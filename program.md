@@ -2,6 +2,8 @@
 
 **Goal:** generate a swing-trading strategy on the top-200-by-ADV liquid Nifty 500 slice, with positive risk-adjusted return after Dhan delivery costs, that survives a sealed walk-forward test on 2024-01 to 2026-05 Indian market data.
 
+**You may edit `strategy.py`. You must NOT edit `prepare.py`** — `prepare.py` is the read-only walk-forward evaluator + anti-overfit gate runner. Do not edit it under any circumstance; changing the evaluator invalidates every prior iteration's comparison baseline.
+
 **Constraints (do not violate):**
 
 1. **Long-only, CNC (delivery), single segment (NSE_EQ).** No F&O, no intraday, no short selling, no margin.
@@ -35,11 +37,14 @@
 **Decision criteria for KEEP:**
 A variant is KEPT iff all gates pass:
 1. Walk-forward Sortino (net of costs) > baseline AND > 0
-2. `|Sortino| < 10` (sanity)
-3. Aggregate drawdown does not regress more than 10 percentage points vs prior KEPT
-4. Catastrophe-validator clear (gross > 100%, agg-DD > 50%, n_trades < 20)
-5. Anti-overfit gates clear: Bonferroni, RW Monte Carlo, parsimony budget, sub-period stationarity
-6. Sealed-test reveal Sortino > baseline AND > 0
+2. `|Sortino| < 10` (sanity sortino bound — anything beyond is signal of a bug or numerical artefact)
+3. Aggregate drawdown does not regress more than 10pp (10 percentage points) vs prior KEPT
+4. Catastrophe-validator clear — all of:
+   - gross exposure < 100% (no leverage; equal-weight long-only)
+   - aggregate drawdown < 50% (account-wipe gate)
+   - at least 20 trades total (below 20 trades the Sortino is too noisy to trust)
+5. Anti-overfit gates clear: Bonferroni p-correction, Random-Walk Monte Carlo (5000 permutations, must beat 95th-pct null), parameter parsimony budget, sub-period stationarity (min/max sub-period Sortino ratio >= 0.30)
+6. Sealed-test reveal Sortino > baseline AND > 0 (one-shot per variant; failure is final)
 
 Otherwise: REVERT.
 

@@ -20,7 +20,8 @@ class _IndmoneyCommission(bt.CommInfoBase):
 
     def _getcommission(self, size, price, pseudoexec):  # type: ignore[override]
         order_value = abs(size * price)
-        return commission_usd(order_value)
+        side = "BUY" if size >= 0 else "SELL"
+        return commission_usd(order_value, side)
 
 
 class TradeRecorder(bt.Analyzer):

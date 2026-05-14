@@ -143,40 +143,51 @@ def compute_universe(
 
     conn = duckdb.connect(str(prices_db), read_only=True)
     try:
-        # Look-back window for ADV: strictly BEFORE as_of_date so we don't use
-        # same-day data. Look back enough calendar days to cover the lookback
-        # window with margin (weekends/holidays).
-        window_start = as_of_date - timedelta(days=ADV_LOOKBACK_DAYS * 2 + 30)
-        rows = conn.execute(
+        # ADV computation: short window strictly BEFORE as_of_date (don't use
+        # same-day data). Window is ~ADV_LOOKBACK_DAYS calendar days × 2 + 30
+        # margin to cover weekends/holidays.
+        adv_window_start = as_of_date - timedelta(days=ADV_LOOKBACK_DAYS * 2 + 30)
+        adv_rows = conn.execute(
             """
             SELECT ticker,
-                   COUNT(*) AS n_bars,
-                   AVG(close * volume) / 1e7 AS adv_cr,
-                   MAX(dt) AS last_dt,
-                   MIN(dt) AS first_dt,
-                   SUM(CASE WHEN volume > 0 THEN 1 ELSE 0 END) AS n_trading_days
+                   AVG(close * volume) / 1e7 AS adv_cr
               FROM daily_bars
              WHERE dt >= ? AND dt < ?
              GROUP BY ticker
             """,
-            (window_start, as_of_date),
+            (adv_window_start, as_of_date),
+        ).fetchall()
+
+        # Total listing-age + trading-day stats over the FULL history strictly
+        # before `as_of_date`. Listing age = total count of trading bars; the
+        # trading-day ratio is computed against the last RECENT_SESSIONS_WINDOW
+        # sessions.
+        recent_window_start = as_of_date - timedelta(days=int(RECENT_SESSIONS_WINDOW * 1.5))
+        history_rows = conn.execute(
+            """
+            SELECT ticker,
+                   COUNT(*) AS total_bars,
+                   SUM(CASE WHEN dt >= ? AND volume > 0 THEN 1 ELSE 0 END)
+                       AS recent_trading_days,
+                   SUM(CASE WHEN dt >= ? THEN 1 ELSE 0 END) AS recent_bars
+              FROM daily_bars
+             WHERE dt < ?
+             GROUP BY ticker
+            """,
+            (recent_window_start, recent_window_start, as_of_date),
         ).fetchall()
     finally:
         conn.close()
 
-    # n_bars_in_recent = how many of the last RECENT_SESSIONS_WINDOW (≈12 months)
-    # sessions had trades. We approximate using the look-back window above (it
-    # exceeds 250 calendar days * 5/7 ≈ 178 trading days; close enough for the
-    # "filter persistently halted names" purpose).
+    adv_by = {r[0]: (r[1] or 0.0) for r in adv_rows}
     by_ticker = {
         r[0]: {
             "n_bars": r[1],
-            "adv_cr": r[2] or 0.0,
-            "last_dt": r[3],
-            "first_dt": r[4],
-            "n_trading_days": r[5],
+            "adv_cr": adv_by.get(r[0], 0.0),
+            "n_trading_days": r[2],
+            "recent_bars": r[3],
         }
-        for r in rows
+        for r in history_rows
     }
 
     survivors: list[UniverseRow] = []
@@ -188,9 +199,11 @@ def compute_universe(
             continue
         if stats["adv_cr"] < min_adv_cr:
             continue
-        n_window = min(stats["n_bars"], RECENT_SESSIONS_WINDOW)
-        if n_window > 0 and stats["n_trading_days"] / n_window < MIN_TRADING_DAYS_RATIO:
-            continue
+        recent_bars = stats.get("recent_bars", 0) or 0
+        if recent_bars > 0:
+            ratio = stats["n_trading_days"] / recent_bars
+            if ratio < MIN_TRADING_DAYS_RATIO:
+                continue
         # Free-float mcap is supplied by NSE Indices monthly file; for now we
         # accept the constituent. If the file does not carry the field, we
         # accept all names that pass the other filters and rely on ADV to

@@ -27,6 +27,8 @@ This is the autoresearch loop's persistent memory. Every iteration appends an en
 
 **Result:** Pending first walk-forward run.
 
+**Learning:** (to be filled by the first iteration after walk-forward results land) — what did this baseline teach us about Indian-market behaviour under the chosen parameter set? Was the regime gate signal active during 2024-Q4 / 2026-Q1 drawdowns? Did the quality screen materially change which names were selected?
+
 **Decision:** PENDING
 
 ---
