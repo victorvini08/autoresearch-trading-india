@@ -222,7 +222,9 @@ class IndiaMomentumQualityRegime(bt.Strategy):
                 new_entries = new_candidates[:slots_remaining]
 
         selected = retained + new_entries
-        target_each = 1.0 / max(len(selected), 1) if selected else 0.0
+        # 1% cash buffer for commission + slippage; without this backtrader can
+        # silently reject the final order when the cumulative target hits 100%.
+        target_each = 0.99 / max(len(selected), 1) if selected else 0.0
 
         # 6. Issue orders: order_target_percent for every name (selected or
         # held-but-being-exited gets 0.0)

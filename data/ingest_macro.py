@@ -126,15 +126,22 @@ def fetch_yfinance_history(
     out: list[tuple[date, float]] = []
     if df is None or df.empty:
         return out
+    # yfinance 0.2.x returns a MultiIndex column structure: (Price, Ticker).
+    # Pull Close → scalar Series whether the columns are MultiIndex or not.
     closes = df["Close"]
+    if hasattr(closes, "columns"):
+        # MultiIndex case → single-ticker download still gives DataFrame; flatten
+        closes = closes.iloc[:, 0]
     for ts, val in closes.items():
-        if val is None or (isinstance(val, float) and val != val):
-            continue
-        d = ts.date() if hasattr(ts, "date") else ts
+        # NaN in numpy/pandas returns False for `== None`; check both
         try:
-            out.append((d, float(val)))
+            v = float(val)
         except (TypeError, ValueError):
             continue
+        if v != v:  # NaN
+            continue
+        d = ts.date() if hasattr(ts, "date") else ts
+        out.append((d, v))
     return out
 
 

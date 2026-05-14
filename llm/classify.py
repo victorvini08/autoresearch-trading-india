@@ -136,13 +136,17 @@ def _process_macro_chunk(
     chunk: list[tuple[date, str, dict[str, float], list[str], str]],
     provider: Provider,
     out: dict[date, dict],
+    *,
+    strict: bool = True,
 ) -> list[tuple[date, str, dict[str, float], list[str], str]]:
     """Run one batched LLM call for a macro chunk, write valid cells to `out`
     and the cache, and return the list of cells the LLM did NOT return (or
     returned invalid). Caller decides whether to retry or raise.
 
-    Raises on whole-batch parse failure or zero-valid (those are signal of
-    a broken response, not a partial drop).
+    With `strict=True` (default, for the initial call), a zero-valid-batch
+    raises RuntimeError — strong signal of a broken LLM response. With
+    `strict=False` (used by retry calls), zero-valid is logged and missing
+    is returned so the outer driver can continue gracefully.
     """
     items = [(d_str, fred, headlines) for _, d_str, fred, headlines, _ in chunk]
     prompt = build_macro_regime_batch_prompt(items)
@@ -174,7 +178,12 @@ def _process_macro_chunk(
         )
         out[d] = cache_value
         valid += 1
-    if valid == 0:
+    if valid == 0 and len(chunk) > 0 and strict:
+        # All cells in this chunk failed. In the initial call this is
+        # strong evidence of a broken LLM response (not a one-row glitch),
+        # so we raise. In retry calls, the caller suppresses this by
+        # passing `strict=False` and we just return the missing list to
+        # be logged at the outer error level.
         raise RuntimeError(
             f"macro_regime batch [{items[0][0]}..{items[-1][0]}] "
             f"had 0 valid entries out of {len(chunk)}. Got: {raw[:300]}"
@@ -232,18 +241,15 @@ def classify_macro_regime_batch(
             ] = []
             for sub_chunk in _chunked(missing, retry_size):
                 still_missing.extend(
-                    _process_macro_chunk(sub_chunk, provider, out)
+                    _process_macro_chunk(sub_chunk, provider, out, strict=False)
                 )
             if still_missing:
                 still_keys = [m[1] for m in still_missing]
                 logger.error(
                     "macro_regime retry failed: %d cells still missing "
-                    "after smaller-chunk retry (dates=%s)",
+                    "after smaller-chunk retry (dates=%s); proceeding "
+                    "without these cells — strategy will read None for them",
                     len(still_missing), still_keys,
-                )
-                raise RuntimeError(
-                    f"macro_regime classifier dropped {len(still_missing)} "
-                    f"cells even after retry: {still_keys}"
                 )
 
     return out
@@ -277,9 +283,16 @@ def _process_sentiment_chunk(
     chunk: list[tuple[tuple[str, date], str, str, list[dict], str, str]],
     provider: Provider,
     out: dict[tuple[str, date], dict],
+    *,
+    strict: bool = True,
 ) -> list[tuple[tuple[str, date], str, str, list[dict], str, str]]:
     """Run one batched LLM call for a sentiment chunk. Returns cells the LLM
-    did not return (or returned invalid) so the caller can retry."""
+    did not return (or returned invalid) so the caller can retry.
+
+    With `strict=True` (default; initial call) a zero-valid response raises;
+    with `strict=False` (retry calls), the missing list is returned so the
+    outer driver can continue gracefully.
+    """
     items = [(ticker, d_str, news_items)
              for _, ticker, d_str, news_items, _, _ in chunk]
     prompt = build_sentiment_batch_prompt(items)
@@ -316,7 +329,7 @@ def _process_sentiment_chunk(
         )
         out[key] = cache_value
         valid += 1
-    if valid == 0:
+    if valid == 0 and len(chunk) > 0 and strict:
         raise RuntimeError(
             f"sentiment batch ({chunk[0][1]} {chunk[0][2]}..) "
             f"had 0 valid entries out of {len(chunk)}. Got: {raw[:300]}"
@@ -378,18 +391,15 @@ def classify_sentiment_batch(
             ] = []
             for sub_chunk in _chunked(missing, retry_size):
                 still_missing.extend(
-                    _process_sentiment_chunk(sub_chunk, provider, out)
+                    _process_sentiment_chunk(sub_chunk, provider, out, strict=False)
                 )
             if still_missing:
                 still_keys = [(m[1], m[2]) for m in still_missing]
                 logger.error(
                     "sentiment retry failed: %d cells still missing "
-                    "after smaller-chunk retry (cells=%s)",
+                    "after smaller-chunk retry (cells=%s); proceeding "
+                    "without these cells — strategy will read None for them",
                     len(still_missing), still_keys,
-                )
-                raise RuntimeError(
-                    f"sentiment classifier dropped {len(still_missing)} "
-                    f"cells even after retry: {still_keys}"
                 )
 
     return out
@@ -428,9 +438,16 @@ def _process_events_chunk(
     chunk: list[tuple[tuple[str, date], str, str, list[dict], str, str]],
     provider: Provider,
     out: dict[tuple[str, date], dict],
+    *,
+    strict: bool = True,
 ) -> list[tuple[tuple[str, date], str, str, list[dict], str, str]]:
     """Run one batched LLM call for an events chunk. Returns cells the LLM
-    did not return (or returned invalid) so the caller can retry."""
+    did not return (or returned invalid) so the caller can retry.
+
+    With `strict=True` (default; initial call), zero-valid raises; with
+    `strict=False` (retry calls), missing is returned for the outer
+    driver to log and proceed.
+    """
     items = [(ticker, d_str, news_items)
              for _, ticker, d_str, news_items, _, _ in chunk]
     prompt = build_events_batch_prompt(items)
@@ -466,7 +483,7 @@ def _process_events_chunk(
         )
         out[key] = cache_value
         valid += 1
-    if valid == 0:
+    if valid == 0 and len(chunk) > 0 and strict:
         raise RuntimeError(
             f"events batch ({chunk[0][1]} {chunk[0][2]}..) "
             f"had 0 valid entries out of {len(chunk)}. Got: {raw[:300]}"
@@ -523,18 +540,15 @@ def classify_events_batch(
             ] = []
             for sub_chunk in _chunked(missing, retry_size):
                 still_missing.extend(
-                    _process_events_chunk(sub_chunk, provider, out)
+                    _process_events_chunk(sub_chunk, provider, out, strict=False)
                 )
             if still_missing:
                 still_keys = [(m[1], m[2]) for m in still_missing]
                 logger.error(
                     "events retry failed: %d cells still missing "
-                    "after smaller-chunk retry (cells=%s)",
+                    "after smaller-chunk retry (cells=%s); proceeding "
+                    "without these cells — strategy will read None for them",
                     len(still_missing), still_keys,
-                )
-                raise RuntimeError(
-                    f"events classifier dropped {len(still_missing)} "
-                    f"cells even after retry: {still_keys}"
                 )
 
     return out

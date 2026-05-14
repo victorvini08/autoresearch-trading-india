@@ -63,15 +63,17 @@ class IngestProgress:
 def _ensure_progress_table(news_db: Path) -> None:
     conn = duckdb.connect(str(news_db))
     try:
+        # DuckDB doesn't allow expressions in PK; use ticker_key surrogate
+        # column (always non-null: '' for ticker IS NULL).
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS ingest_progress (
                 source VARCHAR NOT NULL,
-                ticker VARCHAR,
+                ticker_key VARCHAR NOT NULL,
                 last_dt_completed DATE,
                 last_offset INTEGER NOT NULL DEFAULT 0,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                PRIMARY KEY (source, COALESCE(ticker, ''))
+                PRIMARY KEY (source, ticker_key)
             )
             """
         )
@@ -79,12 +81,15 @@ def _ensure_progress_table(news_db: Path) -> None:
         conn.close()
 
 
+def _ticker_key(ticker: str | None) -> str:
+    return ticker.upper() if ticker else ""
+
+
 def get_progress(news_db: Path, source: str, ticker: str | None = None) -> IngestProgress | None:
     if not news_db.exists():
         return None
     conn = duckdb.connect(str(news_db), read_only=True)
     try:
-        # Check if table exists
         tbl = conn.execute(
             "SELECT 1 FROM information_schema.tables WHERE table_name='ingest_progress'"
         ).fetchone()
@@ -92,8 +97,8 @@ def get_progress(news_db: Path, source: str, ticker: str | None = None) -> Inges
             return None
         row = conn.execute(
             "SELECT last_dt_completed, last_offset FROM ingest_progress "
-            "WHERE source=? AND COALESCE(ticker,'')=COALESCE(?,'')",
-            (source, ticker),
+            "WHERE source=? AND ticker_key=?",
+            (source, _ticker_key(ticker)),
         ).fetchone()
     finally:
         conn.close()
@@ -115,15 +120,16 @@ def update_progress(
         conn.execute("BEGIN TRANSACTION")
         try:
             conn.execute(
-                "DELETE FROM ingest_progress WHERE source=? AND COALESCE(ticker,'')=COALESCE(?,'')",
-                (source, ticker),
+                "DELETE FROM ingest_progress WHERE source=? AND ticker_key=?",
+                (source, _ticker_key(ticker)),
             )
             conn.execute(
                 """
-                INSERT INTO ingest_progress (source, ticker, last_dt_completed, last_offset)
+                INSERT INTO ingest_progress
+                    (source, ticker_key, last_dt_completed, last_offset)
                 VALUES (?, ?, ?, ?)
                 """,
-                (source, ticker, last_dt, last_offset),
+                (source, _ticker_key(ticker), last_dt, last_offset),
             )
             conn.execute("COMMIT")
         except Exception:

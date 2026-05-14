@@ -285,6 +285,41 @@ def ingest_today(news_db: Path) -> dict[str, int]:
 DB_PATH = Path("storage/news.duckdb")
 
 
+def _upsert(rows: list[dict]) -> int:
+    """Predecessor test-fixture entry point.
+
+    `rows` accepts the legacy schema with keys:
+      ticker, published_at (datetime), headline, summary, source_name | source,
+      source_id, url, [body]
+    Maps to our Article(article_id, dt, source, ticker, title, url, summary, body)
+    and upserts into the default `storage/news.duckdb`. Returns # rows inserted.
+    """
+    articles: list[Article] = []
+    for r in rows:
+        pub = r.get("published_at")
+        if hasattr(pub, "date"):
+            dt = pub.date()
+        elif isinstance(pub, str):
+            dt = datetime.fromisoformat(pub).date()
+        else:
+            dt = pub or date.today()
+        source = r.get("source") or r.get("source_name") or r.get("source_id") or "unknown"
+        title = r.get("headline") or r.get("title") or ""
+        articles.append(
+            Article(
+                article_id=_hash_id(title, source, dt),
+                dt=dt,
+                source=source,
+                ticker=(r.get("ticker") or "").upper() or None,
+                title=title,
+                url=r.get("url", ""),
+                summary=r.get("summary", ""),
+                body=r.get("body", ""),
+            )
+        )
+    return write_articles(DB_PATH, articles)
+
+
 def count_news(ticker: str | None, on_date) -> int:
     """Number of articles for `ticker` on the given date (None matches macro news)."""
     if isinstance(on_date, str):
