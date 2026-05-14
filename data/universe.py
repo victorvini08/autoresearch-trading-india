@@ -86,7 +86,10 @@ def fetch_nifty500_constituents(timeout: int = 30) -> list[dict[str, str]]:
     result in `storage/universe.duckdb` and fall back to the cached copy on
     transient failure.
     """
-    headers = {"User-Agent": _BROWSER_UA, "Accept": "text/csv"}
+    # niftyindices.com sniffs the Accept header and serves an HTML wrapper for
+    # specific CSV / text mimetypes; only Accept:*/* (curl default) returns the
+    # raw CSV. Empirically verified 2026-05-15.
+    headers = {"User-Agent": _BROWSER_UA, "Accept": "*/*"}
     resp = requests.get(NIFTY500_URL, headers=headers, timeout=timeout)
     resp.raise_for_status()
     reader = csv.DictReader(io.StringIO(resp.text))
