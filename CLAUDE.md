@@ -1,0 +1,183 @@
+# Autoresearch Trading — India
+
+LLM-driven autoresearch swing-trading system for Indian equities, delivery (CNC) only, via the Dhan HQ Trading API. Inherits architecture from `autoresearch-trading-us` (archived); the data/broker/strategy/cost layers are India-specific.
+
+**Current phase:** v1 paper-only (`dhan-paper`), built against an in-memory mock Dhan client. Live execution (`dhan-live`) is built but disabled by `halt.json` until 4 weeks of clean paper validation.
+
+---
+
+## How to think about this codebase
+
+**Three layers, broker- and market-agnostic at the top, India-specific at the bottom:**
+
+1. **Autoresearch loop** (`scripts/loop.py`, `scripts/run_overnight.py`): Claude Opus 4.7 reads `journal.md`, proposes a `strategy.py` edit, runs walk-forward backtest, KEEP/REVERT based on multi-dimensional gates. Universal.
+2. **Strategy + classifiers** (`strategy.py`, `llm/`): the strategy is a backtrader subclass that reads pre-computed LLM classifier outputs (`macro_regime`, `sentiment`, `events`) for India. The classifier prompts are India-specific (RBI / FII / INR / Nifty 50 / India VIX inputs).
+3. **Executor + broker + data** (`scripts/executors/dhan.py`, `brokers/dhan.py`, `data/*`): India-specific. Dhan Trading API for orders; NSE bhav archive for prices; Pulse RSS + MoneyControl + NSE filings + RBI/SEBI press for news; FRED + NSE indices + RBI for macro.
+
+**The Karpathy 3-file pattern is core:**
+- `prepare.py` — IMMUTABLE walk-forward evaluator with anti-overfit gates. The autoresearch loop never edits this.
+- `strategy.py` — loop-EDITABLE signal logic. Every overnight iteration may mutate this.
+- `journal.md` — append-only memory of every iteration's hypothesis, change, result, and KEEP/REVERT decision. The loop reads this each iteration to avoid re-proposing burned ideas.
+
+---
+
+## Locked decisions (do not re-debate without explicit user input)
+
+| Decision | Choice | Source |
+|---|---|---|
+| Market | Indian equities (NSE), CNC delivery | India-resident user; eliminates LRS / TCS / Schedule FA |
+| Broker | **Dhan HQ Trading API** (free brokerage on delivery) | docs/superpowers/specs/2026-05-14-india-autoresearch-trading-design.md §3 |
+| Price data | **NSE bhav archive** (free public ZIPs) | Dhan Data API is paid ₹500/mo — we don't use it |
+| Universe | **Top 200 by 20-day ADV from liquid-filtered Nifty 500** | Includes mid-cap winners that Nifty 100 misses |
+| Strategy shape | Cross-sectional 12-1 momentum + retention + quality screen + sector cap + Indian regime gate (5 hyperparameters) | Theory-backed (Jegadeesh-Titman / Asness / Novy-Marx); avoids US repo's ATR-stop overfit |
+| Anti-overfit gates | Sealed 2024-26 test, Bonferroni p-correction, RW Monte Carlo, parsimony budget, sub-period stationarity, cost-aware Sortino | **NEW for India**; addresses US multi-strategy overfit failure |
+| Rebalance cadence | **Biweekly** (alternate Fridays) | User-specified |
+| Starting capital | ₹50,000 paper; 5-6 positions default | DP-charge optimization |
+| LLM stack | Claude Code SDK: **Opus 4.7** for autoresearch loop, **Sonnet 4.6** for classifiers; Qwen3 fallback | Subscription-bounded cost; cache keyed by `(date, ticker, prompt_hash, model_id)` |
+| Live mode | Built but disabled (`halt.json` defaults to halted=true for `dhan-live`) | 4-week paper validation gate |
+| News sources | **5 trusted free**: MoneyControl, Pulse RSS, NSE filings, RBI press, SEBI press | No paid APIs |
+
+---
+
+## Hard constraints (real money risk if violated)
+
+1. **Never enable `dhan-live` mode without explicit user approval AND a successful 4-week `dhan-paper` validation run** logged in `iterations/log.csv` and `journal.md`. The `halt.json` mechanism is the gate.
+2. **All orders must carry the SEBI algo ID stamp** (`$SEBI_ALGO_ID` env var) per the 2026-04-01 retail algo framework. Orders without it are non-compliant.
+3. **Strategy uses `order_target_percent` only** (no `self.buy()` / `self.close()`). Required by `scripts/signal_today.py`'s capture logic.
+4. **FRACTION_CHANGE_THRESHOLD = 0.005** on `target_fraction` (not `target_qty`) suppresses mark-drift churn. Do not remove.
+5. **Cash-ledger entries write on `fill_date`, not `signal_date`** (US repo learnings §4.3 — get_cash over-counts if we use signal_date).
+6. **Journal parser uses literal-line match for `**Decision:** KEPT`** — never substring (US repo learnings §4.4).
+7. **LLM cache key includes `model_id`** — swapping models must invalidate the affected slice.
+8. **Anti-overfit gates are atomic.** A variant that fails ANY gate is REJECTED, not partially accepted.
+9. **Sealed test set (2024-01 → 2026-05) is revealed ONCE per promotion** — no retries on the same variant.
+
+---
+
+## User action items (one-time setup, do these in order)
+
+These steps are required before `dhan-paper` can run against a real Dhan account. While they're pending, `DHAN_MOCK=1` in `.env` keeps the system runnable against an in-memory mock.
+
+### 1. Open a Dhan account
+Sign up at https://dhan.co. KYC requires PAN + Aadhaar + bank account. Process usually completes in 1 business day.
+
+### 2. Enable equity delivery
+Default on for new accounts. (F&O / commodities are not used; do not enable.)
+
+### 3. Generate the Dhan access token
+- Log in to https://web.dhan.co
+- Top-right profile menu → "DhanHQ Trading APIs"
+- Click "Generate Access Token". Token validity ~1 year.
+- Note your `dhanClientId` (visible in the API section).
+
+### 4. Register the algo with Dhan (SEBI compliance, mandatory from 2026-04-01)
+- In the Dhan API portal, register a new "Personal Algo" (NOT "Trading Provider").
+- You'll receive a unique `SEBI_ALGO_ID`. This will be stamped on every order our system places.
+- Confirm your home IP is static (most ISPs are; check at `whatismyip.com` over 24h). If dynamic, a cheap cloud bastion (Hetzner CX22, ~₹500/mo) is the workaround.
+
+### 5. Populate `.env`
+Copy `.env.example` to `.env` and fill in:
+- `DHAN_ACCESS_TOKEN`
+- `DHAN_CLIENT_ID`
+- `SEBI_ALGO_ID`
+- `FRED_API_KEY` (sign up at https://fred.stlouisfed.org/docs/api/api_key.html if needed)
+- Toggle `DHAN_MOCK=0` once the real token is in place.
+
+### 6. Verify with the read-only smoke
+```
+uv run python -m scripts.dhan_smoke
+```
+This calls `get_cash`, `get_positions`, `get_holdings`, `get_historical_candles` and exits. No orders placed.
+
+### 7. Set a calendar reminder for token rotation
+Dhan tokens expire after ~1 year. Set a reminder for ~340 days from generation.
+
+---
+
+## Daily operation
+
+### Cron / launchd schedule (IST)
+
+| Job | Time | Plist file | What it does |
+|---|---|---|---|
+| Premarket scan | 09:00 | `deploy/launchd/com.autoresearch.premarket_scan.plist` | Check overnight gaps, India VIX spike, halts |
+| Daily update | 09:15 | `deploy/launchd/com.autoresearch.daily_update.plist` | Ingest yesterday's bhav, news, macro deltas |
+| Run live (rebalance days only) | 10:00 | `deploy/launchd/com.autoresearch.run_live.plist` | Signal → orders → fills → ledger writes |
+| Risk check + daily report | 15:35 | `deploy/launchd/com.autoresearch.daily_report.plist` | Post-close summary |
+| Autoresearch loop | 22:00 | Manual or `deploy/launchd/com.autoresearch.run_overnight.plist` | LLM proposes strategy edit; backtest; KEEP/REVERT |
+
+NSE trading hours: 09:15 – 15:30 IST. Our execution window for biweekly rebalance is **10:00–15:00 IST** (avoids open-spread chaos and close-auction overlap).
+
+### Manual commands
+
+```bash
+# Run tests
+uv run pytest -q
+
+# Walk-forward backtest of current strategy.py (on synthetic prices for first run)
+uv run python prepare.py research
+
+# End-to-end paper run for today
+uv run python -m scripts.run_live --date $(date +%Y-%m-%d)
+
+# Autoresearch loop (single iteration)
+uv run python -m scripts.loop --iterations 1
+
+# Overnight autoresearch (8-12 iterations)
+uv run python -m scripts.run_overnight
+
+# Dashboard
+uv run python -m scripts.dashboard
+open state/reports/dashboard.html
+```
+
+---
+
+## Repository structure
+
+```
+.
+├── prepare.py            # IMMUTABLE walk-forward evaluator + anti-overfit gates
+├── strategy.py           # LOOP-EDITABLE: 12-1 momentum + quality + sector + regime
+├── program.md            # Goal + constraints (read by autoresearch loop)
+├── journal.md            # Append-only memory of every iteration
+├── learnings.md          # Compounding domain insights
+├── backtest/             # engine, metrics, risk, costs (Dhan), anti_overfit
+├── brokers/              # dhan (Trading API), dhan_mock (paper)
+├── data/                 # universe, sectors, quality_screen, ingest_{prices,news,macro,earnings,corp_actions}
+├── llm/                  # provider, classify, features, cache, prompts (India)
+├── scripts/              # loop, run_live, run_overnight, executors/dhan, sebi_compliance, ...
+├── storage/              # *.duckdb generated (gitignored)
+├── tests/                # pytest tree
+├── deploy/launchd/       # macOS plists (IST schedules)
+└── docs/
+    ├── handoff-india-pivot.md     # carried from US repo (historical)
+    ├── learnings-from-us-build.md # carried from US repo (historical)
+    └── superpowers/
+        ├── specs/                 # design spec (this rebuild)
+        └── plans/                 # implementation plans
+```
+
+---
+
+## Indian-market specifics worth knowing
+
+- **Trading hours:** 09:15–15:30 IST (pre-open 09:00–09:15)
+- **Settlement:** T+1 for equities (since Jan 2023)
+- **Tax (India resident):**
+  - STCG (held < 12 months): 15% flat
+  - LTCG (held ≥ 12 months): 10% on gains above ₹1 lakh / financial year
+  - FY runs Apr 1 → Mar 31
+  - No LRS / Schedule FA / Form 67 / TCS overhead (those are foreign-asset concerns only)
+- **DP charge:** ₹14.75 per scrip per sell (flat). Dominant cost component at our trade size — strategy caps positions to limit total DP drag.
+- **SEBI retail algo framework** (effective 2026-04-01): every order must carry our algo ID; >10 OPS triggers empanelment requirement (we're at ~0.001 OPS, easy).
+
+---
+
+## When in doubt
+
+- **Don't add features the loop hasn't earned.** Each new hyperparameter must clear the parsimony budget (§6.4 of spec).
+- **Don't pre-emptively delete code** even if it looks unused — the US repo learned this the hard way (US repo learnings §8.4).
+- **Don't skip the empty-news short-circuit** in classifiers — saves ~80% of LLM calls (US repo learnings §6.5).
+- **Don't trust LLM-generated strategy code without running anti-overfit gates.** The whole point of the gates is that the loop *will* try to overfit; it's the gates that catch it.
+- **Read `docs/handoff-india-pivot.md` and `docs/learnings-from-us-build.md`** before making non-trivial changes. These capture empirical lessons from the US-stocks predecessor (3 pivots in 3 days, ~4 weeks of trial-and-error compressed into reference docs).
+- **The strategy is replaceable; the gates are not.** A bad strategy that passes the gates is a learning data point; a good strategy that bypasses the gates is a future blow-up.

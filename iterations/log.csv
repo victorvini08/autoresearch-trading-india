@@ -1,0 +1,1 @@
+iter_id,timestamp,hypothesis_summary,decision,sortino_train,sortino_val,sortino_sealed,n_trades,max_dd,catastrophe_clear,bonferroni_p,rw_mc_pct,parsimony_ok,sub_period_min_ratio,notes
