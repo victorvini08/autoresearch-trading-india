@@ -1,0 +1,57 @@
+# Secrets — never commit
+.env
+.env.local
+.env.*.local
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+env/
+.python-version.local
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# uv
+.uv/
+
+# DuckDB / SQLite data stores (regenerable from sources)
+storage/*.duckdb
+storage/*.duckdb.wal
+storage/*.sqlite
+storage/*.sqlite-journal
+!storage/.gitkeep
+
+# Autoresearch loop artifacts (regenerable from log.csv + per-iter dirs)
+iterations/*/
+iterations/dashboard.html
+
+# OS / IDE
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swn
+Thumbs.db
+
+# Reports + state (regenerable)
+state/reports/*.html
+state/reports/*.json
+!state/reports/.gitkeep
+
+# Halt flag (operational, not source)
+halt.json
+
+# Scratch / temp
+*.log
+*.tmp
+scratch/
+
+# Mac
+.DS_Store
