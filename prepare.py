@@ -38,15 +38,15 @@ from backtest.risk import validate as validate_risk
 from data.ingest_prices import read_prices
 from data.universe import get_universe_at
 
-BACKTEST_START = date(2018, 1, 1)
-# Slid forward 2026-05-11 so the sealed test window overlaps the news cache
-# (Finnhub free covers ~1y back from today). Validation now spans 2018-01 →
-# 2025-10 (~36 folds vs prior ~25); sealed test = 2025-11 → 2026-05-08 (~6
-# months, fully news-covered). Enables sealed-test validation of news-aware
-# strategies. Step A probe (2026-05-11) confirmed the boundary doesn't pull
-# nishant below its prior sealed-test edge — actually raised it to 2.91.
-BACKTEST_END = date(2026, 5, 8)
-TEST_BOUNDARY = date(2025, 11, 1)
+BACKTEST_START = date(2020, 1, 1)
+# India rebuild: NSE bhav archive starts cleanly in late 2019; 2020-01-01 is
+# the first month with dense data across the Nifty 500. Train+val spans
+# 2020-01 → 2024-12 (~5y, walk-forward folds with 2y train / 6m val / 3m slide);
+# sealed test = 2025-01 → 2026-05-14 (~16 months, covers the Jan-26 → Mar-26
+# drawdown which is an adversarial regime for momentum strategies — passing
+# sealed test here is a meaningful signal). Per spec §6.1.
+BACKTEST_END = date(2026, 5, 14)
+TEST_BOUNDARY = date(2025, 1, 1)
 TRAIN_DAYS = 504
 VAL_DAYS = 126
 SLIDE_DAYS = 63

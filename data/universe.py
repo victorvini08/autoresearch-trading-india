@@ -339,8 +339,16 @@ DEFAULT_UNIVERSE_DB = Path("storage/universe.duckdb")
 def get_universe_at(as_of_date: date, universe_db: Path = DEFAULT_UNIVERSE_DB) -> list[str]:
     """Return the list of NSE tickers in the universe snapshot for `as_of_date`.
 
-    Falls back to the most-recent snapshot on or before `as_of_date` if no
-    exact snapshot exists. Returns [] if the DB is empty.
+    Resolution order:
+      1. Most-recent snapshot ON OR BEFORE `as_of_date` (correct historical lookup).
+      2. Earliest snapshot AFTER `as_of_date` — fallback when historical snapshots
+         haven't been built yet but the strategy still needs to run a backtest
+         from before any snapshot exists. Introduces survivorship bias (the
+         universe will include names that joined later, exclude ones that left
+         earlier). Acceptable for v1 paper validation; v2 should backfill
+         historical snapshots from NSE Indices monthly archives.
+
+    Returns [] if the DB is empty.
     """
     if not universe_db.exists():
         return []
@@ -351,6 +359,18 @@ def get_universe_at(as_of_date: date, universe_db: Path = DEFAULT_UNIVERSE_DB) -
             (as_of_date,),
         ).fetchone()
         snap = row[0] if row else None
+        if not snap:
+            # Fallback: earliest available snapshot (survivorship bias documented above)
+            row = conn.execute(
+                "SELECT MIN(as_of_date) FROM universe_snapshot"
+            ).fetchone()
+            snap = row[0] if row else None
+            if snap:
+                logger.warning(
+                    "universe: no snapshot on or before %s; falling back to "
+                    "earliest available (%s) — introduces survivorship bias",
+                    as_of_date, snap,
+                )
         if not snap:
             return []
         rows = conn.execute(

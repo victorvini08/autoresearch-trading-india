@@ -375,8 +375,11 @@ def read_prices(ticker: str, start, end):
         ).fetchdf()
     finally:
         conn.close()
+    # Predecessor (US) modules expected a "date" column (not an index) so the
+    # downstream prepare.py / engine code can call df["date"]. We rename `dt`
+    # → `date` and keep it as a regular column.
     if not df.empty:
-        df = df.set_index("dt")
+        df = df.rename(columns={"dt": "date"})
     return df
 
 
