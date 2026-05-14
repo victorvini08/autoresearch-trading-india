@@ -55,3 +55,6 @@ scratch/
 
 # Mac
 .DS_Store
+
+# Claude Code local state
+.claude/
