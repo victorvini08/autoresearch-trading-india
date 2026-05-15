@@ -208,6 +208,7 @@ def ingest_yfinance_earnings(
     earnings_db: Path,
     *,
     limit: int = 60,
+    since: date | None = None,
     polite_delay_sec: float = 0.3,
 ) -> int:
     """PRIMARY earnings path. Pull historical earnings dates + EPS surprise
@@ -215,8 +216,12 @@ def ingest_yfinance_earnings(
 
     `get_earnings_dates` returns a DataFrame indexed by the earnings datetime
     with columns `EPS Estimate`, `Reported EPS`, `Surprise(%)`. Yahoo carries
-    5-18 years of dates for NSE blue-chips — far deeper than any free Indian
-    filing API, and the surprise% directly feeds the beat/miss event signal.
+    20+ years for blue-chips, but we only need the backtest window. `since`
+    floors the ingested events (default: 2019-01-01 — one year of margin
+    before BACKTEST_START=2020-01-01 for any trailing-window logic). Events
+    older than `since` are dropped, not stored. Future-scheduled earnings
+    rows (yfinance includes the next, not-yet-reported date) are kept — they
+    carry NULL reported EPS and are harmless.
 
     Idempotent on (ticker, announcement_date). `source='yfinance'`.
     """
@@ -224,7 +229,11 @@ def ingest_yfinance_earnings(
 
     import yfinance as yf
 
+    if since is None:
+        since = date(2019, 1, 1)
+
     rows: list[tuple] = []
+    dropped_old = 0
     for t in tickers:
         try:
             yt = yf.Ticker(f"{t}.NS")
@@ -237,6 +246,9 @@ def ingest_yfinance_earnings(
             continue
         for ts, r in df.iterrows():
             d = ts.date() if hasattr(ts, "date") else ts
+            if d < since:
+                dropped_old += 1
+                continue
             def _f(v):
                 try:
                     fv = float(v)
@@ -280,7 +292,11 @@ def ingest_yfinance_earnings(
             raise
     finally:
         conn.close()
-    logger.info("yfinance earnings: wrote %d rows for %d tickers", len(rows), len(tickers))
+    logger.info(
+        "yfinance earnings: wrote %d rows for %d tickers (dropped %d events "
+        "older than %s)",
+        len(rows), len(tickers), dropped_old, since,
+    )
     return len(rows)
 
 

@@ -109,8 +109,12 @@ def _earnings_5y() -> int:
     if not tickers:
         logger.error("no universe snapshot; run compute_universe first")
         return -1
-    logger.info("yfinance earnings backfill for %d tickers", len(tickers))
-    return ingest_yfinance_earnings(tickers, earnings_db, limit=60)
+    # Bound to the backtest window (BACKTEST_START=2020-01-01) with ~1y of
+    # margin; yfinance otherwise returns 20+ years for blue-chips which we
+    # never read.
+    since = date(2019, 1, 1)
+    logger.info("yfinance earnings backfill for %d tickers since %s", len(tickers), since)
+    return ingest_yfinance_earnings(tickers, earnings_db, limit=60, since=since)
 
 
 _SOURCES = {
