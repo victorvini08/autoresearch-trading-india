@@ -352,3 +352,31 @@ separate lineages.
 **Learning:** Sortino scored 0.115 with no prior kept baseline. Aggregate DD was 32.5%; negative folds were 12/20; trades=85. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: anti-overfit FAILED: universe_respect(variant traded tickers outside the point-in-time universe — survivorship/look-ahead reintroduced (hard reject)) · bonferroni(p=0.9578 >= alpha/N=0.0038) · sub_period_stationarity(min/max ratio of |Sortino| across 3 sub-periods = 0.06).
 
 ---
+
+## Iteration 2026-05-16-ff54a95 — REVERTED
+
+**Hypothesis:** Requiring the strategy to rank and retain only names with genuinely negative cumulative factor residuals will improve validation Sortino by avoiding forced relative-value buys where the stock is merely less strong than peers rather than actually oversold.
+
+**Change:** I added an absolute residual-sign gate in portfolio construction so new entries and retained positions must have negative cumulative market-plus-size residuals, while preserving the existing z-score ranking, cadence, PIT universe, sector cap, and sizing logic.
+
+**Decision:** REVERTED — sortino -0.563 not positive — won't compound on losing baseline | catastrophe: max drawdown: 86.3% > 50% (account-wipe territory) | anti-overfit FAILED: bonferroni(p=1.0000 >= alpha/N=0.0036) · random_walk_mc(only 8.22% percentile vs RW null) · parsimony(baseline params=7, strategy=7; needs Sortino +0.00, has +-0.56) · sub_period_stationarity(min/max ratio of |Sortino| across 3 sub-periods = 0.11)
+
+**Result:**
+- validation_sortino_mean: -0.5628923278136998
+- validation_folds: 20
+- per_fold_sortinos: [0.3331, -0.7148, -0.5632, 2.305, -2.2917, -1.8988, 2.0006, 5.1135, -1.0367, -2.5238, 0.036, 0.9697, 0.3812, 0.4818, -0.908, -1.8978, -2.1351, -2.5208, -1.7049, -4.6832]
+- calmar_mean: 0.05202078300802215
+- hit_rate_mean: 0.4008333333333334
+- profit_factor_mean: 1.4147639257559488
+- trade_count_total: 70
+- aggregate_max_dd: 0.8629334982368633
+- worst_fold_max_dd: 0.382906221160284
+- max_position_frac_peak: 1.0171293528304304
+- lower_quartile_fold_calmar: -1.8944802390645987
+- n_negative_folds: 13/20
+- risk.passed: False
+- risk.violations: ['max drawdown: 86.3% > 50% (account-wipe territory)']
+
+**Learning:** Sortino scored -0.563 with no prior kept baseline. Aggregate DD was 86.3%; negative folds were 13/20; trades=70. Do not reuse this exact setup: it failed the catastrophe gate, so the result is not a usable edge even if the hypothesis was economically plausible. Decision reason: sortino -0.563 not positive — won't compound on losing baseline | catastrophe: max drawdown: 86.3% > 50% (account-wipe territory) | anti-overfit FAILED: bonferroni(p=1.0000 >= alpha/N=0.0036) · random_walk_mc(only 8.22% percentile vs RW null) · parsimony(baseline params=7, strategy=7; needs Sortino +0.00, has +-0.56) · sub_period_stationarity(min/max ratio of |Sortino| across 3 sub-periods = 0.11).
+
+---
