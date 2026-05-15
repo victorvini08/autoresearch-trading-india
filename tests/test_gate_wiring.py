@@ -13,7 +13,7 @@ from backtest.anti_overfit import (
     universe_respect_gate,
 )
 from scripts.loop import evaluate_anti_overfit_gates
-from strategy import IndiaMomentumQualityRegime
+from strategy import IndiaResidualReversalStatArb
 
 
 def _summary(**kw) -> StrategySummary:
@@ -72,11 +72,12 @@ def test_bonferroni_tightens_with_more_variants():
 
 # ── prepare.py pure helpers feeding the gates ───────────────────────────
 def test_count_hyperparameters_excludes_plumbing():
-    n = prepare.count_hyperparameters(IndiaMomentumQualityRegime)
-    # Signal knobs after quality_pct removal (2026-05-15): lookback, skip,
-    # retention, regime_pct, fii_threshold_cr, n_positions, sector_cap = 7.
-    # Excludes db paths / weekday / parity / enforce_sector_cap /
-    # universe_by_date.
+    n = prepare.count_hyperparameters(IndiaResidualReversalStatArb)
+    # Residual-reversal signal knobs: beta_window, formation_days,
+    # retention_mult, entry_pct, regime_pct, n_positions, sector_cap = 7.
+    # Matched to the momentum book's parsimony footprint so neither
+    # autoresearch loop starts with a parsimony-gate advantage. Excludes db
+    # paths / weekday / parity / enforce_sector_cap / universe_by_date.
     assert n == 7
 
 

@@ -4,6 +4,14 @@ LLM-driven autoresearch swing-trading system for Indian equities, delivery (CNC)
 
 **Current phase:** v1 paper-only (`dhan-paper`), built against an in-memory mock Dhan client. Live execution (`dhan-live`) is built but disabled by `halt.json` until 4 weeks of clean paper validation.
 
+> **Branch `mean-reversion-quant-strategy` (parallel experiment):** on this
+> branch `strategy.py` is `IndiaResidualReversalStatArb` — a long-only
+> short-horizon residual mean-reversion stat-arb book, the structural
+> inverse of `main`'s momentum strategy. It runs its own isolated
+> autoresearch loop (own `journal.md`/`program.md`) so the two experiments
+> cannot converge. The locked-decisions table below documents `main`'s
+> momentum rationale and is intentionally left intact for reference.
+
 ---
 
 ## How to think about this codebase

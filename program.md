@@ -10,17 +10,28 @@
 2. **Position sizing via `self.order_target_percent` only.** Never call `self.buy()` or `self.close()` directly.
 3. **Universe is fixed by `data/universe.py`** at each rebalance date. Strategy may rank or filter within the universe; it may not add tickers outside it.
 4. **Biweekly rebalance** (alternate Fridays) is the default cadence. Loop may propose changing this; must clear anti-overfit gates.
-5. **Hyperparameter parsimony budget:** starting strategy has 5 params; each new param added must improve sealed-test Sortino by ≥ 0.10 AND clear Bonferroni significance.
+5. **Hyperparameter parsimony budget:** starting strategy has 7 counted signal params; each new param added must improve sealed-test Sortino by ≥ 0.10 AND clear Bonferroni significance.
 6. **Sector cap 25%** enforced at rebalance. Hard constraint.
 7. **Anti-overfit gates** (`backtest/anti_overfit.py`) are atomic. A variant failing any gate is REJECTED.
 8. **All Sortinos used for promotion are computed net of full Dhan delivery costs** (brokerage 0, STT, DP charges, exchange, GST, stamp duty).
 9. **Sealed test set 2024-01 to 2026-05 is revealed ONCE per promotion.** No retries on the same variant.
 
+**Strategy family (branch `mean-reversion-quant-strategy`):** long-only
+short-horizon **residual mean-reversion statistical arbitrage** — the
+structural inverse of the momentum book on `main`. Each rebalance: rolling
+OLS of every name's returns on a market factor (equal-weight universe mean)
+and a size factor (small-ADV minus large-ADV tercile; no market cap is
+available so ADV is the size proxy), then buy the names whose cumulative
+factor residual is most negative (most oversold relative to their factor
+exposure), expecting reversion.
+
 **Hyperparameters the loop may tune:**
-- `lookback_days`, `skip_days` (momentum signal)
-- `retention_mult` (selection retention buffer)
-- `quality_pct` (quality screen percentile threshold)
-- `regime_pct`, `fii_threshold_cr` (regime gate thresholds)
+- `beta_window` (rolling OLS window for the market/size betas)
+- `formation_days` (residual accumulation / reversion horizon)
+- `retention_mult` (selection retention buffer; turnover/DP-cost control)
+- `entry_pct` (only the most-oversold tail is entry-eligible)
+- `regime_pct` (regime-gate threshold; reversion is fragile in trending
+  crashes so the defensive gate matters more, not less)
 - `n_positions` (target position count; 4-10 acceptable range)
 - `rebalance_freq` (biweekly default; may propose weekly/monthly with full justification)
 
