@@ -50,16 +50,17 @@ def _get_general_news_by_date(d: date, *, lookback_days: int = 3, limit: int = 1
 
 
 def trading_days(start: date, end: date) -> list[date]:
-    """Return NSE trading days in [start, end] from prices.duckdb (NIFTY index).
+    """Return NSE trading days in [start, end] from prices.duckdb.
 
-    NIFTY has continuous coverage over the backtest horizon in our local
-    store, so its row dates are a reliable trading-calendar proxy
-    without any external dependency.
+    Stale-schema fix (2026-05-15): the store's table is `daily_bars` with a
+    `dt` column, and there is NO 'NIFTY' pseudo-ticker. Every traded session
+    has rows for many symbols, so DISTINCT dt across daily_bars is the exact
+    NSE trading calendar (same source prepare.py / data.universe use).
     """
     con = duckdb.connect(str(PRICES_DB), read_only=True)
     rows = con.execute(
-        "SELECT DISTINCT date FROM prices WHERE ticker = 'NIFTY' "
-        "AND date BETWEEN ? AND ? ORDER BY date",
+        "SELECT DISTINCT dt FROM daily_bars "
+        "WHERE dt BETWEEN ? AND ? ORDER BY dt",
         [start.isoformat(), end.isoformat()],
     ).fetchall()
     con.close()

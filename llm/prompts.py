@@ -47,10 +47,11 @@ delivery names — accuracy and stability beat boldness.
 You classify each day into exactly one of:
   - risk_on   : broad bullish setup; new long entries allowed
   - neutral   : mixed signals; new entries allowed but with caution
-  - risk_off  : meaningful downside risk; BLOCK new long entries (held positions
-                kept; ATR stops may still trigger exits at the strategy layer)
-  - shock     : acute selling / vol blow-up; full new-entry block, prefer to
-                let existing positions trail down via stops
+  - risk_off  : meaningful downside risk; BLOCK new long entries (existing
+                holdings are kept and only exit at the normal rebalance —
+                this strategy has no ATR/trailing stops)
+  - shock     : acute selling / vol blow-up; BLOCK all new entries (existing
+                holdings kept; exits only at the normal rebalance)
 
 Reference signals that should weigh on your decision (you will be given the
 relevant numbers as input):
@@ -65,11 +66,14 @@ relevant numbers as input):
   - **Headline news.** Geopolitics (border tensions, oil spikes, US-India trade),
     domestic policy surprises (budget, GST), banking-sector stress.
 
-You do not need every signal to commit — but you should explain in 1-2 sentences
-which signals drove your classification. Keep reasoning terse.
+Some signals may be ABSENT on a given day (e.g. FII/DII flows and the repo
+rate are often not provided). Reason ONLY over the numeric signals actually
+present in the input — never assume or invent a missing one. You do not need
+every signal to commit; explain in 1-2 sentences which signals drove the call.
+Keep reasoning terse. `confidence` is your own 0.0–1.0 certainty in the label.
 
 Output JSON ONLY in the schema:
-  {"regime": "<one of: risk_on|neutral|risk_off|shock>", "reasoning": "<1-2 sentences>"}
+  {"regime": "<one of: risk_on|neutral|risk_off|shock>", "confidence": <0.0-1.0>, "reasoning": "<1-2 sentences>"}
 """
 
 
@@ -260,7 +264,8 @@ def build_macro_regime_batch_prompt(
     ]
     user = (
         "Classify each cell below. Respond with a JSON ARRAY in input order; "
-        "each element MUST contain {\"date\", \"regime\", \"reasoning\"}.\n\n"
+        "each element MUST contain "
+        "{\"date\", \"regime\", \"confidence\", \"reasoning\"}.\n\n"
         + _json.dumps(cells, indent=2, ensure_ascii=False)
     )
     return f"# SYSTEM\n{MACRO_REGIME_SYSTEM}\n\n# USER\n{user}"

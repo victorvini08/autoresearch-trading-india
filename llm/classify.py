@@ -221,13 +221,28 @@ def _extract_json_array(text: str) -> list | None:
 
 
 def _validate_macro(out: dict) -> bool:
-    return (
-        isinstance(out, dict)
-        and out.get("regime") in _ALLOWED_REGIMES
-        and isinstance(out.get("confidence"), (int, float))
-        and 0 <= float(out["confidence"]) <= 1
-        and isinstance(out.get("reasoning"), str)
-    )
+    """regime + reasoning are load-bearing; confidence is auxiliary.
+
+    confidence is now requested in the prompt, but a stray omission or a
+    non-numeric value must NOT nuke an entire chunk in an unattended multi-
+    year run (that was the 2026-05-15 'every row invalid' failure). So a
+    missing/!numeric/out-of-range confidence is tolerated here and defaulted
+    at extraction time (see _macro_confidence)."""
+    if not isinstance(out, dict):
+        return False
+    if out.get("regime") not in _ALLOWED_REGIMES:
+        return False
+    if not isinstance(out.get("reasoning"), str):
+        return False
+    return True
+
+
+def _macro_confidence(out: dict) -> float:
+    """Extract a sane confidence in [0,1]; default 0.5 when absent/invalid."""
+    c = out.get("confidence")
+    if isinstance(c, (int, float)) and 0.0 <= float(c) <= 1.0:
+        return float(c)
+    return 0.5
 
 
 def _process_macro_chunk(
@@ -267,7 +282,7 @@ def _process_macro_chunk(
             continue
         cache_value = {
             "regime": entry["regime"],
-            "confidence": float(entry["confidence"]),
+            "confidence": _macro_confidence(entry),
             "reasoning": entry["reasoning"],
         }
         cache_put(

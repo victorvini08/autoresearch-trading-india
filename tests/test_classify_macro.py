@@ -116,6 +116,29 @@ def test_classify_raises_when_unparseable(_stub_fred):
         classify_macro_regime_batch([date(2024, 3, 1)], p)
 
 
+def test_macro_accepts_response_without_confidence(_stub_fred):
+    """Regression for the 2026-05-15 'every row invalid' bug: the prompt
+    schema was {regime, reasoning} but the validator REQUIRED confidence,
+    so 100% of rows were rejected. confidence is now requested AND optional
+    (defaulted) so a stray omission can't nuke an unattended run."""
+    p = _fake_provider(
+        '[{"date": "2024-03-01", "regime": "risk_off", "reasoning": "vol up"}]'
+    )
+    out = classify_macro_regime_batch([date(2024, 3, 1)], p)
+    assert out[date(2024, 3, 1)]["regime"] == "risk_off"
+    assert out[date(2024, 3, 1)]["confidence"] == 0.5  # defaulted
+
+
+def test_macro_defaults_bad_confidence_value(_stub_fred):
+    p = _fake_provider(
+        '[{"date": "2024-03-01", "regime": "neutral", '
+        '"confidence": "high", "reasoning": "mixed"}]'
+    )
+    out = classify_macro_regime_batch([date(2024, 3, 1)], p)
+    assert out[date(2024, 3, 1)]["regime"] == "neutral"
+    assert out[date(2024, 3, 1)]["confidence"] == 0.5  # non-numeric → default
+
+
 def test_classify_handles_markdown_fenced_json(_stub_fred):
     p = _fake_provider(
         'Here is my analysis:\n```json\n'
