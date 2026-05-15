@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  DhanHQ access-token daily refresh.
+
+  DhanHQ self-generated tokens expire after 24h but can be renewed any time
+  while still active (GET /v2/RenewToken). This job runs daily at 08:45 IST
+  — before the 09:00 premarket scan — so the token never lapses as long as
+  the machine is on at least once per 24h.
+
+  Install:
+    1. Edit WorkingDirectory + the uv path below to match your machine.
+    2. cp this file to ~/Library/LaunchAgents/
+    3. launchctl load ~/Library/LaunchAgents/com.autoresearch.dhan_token_refresh.plist
+    4. Verify: launchctl list | grep dhan_token_refresh
+
+  The job logs to state/logs/dhan_token_refresh.{out,err}.log. If the token
+  has lapsed (machine off > 24h), the run exits non-zero and logs a clear
+  message; regenerate manually at https://web.dhan.co and the next run
+  resumes the chain automatically.
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.autoresearch.dhan_token_refresh</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/sh</string>
+    <string>-c</string>
+    <string>cd "/Users/aryanmehta/Desktop/My Work/autoresearch-trading-india" &amp;&amp; /opt/homebrew/bin/uv run python -m scripts.dhan_token_refresh</string>
+  </array>
+
+  <key>StartCalendarInterval</key>
+  <dict>
+    <key>Hour</key>
+    <integer>8</integer>
+    <key>Minute</key>
+    <integer>45</integer>
+  </dict>
+
+  <key>StandardOutPath</key>
+  <string>/Users/aryanmehta/Desktop/My Work/autoresearch-trading-india/state/logs/dhan_token_refresh.out.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/aryanmehta/Desktop/My Work/autoresearch-trading-india/state/logs/dhan_token_refresh.err.log</string>
+
+  <key>RunAtLoad</key>
+  <false/>
+</dict>
+</plist>

@@ -40,7 +40,7 @@ A third change (universe) addresses a separate empirical observation:
 | Decision | Choice | Rationale |
 |---|---|---|
 | Market | Indian equities (NSE), CNC / delivery | India-resident user; native market; eliminates LRS / TCS / Schedule FA overhead from US path |
-| Broker (execution) | **Dhan HQ Trading API** | Free brokerage on delivery; free Trading API (orders, positions, holdings); 1-year access token; 20 req/s rate limit; cheapest TCO at our capital range per US handoff §17. **Note:** Dhan's separate Data API costs ₹500/mo — we don't use it. Price data comes from free NSE bhav archive. |
+| Broker (execution) | **Dhan HQ Trading API** | Free brokerage on delivery; free Trading API (orders, positions, holdings); 24-hour access token auto-renewed daily via `scripts/dhan_token_refresh.py` (GET /v2/RenewToken — verified live 2026-05-15; the handoff doc's "1-year" claim was wrong); 20 req/s rate limit; cheapest TCO at our capital range per US handoff §17. **Note:** Dhan's separate Data API costs ₹500/mo — we don't use it. Price data comes from free NSE bhav archive. |
 | Price data (historical + live EOD) | **NSE bhav archive** (free public ZIP) | Authoritative NSE-published EOD data; same source backtest and live; no monthly fee; corporate actions in NSE bhav include splits/bonuses |
 | Universe | **Top 200 by 20d ADV, filtered from Nifty 500** | Includes mid-cap winners that Nifty 100 misses; ADV filter keeps liquidity; quality screen excludes weak names; refreshed monthly |
 | Strategy shape | **Cross-sectional 12-1 momentum + retention buffer + quality screen + sector cap + Indian regime gate** | Sparse (4 params), theory-backed (Jegadeesh-Titman / Asness / Novy-Marx); avoids ATR-stop overfit risk from US repo |

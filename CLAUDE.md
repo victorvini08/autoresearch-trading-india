@@ -66,8 +66,13 @@ Default on for new accounts. (F&O / commodities are not used; do not enable.)
 ### 3. Generate the Dhan access token
 - Log in to https://web.dhan.co
 - Top-right profile menu → "DhanHQ Trading APIs"
-- Click "Generate Access Token". Token validity ~1 year.
-- Note your `dhanClientId` (visible in the API section).
+- Click "Generate Access Token". **Token validity is 24 hours** (NOT 1 year —
+  the handoff doc was wrong). It is auto-renewed daily by
+  `scripts/dhan_token_refresh.py` (see "Token auto-refresh" below), so you
+  only paste it once.
+- Note your `dhanClientId` (visible in the API section). You don't strictly
+  need to copy it — the refresher reads it from `/v2/profile` and writes
+  `DHAN_CLIENT_ID` into `.env` automatically on first run.
 
 ### 4. Register the algo with Dhan (SEBI compliance, mandatory from 2026-04-01)
 - In the Dhan API portal, register a new "Personal Algo" (NOT "Trading Provider").
@@ -88,8 +93,29 @@ uv run python -m scripts.dhan_smoke
 ```
 This calls `get_cash`, `get_positions`, `get_holdings`, `get_historical_candles` and exits. No orders placed.
 
-### 7. Set a calendar reminder for token rotation
-Dhan tokens expire after ~1 year. Set a reminder for ~340 days from generation.
+### 7. Token auto-refresh (no calendar reminder needed)
+DhanHQ self-generated tokens expire after **24 hours**, but can be renewed
+any time while still active (`GET /v2/RenewToken`), yielding a fresh 24h
+token. `scripts/dhan_token_refresh.py` automates this:
+
+```
+uv run python -m scripts.dhan_token_refresh            # validate + renew + rewrite .env
+uv run python -m scripts.dhan_token_refresh --check-only  # just print expiry
+```
+
+Install the launchd job so it runs daily at 08:45 IST (before the 09:00
+premarket scan):
+
+```
+cp deploy/launchd/com.autoresearch.dhan_token_refresh.plist ~/Library/LaunchAgents/
+launchctl load ~/Library/LaunchAgents/com.autoresearch.dhan_token_refresh.plist
+```
+
+As long as the machine is on at least once per 24h, the token chains
+forever — you paste it **once**. Only failure mode: machine off > 24h →
+token lapses (can't renew an expired token) → regenerate once at
+https://web.dhan.co and the cron resumes automatically. Verified live
+2026-05-15 (renew is a GET; new JWT is the `token` field).
 
 ---
 
