@@ -35,7 +35,9 @@ import re
 from datetime import date, timedelta
 from typing import Iterable, Iterator, TypeVar
 
-from data.ingest_macro import read_macro
+from pathlib import Path
+
+from data.ingest_macro import read_fii_dii, read_macro_window
 from data.ingest_news import read_news
 
 from .cache import (
@@ -57,8 +59,15 @@ from .provider import Provider
 
 logger = logging.getLogger(__name__)
 
-_MACRO_INDICATORS = ["DGS10", "VIXCLS", "T10Y2Y", "BAMLH0A0HYM2", "USEPUINDXD"]
 _ALLOWED_REGIMES = {"risk_on", "risk_off", "neutral", "shock"}
+
+# Indian macro series in storage/macro.duckdb (NOT the US FRED IDs the US
+# repo carried — those would silently return an empty snapshot here).
+_MACRO_DB = Path("storage/macro.duckdb")
+_S_VIX = "index_india_vix"
+_S_NIFTY50 = "index_nifty_50"
+_S_REPO = "INTDSRINM193N"      # FRED India short-term policy rate proxy
+_S_USDINR = "DEXINUS"          # FRED USD/INR daily
 
 _DEFAULT_CHUNK_SIZE = 50
 _MIN_RETRY_CHUNK_SIZE = 5
@@ -71,15 +80,66 @@ def _chunked(items: list[T], n: int) -> Iterator[list[T]]:
         yield items[i:i + n]
 
 
-def _fred_snapshot(d: date) -> dict[str, float]:
-    """Most recent value of each macro indicator on or before `d`."""
-    start = (d - timedelta(days=10)).isoformat()
-    end = d.isoformat()
+def _macro_snapshot(d: date, macro_db: Path = _MACRO_DB) -> dict[str, float]:
+    """Indian macro-regime signal snapshot as of `d` (most recent on/before).
+
+    Computes the signals the macro_regime prompt expects:
+      india_vix, india_vix_pct_252d, nifty50_close, nifty50_200dma,
+      nifty50_pct_vs_200dma, repo_rate_pct, usd_inr, usd_inr_1w_change_pct,
+      fii_net_20d_cr, dii_net_20d_cr
+
+    Every signal degrades to "absent" (key omitted) rather than 0.0 when its
+    series has no data — the prompt only reasons over keys present, so a
+    missing FII history (v2) just means the FII arm is silent, not false.
+    A ~430-calendar-day lookback covers the 252d VIX percentile + 200d MA.
+    """
+    end = d
+    start = d - timedelta(days=430)
     snap: dict[str, float] = {}
-    for series_id in _MACRO_INDICATORS:
-        df = read_macro(series_id, start, end)
-        if not df.empty:
-            snap[series_id] = float(df["value"].iloc[-1])
+
+    vix = read_macro_window(macro_db, _S_VIX, start, end)
+    if vix:
+        latest = vix[-1][1]
+        snap["india_vix"] = round(latest, 2)
+        window = [v for _, v in vix][-252:]
+        if len(window) >= 30:
+            rank = sum(1 for x in window if x <= latest) / len(window)
+            snap["india_vix_pct_252d"] = round(rank, 3)
+
+    nifty = read_macro_window(macro_db, _S_NIFTY50, start, end)
+    if nifty:
+        close = nifty[-1][1]
+        snap["nifty50_close"] = round(close, 2)
+        last200 = [v for _, v in nifty][-200:]
+        if len(last200) >= 50:
+            dma = sum(last200) / len(last200)
+            snap["nifty50_200dma"] = round(dma, 2)
+            snap["nifty50_pct_vs_200dma"] = round((close / dma - 1.0) * 100, 2)
+
+    repo = read_macro_window(macro_db, _S_REPO, start, end)
+    if repo:
+        snap["repo_rate_pct"] = round(repo[-1][1], 2)
+
+    usdinr = read_macro_window(macro_db, _S_USDINR, start, end)
+    if usdinr:
+        snap["usd_inr"] = round(usdinr[-1][1], 3)
+        # ~1 trading week ago ≈ 5 points back
+        if len(usdinr) >= 6:
+            wk_ago = usdinr[-6][1]
+            if wk_ago:
+                snap["usd_inr_1w_change_pct"] = round(
+                    (usdinr[-1][1] / wk_ago - 1.0) * 100, 2
+                )
+
+    # FII/DII 20-day net — graceful: only emitted if >= 20 trading rows exist
+    # (today only ~1 row; full history is the v2 task). The prompt treats
+    # absent FII as "no signal", never as zero/negative.
+    fii = read_fii_dii(macro_db, start, end)
+    if len(fii) >= 20:
+        last20 = fii[-20:]
+        snap["fii_net_20d_cr"] = round(sum(r[1] for r in last20), 1)
+        snap["dii_net_20d_cr"] = round(sum(r[2] for r in last20), 1)
+
     return snap
 
 
@@ -213,14 +273,14 @@ def classify_macro_regime_batch(
     pending: list[tuple[date, str, dict[str, float], list[str], str]] = []
     for d in dates:
         d_str = d.isoformat()
-        fred_values = _fred_snapshot(d)
+        macro_signals = _macro_snapshot(d)
         headlines = recent_news_by_date.get(d, [])
-        _, single_hash = build_macro_regime_prompt(d_str, fred_values, headlines)
+        _, single_hash = build_macro_regime_prompt(d_str, macro_signals, headlines)
         cached = cache_get(d_str, MACRO_TICKER_SENTINEL, single_hash, provider.model_id)
         if cached is not None:
             out[d] = cached
         else:
-            pending.append((d, d_str, fred_values, headlines, single_hash))
+            pending.append((d, d_str, macro_signals, headlines, single_hash))
 
     # Phase 2: batch the uncached cells, one LLM call per chunk
     for chunk in _chunked(pending, chunk_size):

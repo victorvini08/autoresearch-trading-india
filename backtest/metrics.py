@@ -17,8 +17,8 @@ import pandas as pd
 # only loser) produces a near-zero downside_dev and a Sortino of magnitude
 # 50+ that dominates the cross-fold mean. We saw a single fold drag the
 # 25-fold mean to -142 on Strategy A this way. The floor of 0.001 ≈ 16%
-# annualized vol — roughly QQQ-equivalent — sanity-bounds the metric without
-# touching legitimate strategies, whose dstd sits comfortably above this.
+# annualized vol — roughly a broad large-cap-index level — sanity-bounds the
+# metric without touching legitimate strategies, whose dstd sits well above.
 SORTINO_DSTD_FLOOR = 0.001
 
 
@@ -65,7 +65,7 @@ def calmar(
     `dd_floor` clamps the denominator from below. Without it, the metric is
     pathologically unstable when max_dd → 0: a slightly-losing 6-month fold
     with 0.3% drawdown becomes Calmar ≈ -3.3 — that's noise amplification, not
-    risk measurement. 5% is roughly 1x monthly Nasdaq-100 vol; below it, the
+    risk measurement. 5% is roughly 1x monthly broad large-cap vol; below it, the
     strategy hasn't engaged enough risk to be measured. The 20% absolute-DD
     gate handles real drawdown blow-ups separately, so the floor doesn't mask
     danger — it just prevents division-by-near-zero from dominating the gate.

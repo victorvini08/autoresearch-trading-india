@@ -5,9 +5,9 @@ Strategy code calls these to gate decisions:
     from llm.features import macro_regime, sentiment, events, news_volume
 
     regime = macro_regime(today)            # → 'risk_on' | 'risk_off' | 'neutral' | 'shock' | None
-    sent = sentiment("AAPL", today)         # → {'score', 'confidence', 'is_actionable'} | None
-    evts = events("AAPL", today)            # → 7 categories, each {'fired': bool, 'severity': 0..1}
-    n = news_volume("AAPL", today)          # → int, article count (0 == no news that day)
+    sent = sentiment("RELIANCE", today)     # → {'score', 'confidence', 'is_actionable'} | None
+    evts = events("RELIANCE", today)        # → 7 categories, each {'fired': bool, 'severity': 0..1}
+    n = news_volume("RELIANCE", today)      # → int, article count (0 == no news that day)
 
 Point-in-time semantics: each cache cell was classified using only data
 available as of `date`. The accessor never sees the future. If a cell has not
@@ -77,7 +77,7 @@ def events(
     all categories not-fired with severity 0.
 
     Strategy usage:
-        evts = events("AAPL", today)
+        evts = events("RELIANCE", today)
         if evts["regulatory"]["fired"] and evts["regulatory"]["severity"] > 0.5:
             tighten_stop()
     """

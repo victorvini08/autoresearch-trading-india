@@ -23,14 +23,14 @@ Output: JSON to stdout (or `--output` file), shape:
     {
       "as_of_date": "2026-05-09",
       "strategy_module": "strategy",
-      "strategy_class": "MomentumRotation",
+      "strategy_class": "IndiaMomentumQualityRegime",
       "targets": [
-        {"ticker": "AAPL", "target_fraction": 0.095},
-        {"ticker": "MSFT", "target_fraction": 0.095},
+        {"ticker": "RELIANCE", "target_fraction": 0.165},
+        {"ticker": "INFY", "target_fraction": 0.165},
         ...
       ],
       "exits": [
-        {"ticker": "TSLA", "target_fraction": 0.0},
+        {"ticker": "TCS", "target_fraction": 0.0},
         ...
       ]
     }

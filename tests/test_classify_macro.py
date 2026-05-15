@@ -17,10 +17,14 @@ def _isolate_cache(monkeypatch, tmp_path):
 
 @pytest.fixture
 def _stub_fred(monkeypatch):
-    """Pretend FRED has values; avoid a real DuckDB read."""
+    """Stub the Indian macro snapshot; avoid a real DuckDB read."""
     monkeypatch.setattr(
-        "llm.classify._fred_snapshot",
-        lambda _d: {"VIXCLS": 18.5, "DGS10": 4.1, "T10Y2Y": -0.4},
+        "llm.classify._macro_snapshot",
+        lambda _d, *a, **k: {
+            "india_vix": 18.5,
+            "india_vix_pct_252d": 0.62,
+            "nifty50_pct_vs_200dma": 3.4,
+        },
     )
 
 

@@ -242,11 +242,11 @@ def _stable_hash(prompt_version: str, payload: object) -> str:
 
 def build_macro_regime_prompt(
     d_str: str,
-    fred_values: dict,
+    signals: dict,
     headlines: list[str],
 ) -> tuple[str, str]:
-    payload = {"date": d_str, "signals": fred_values, "headlines": list(headlines)}
-    user = macro_regime_user_prompt(date_iso=d_str, signals=fred_values, headlines=headlines)
+    payload = {"date": d_str, "signals": signals, "headlines": list(headlines)}
+    user = macro_regime_user_prompt(date_iso=d_str, signals=signals, headlines=headlines)
     full = f"# SYSTEM\n{MACRO_REGIME_SYSTEM}\n\n# USER\n{user}"
     return full, _stable_hash(MACRO_REGIME_PROMPT_VERSION, payload)
 
@@ -255,8 +255,8 @@ def build_macro_regime_batch_prompt(
     items: list[tuple[str, dict, list[str]]],
 ) -> str:
     cells = [
-        {"date": d_str, "signals": fred, "headlines": list(hl)}
-        for (d_str, fred, hl) in items
+        {"date": d_str, "signals": sig, "headlines": list(hl)}
+        for (d_str, sig, hl) in items
     ]
     user = (
         "Classify each cell below. Respond with a JSON ARRAY in input order; "

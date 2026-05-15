@@ -293,6 +293,53 @@ def write_fii_dii(
     return len(points)
 
 
+def read_macro_window(macro_db: Path, series_id: str, start, end):
+    """Return [(dt, value)] for `series_id` in [start, end] (ascending).
+
+    Distinct from data.ingest_macro.read_macro (which reads the default
+    DB_PATH and returns a DataFrame) — this takes an explicit db path and
+    returns plain tuples so the LLM classifier can stay pandas-light.
+    """
+    if not Path(macro_db).exists():
+        return []
+    conn = duckdb.connect(str(macro_db), read_only=True)
+    try:
+        rows = conn.execute(
+            "SELECT dt, value FROM macro_daily WHERE series_id=? "
+            "AND dt BETWEEN ? AND ? ORDER BY dt",
+            (series_id, start, end),
+        ).fetchall()
+    finally:
+        conn.close()
+    return [(r[0], float(r[1])) for r in rows if r[1] is not None]
+
+
+def read_fii_dii(macro_db: Path, start, end):
+    """Return [(dt, fii_net_cr, dii_net_cr)] in [start, end] (ascending).
+
+    Empty list if the table is missing or the window has no rows — callers
+    must degrade gracefully (FII history is v2; today only ~1 row exists).
+    """
+    if not Path(macro_db).exists():
+        return []
+    conn = duckdb.connect(str(macro_db), read_only=True)
+    try:
+        tbl = conn.execute(
+            "SELECT 1 FROM information_schema.tables "
+            "WHERE table_name='fii_dii_daily'"
+        ).fetchone()
+        if not tbl:
+            return []
+        rows = conn.execute(
+            "SELECT dt, fii_net_cr, dii_net_cr FROM fii_dii_daily "
+            "WHERE dt BETWEEN ? AND ? ORDER BY dt",
+            (start, end),
+        ).fetchall()
+    finally:
+        conn.close()
+    return [(r[0], float(r[1]), float(r[2])) for r in rows]
+
+
 def write_india_vix(macro_db: Path, points: list[tuple[date, float]]) -> int:
     if not points:
         return 0
@@ -440,5 +487,7 @@ __all__ = [
     "ingest_yfinance_indices",
     "ingest_fii_dii_recent",
     "read_macro",
+    "read_macro_window",
+    "read_fii_dii",
     "ingest_macro",
 ]
