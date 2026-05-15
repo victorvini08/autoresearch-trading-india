@@ -28,7 +28,7 @@ LLM-driven autoresearch swing-trading system for Indian equities, delivery (CNC)
 | Market | Indian equities (NSE), CNC delivery | India-resident user; eliminates LRS / TCS / Schedule FA |
 | Broker | **Dhan HQ Trading API** (free brokerage on delivery) | docs/superpowers/specs/2026-05-14-india-autoresearch-trading-design.md §3 |
 | Price data | **NSE bhav archive** (free public ZIPs) | Dhan Data API is paid ₹500/mo — we don't use it |
-| Universe | **Top 200 by 20-day ADV from liquid-filtered Nifty 500** | Includes mid-cap winners that Nifty 100 misses |
+| Universe | **Top 200 by 20-day ADV, point-in-time from the full NSE EQ bhav** (survivorship-free; the current Nifty 500 list is sector/ISIN enrichment only, NOT the membership gate) | 2026-05-15 audit: using today's Nifty 500 list historically censored 293 delisted names → inflated momentum backtest. PIT membership from price history fixes it with data we already have |
 | Strategy shape | Cross-sectional 12-1 momentum + retention + quality screen + sector cap + Indian regime gate (5 hyperparameters) | Theory-backed (Jegadeesh-Titman / Asness / Novy-Marx); avoids US repo's ATR-stop overfit |
 | Anti-overfit gates | Sealed 2024-26 test, Bonferroni p-correction, RW Monte Carlo, parsimony budget, sub-period stationarity, cost-aware Sortino | **NEW for India**; addresses US multi-strategy overfit failure |
 | Rebalance cadence | **Biweekly** (alternate Fridays) | User-specified |

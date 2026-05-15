@@ -121,28 +121,38 @@ def compute_universe(
     min_adv_cr: float = MIN_ADV_CR,
     min_free_float_mcap_cr: float = MIN_FREE_FLOAT_MCAP_CR,
 ) -> list[UniverseRow]:
-    """Compute the universe as of `as_of_date` using prices already in `prices_db`.
+    """Compute the universe as of `as_of_date` — POINT-IN-TIME, survivorship-free.
 
-    `prices_db` must have a `daily_bars` table with at least columns
-    `(ticker, dt, close, volume)`. ADV is computed as
-    `mean(close * volume) over the last ADV_LOOKBACK_DAYS sessions strictly before as_of_date`.
+    Membership is derived purely from the prices already in `prices_db`
+    (`daily_bars`, the full NSE EQ bhav including names that later delisted):
+    every ticker actively trading strictly BEFORE `as_of_date` is a candidate,
+    filtered by listing age + 20-day ADV + recent-trading-days ratio, then
+    ranked by ADV desc and sliced to `target_size`. A name that delisted in
+    2022 simply stops being a candidate after 2022 — automatically, with no
+    look-ahead. This is the live-trading selection rule applied consistently
+    through time (see audit 2026-05-15).
 
-    `universe_db` is written-to: a snapshot row per (as_of_date, ticker) is
-    inserted. Re-running for the same date OVERWRITES that snapshot
-    (idempotent).
+    `constituents` (the CURRENT Nifty 500 CSV, fetched if None) is used ONLY
+    as a best-effort sector/ISIN enrichment lookup — NOT for membership.
+    Sector labels are stable over time, so today's label applied historically
+    is a harmless approximation; a name absent from the current list (e.g. a
+    delisted one) gets industry='OTHER' and an empty ISIN, both of which
+    data.sectors.canonicalise and resolve_scrip_code already handle
+    gracefully (sector cap treats OTHER as a normal bucket; BSE matching
+    falls back to the NSE symbol).
 
-    Returns the in-memory list of UniverseRow entries (post-filter, sorted by
-    ADV desc, sliced to `target_size`).
+    ADV = mean(close*volume) over the last ADV_LOOKBACK_DAYS sessions strictly
+    before as_of_date. `universe_db` is written idempotently (delete-then-
+    insert per as_of_date). Returns the post-filter list sorted by ADV desc.
     """
     if constituents is None:
         constituents = fetch_nifty500_constituents()
 
-    eq_only = [c for c in constituents if c["series"] == "EQ"]
-    logger.info(
-        "universe: %d Nifty 500 names, %d after EQ-only filter",
-        len(constituents),
-        len(eq_only),
-    )
+    # Static enrichment lookup ONLY (symbol → sector/ISIN/company). Membership
+    # comes from price history below, never from this list.
+    enrich: dict[str, dict[str, str]] = {
+        c["symbol"]: c for c in constituents
+    }
 
     conn = duckdb.connect(str(prices_db), read_only=True)
     try:
@@ -193,11 +203,10 @@ def compute_universe(
         for r in history_rows
     }
 
+    # Candidate set = every ticker with price history strictly before
+    # as_of_date (point-in-time, survivorship-free). NOT a fixed list.
     survivors: list[UniverseRow] = []
-    for c in eq_only:
-        stats = by_ticker.get(c["symbol"])
-        if not stats:
-            continue  # no price history at all → skip
+    for ticker, stats in by_ticker.items():
         if stats["n_bars"] < MIN_LISTING_TRADING_DAYS:
             continue
         if stats["adv_cr"] < min_adv_cr:
@@ -207,18 +216,17 @@ def compute_universe(
             ratio = stats["n_trading_days"] / recent_bars
             if ratio < MIN_TRADING_DAYS_RATIO:
                 continue
-        # Free-float mcap is supplied by NSE Indices monthly file; for now we
-        # accept the constituent. If the file does not carry the field, we
-        # accept all names that pass the other filters and rely on ADV to
-        # enforce liquidity (ADV is highly correlated with mcap).
+        meta = enrich.get(ticker)
+        # ADV (₹10cr floor) is the liquidity gate; free-float mcap is a
+        # best-effort enrichment only, hence 0.0 when unknown.
         survivors.append(
             UniverseRow(
                 as_of_date=as_of_date,
-                ticker=c["symbol"],
-                isin=c["isin"],
-                company=c["company"],
-                industry=c["industry"],
-                free_float_mcap_cr=0.0,  # populated by sectors.py join if available
+                ticker=ticker,
+                isin=meta["isin"] if meta else "",
+                company=meta["company"] if meta else ticker,
+                industry=meta["industry"] if meta else "OTHER",
+                free_float_mcap_cr=0.0,
                 adv_20d_cr=float(stats["adv_cr"]),
             )
         )
@@ -226,8 +234,9 @@ def compute_universe(
     survivors.sort(key=lambda r: r.adv_20d_cr, reverse=True)
     picked = survivors[:target_size]
     logger.info(
-        "universe: filtered %d → %d → %d (top by ADV)",
-        len(eq_only),
+        "universe @ %s: %d PIT candidates → %d pass filters → %d picked (top by ADV)",
+        as_of_date,
+        len(by_ticker),
         len(survivors),
         len(picked),
     )
