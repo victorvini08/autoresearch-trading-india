@@ -52,12 +52,18 @@ import io
 import logging
 import time
 import zipfile
+from concurrent.futures import ThreadPoolExecutor
 from datetime import date, timedelta
 from pathlib import Path
 
 import requests
 
 logger = logging.getLogger(__name__)
+
+# GKG records carry very large fields (V2Themes / V2Locations / GCAM can be
+# hundreds of KB). Python's csv default field cap is 128 KB, which aborts the
+# WHOLE reader mid-file (not just one row). Raise it well past any GKG field.
+csv.field_size_limit(10_000_000)
 
 _GKG_BASE = "http://data.gdeltproject.org/gdeltv2/{stamp}.gkg.csv.zip"
 _UA = {"User-Agent": "Mozilla/5.0 (autoresearch-trading-india gdelt ingest)"}
@@ -129,10 +135,13 @@ def fetch_gkg_records(stamp: str, *, timeout: int = 60) -> list[tuple[str, float
     try:
         z = zipfile.ZipFile(io.BytesIO(r.content))
         raw = z.read(z.namelist()[0]).decode("utf-8", "replace")
-    except (zipfile.BadZipFile, KeyError) as e:
-        logger.warning("GKG %s bad zip: %s", stamp, e)
+        return _parse_gkg(raw)
+    except Exception as e:
+        # A single pathological file must never kill a multi-hour backfill —
+        # it propagates through ThreadPoolExecutor.map otherwise. Degrade to
+        # "no records for this slice".
+        logger.warning("GKG %s parse failed (%s) — slice skipped", stamp, e)
         return None
-    return _parse_gkg(raw)
 
 
 def _parse_gkg(raw: str) -> list[tuple[str, float]]:
@@ -170,14 +179,19 @@ def compute_day_features(
     Returns the feature dict, or None if no file for the day was reachable
     (vs. an empty dict-of-zeros when files exist but had no kept records —
     a real 'quiet news day' signal, distinct from missing data)."""
+    stamps = _stamps_for(news_day, slice_hours)
+    # The 6 slice files are independent network fetches — pull them
+    # concurrently. GDELT's static bulk-download server tolerates modest
+    # parallelism (it is designed for it); we cap at the slice count.
+    with ThreadPoolExecutor(max_workers=len(stamps)) as ex:
+        results = list(ex.map(fetch_gkg_records, stamps))
     recs: list[tuple[str, float]] = []
     any_file = False
-    for stamp in _stamps_for(news_day, slice_hours):
-        got = fetch_gkg_records(stamp)
+    for got in results:
         if got is not None:
             any_file = True
             recs.extend(got)
-        time.sleep(polite_delay_sec)
+    time.sleep(polite_delay_sec)  # small inter-day breather
     if not any_file:
         return None
     n = len(recs)
