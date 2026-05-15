@@ -334,3 +334,31 @@ This is the autoresearch loop's persistent memory. Every iteration appends an en
 **Learning:** No scored strategy inference: the iteration failed before prepare.py produced validation metrics. Treat this as an implementation failure, not evidence about the hypothesis. Failure reason: validation failed: disallowed import: bisect.
 
 ---
+
+## Iteration 2026-05-16-6376e36 — REVERTED
+
+**Hypothesis:** Ranking candidates by 12-1 momentum divided by realized downside deviation will improve mean validation Sortino by favoring trends with less negative-path volatility, while preserving cadence, sizing, universe, and hyperparameter count.
+
+**Change:** Replaced raw momentum ranking with a no-new-parameter downside-risk-adjusted momentum score and kept the execution contract unchanged.
+
+**Decision:** REVERTED — catastrophe: max drawdown: 60.5% > 50% (account-wipe territory) | anti-overfit FAILED: bonferroni(p=0.9954 >= alpha/N=0.0038) · random_walk_mc(only 87.30% percentile vs RW null) · sub_period_stationarity(min/max ratio of |Sortino| across 3 sub-periods = 0.23)
+
+**Result:**
+- validation_sortino_mean: 2.100424669002477
+- validation_folds: 20
+- per_fold_sortinos: [9.6457, 2.6603, 0.0264, 1.5281, -0.4638, -1.4669, -1.1245, -0.9193, -2.6907, -3.7448, 2.8739, 14.073, 5.0652, 3.3471, 2.9886, 2.6216, 1.6049, 2.2223, 3.4647, 0.2965]
+- calmar_mean: 6.233121021366566
+- hit_rate_mean: 0.2891666666666667
+- profit_factor_mean: 0.0834237373910782
+- trade_count_total: 31
+- aggregate_max_dd: 0.6047759765374946
+- worst_fold_max_dd: 0.25284261999262175
+- max_position_frac_peak: 1.0404314311657057
+- lower_quartile_fold_calmar: -1.4285715822846714
+- n_negative_folds: 7/20
+- risk.passed: False
+- risk.violations: ['max drawdown: 60.5% > 50% (account-wipe territory)']
+
+**Learning:** Sortino scored 2.100 with no prior kept baseline. Aggregate DD was 60.5%; negative folds were 7/20; trades=31. Do not reuse this exact setup: it failed the catastrophe gate, so the result is not a usable edge even if the hypothesis was economically plausible. Decision reason: catastrophe: max drawdown: 60.5% > 50% (account-wipe territory) | anti-overfit FAILED: bonferroni(p=0.9954 >= alpha/N=0.0038) · random_walk_mc(only 87.30% percentile vs RW null) · sub_period_stationarity(min/max ratio of |Sortino| across 3 sub-periods = 0.23).
+
+---
