@@ -210,3 +210,31 @@ This is the autoresearch loop's persistent memory. Every iteration appends an en
 **Learning:** No scored strategy inference: the iteration failed before prepare.py produced validation metrics. Treat this as an implementation failure, not evidence about the hypothesis. Failure reason: prepare.py crashed: Query interrupted.
 
 ---
+
+## Iteration 2026-05-16-1811297 — REVERTED
+
+**Hypothesis:** Switching a failed regime gate from entry-only behavior to full liquidation during risk_off or shock regimes should reduce account-wipe drawdowns and improve validation Sortino by removing stale momentum exposure during macro stress.
+
+**Change:** Changed the regime gate so failed regimes set retention to empty and prevent new entries, causing existing holdings to be exited via order_target_percent while leaving ranking, sector cap, cadence, and sizing unchanged.
+
+**Decision:** REVERTED — catastrophe: max drawdown: 84.1% > 50% (account-wipe territory) | anti-overfit FAILED: sub_period_stationarity(min/max ratio of |Sortino| across 3 sub-periods = 0.04)
+
+**Result:**
+- validation_sortino_mean: 1.3683827674327886
+- validation_folds: 20
+- per_fold_sortinos: [10.7038, 4.2456, -1.6998, -0.2555, -3.3946, -3.3788, -1.9271, -2.8589, -2.7456, -1.9959, 5.0844, 15.4237, 6.2159, 3.128, 2.8153, 3.1902, 1.3742, -0.7422, -3.2094, -2.6056]
+- calmar_mean: 6.432951608973691
+- hit_rate_mean: 0.25833333333333336
+- profit_factor_mean: 1.2661747307426021
+- trade_count_total: 39
+- aggregate_max_dd: 0.8412546130170832
+- worst_fold_max_dd: 0.4021710423452941
+- max_position_frac_peak: 1.2186307069176447
+- lower_quartile_fold_calmar: -1.9069675608148007
+- n_negative_folds: 11/20
+- risk.passed: False
+- risk.violations: ['max drawdown: 84.1% > 50% (account-wipe territory)']
+
+**Learning:** Sortino scored 1.368 with no prior kept baseline. Aggregate DD was 84.1%; negative folds were 11/20; trades=39. Do not reuse this exact setup: it failed the catastrophe gate, so the result is not a usable edge even if the hypothesis was economically plausible. Decision reason: catastrophe: max drawdown: 84.1% > 50% (account-wipe territory) | anti-overfit FAILED: sub_period_stationarity(min/max ratio of |Sortino| across 3 sub-periods = 0.04).
+
+---
