@@ -418,3 +418,31 @@ This is the autoresearch loop's persistent memory. Every iteration appends an en
 **Learning:** Sortino scored 1.674 with no prior kept baseline. Aggregate DD was 78.6%; negative folds were 10/20; trades=31. Do not reuse this exact setup: it failed the catastrophe gate, so the result is not a usable edge even if the hypothesis was economically plausible. Decision reason: catastrophe: max drawdown: 78.6% > 50% (account-wipe territory) | anti-overfit FAILED: bonferroni(p=0.9994 >= alpha/N=0.0033) · random_walk_mc(only 1.20% percentile vs RW null) · sub_period_stationarity(min/max ratio of |Sortino| across 3 sub-periods = 0.10).
 
 ---
+
+## Iteration 2026-05-16-f504777 — REVERTED
+
+**Hypothesis:** Adding a no-new-parameter skip-window confirmation should improve mean validation Sortino by avoiding stale 12-1 momentum leaders whose most recent skipped month has already turned negative.
+
+**Change:** I kept the 12-1 ranking intact but require both retained holdings and new entries to have non-negative last-skip-window return, and replaced the disallowed bisect lookup with a manual point-in-time universe scan.
+
+**Decision:** REVERTED — catastrophe: max drawdown: 86.3% > 50% (account-wipe territory) | anti-overfit FAILED: bonferroni(p=1.0000 >= alpha/N=0.0031) · random_walk_mc(only 0.00% percentile vs RW null) · sub_period_stationarity(min/max ratio of |Sortino| across 3 sub-periods = 0.24)
+
+**Result:**
+- validation_sortino_mean: 1.0348193959564003
+- validation_folds: 20
+- per_fold_sortinos: [5.3446, 0.4285, -2.2628, 0.7454, -3.9352, -3.655, -0.755, -1.6548, -2.3027, -2.619, 2.0931, 15.3413, 5.9887, 2.3872, 3.5027, 3.061, 2.1804, 1.1016, -3.8408, -0.453]
+- calmar_mean: 5.866803545913642
+- hit_rate_mean: 0.525952380952381
+- profit_factor_mean: 8.018803118548991
+- trade_count_total: 62
+- aggregate_max_dd: 0.8627912264070263
+- worst_fold_max_dd: 0.42633993151702443
+- max_position_frac_peak: 1.2775739462384716
+- lower_quartile_fold_calmar: -1.8381669387490214
+- n_negative_folds: 9/20
+- risk.passed: False
+- risk.violations: ['max drawdown: 86.3% > 50% (account-wipe territory)']
+
+**Learning:** Sortino scored 1.035 with no prior kept baseline. Aggregate DD was 86.3%; negative folds were 9/20; trades=62. Do not reuse this exact setup: it failed the catastrophe gate, so the result is not a usable edge even if the hypothesis was economically plausible. Decision reason: catastrophe: max drawdown: 86.3% > 50% (account-wipe territory) | anti-overfit FAILED: bonferroni(p=1.0000 >= alpha/N=0.0031) · random_walk_mc(only 0.00% percentile vs RW null) · sub_period_stationarity(min/max ratio of |Sortino| across 3 sub-periods = 0.24).
+
+---
