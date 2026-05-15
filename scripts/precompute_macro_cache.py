@@ -35,6 +35,7 @@ import duckdb
 # falls back to numeric-only classification (RBI + FRED India + NSE
 # indices + FII/DII), which is still informative.
 from data.ingest_prices import DB_PATH as PRICES_DB
+from prepare import BACKTEST_END, BACKTEST_START
 from llm.classify import classify_macro_regime_batch
 from llm.provider import ClaudeCodeProvider, CodexProvider, Provider
 
@@ -79,8 +80,12 @@ def _make_provider(provider_name: str, model: str | None) -> Provider:
 
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(description=__doc__)
-    p.add_argument("--start", type=date.fromisoformat, default=date(2020, 1, 1))
-    p.add_argument("--end", type=date.fromisoformat, default=date(2024, 12, 31))
+    # Defaults bound to prepare's single source of truth so the macro cache
+    # spans the FULL window the evaluator/sealed-test/live path will read —
+    # not a frozen literal that omits 2025→2026 (audit 2026-05-15). Override
+    # with --start/--end for a partial run (idempotent + resumable).
+    p.add_argument("--start", type=date.fromisoformat, default=BACKTEST_START)
+    p.add_argument("--end", type=date.fromisoformat, default=BACKTEST_END)
     p.add_argument(
         "--provider",
         choices=["claude", "codex"],
@@ -107,7 +112,7 @@ def main(argv: list[str] | None = None) -> int:
     if not days:
         print(
             f"no trading days found in [{args.start}, {args.end}] — "
-            "is prices.duckdb populated for NIFTY?"
+            "is daily_bars in prices.duckdb populated for this range?"
         )
         return 1
 
