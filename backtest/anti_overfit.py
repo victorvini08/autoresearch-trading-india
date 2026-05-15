@@ -75,6 +75,11 @@ class StrategySummary:
     n_hyperparameters: int             # count of tunable params in strategy.py
     sub_period_sortinos: tuple[float, ...]   # disjoint 18m sub-period Sortinos
     rw_mc_null_pct: float              # percentile of strategy Sortino vs RW null
+    # Audit-2026-05-15 #8: every traded ticker was in the point-in-time
+    # universe on its entry date (computed in the immutable evaluator from
+    # the trade log). False ⇒ the variant ignored the injected universe and
+    # silently reintroduced survivorship — a hard structural reject.
+    universe_respected: bool = True
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -318,6 +323,34 @@ def sub_period_stationarity_gate(
 
 
 # ──────────────────────────────────────────────────────────────────────
+# Universe-respect gate (audit 2026-05-15 #8)
+# ──────────────────────────────────────────────────────────────────────
+
+
+def universe_respect_gate(summary: StrategySummary) -> GateResult:
+    """Hard structural reject if the variant traded any ticker that was NOT
+    in the point-in-time universe on its entry date.
+
+    The loop edits strategy.py freely, including the Fix-B PIT-universe
+    guard. This gate enforces the invariant from the IMMUTABLE side using
+    the trade log, so a variant that drops the guard and reintroduces
+    survivorship is rejected no matter how its code is written."""
+    passed = bool(summary.universe_respected)
+    return GateResult(
+        name="universe_respect",
+        passed=passed,
+        metric=None,
+        threshold=None,
+        reason=(
+            "all trades within the point-in-time universe"
+            if passed
+            else "variant traded tickers outside the point-in-time universe "
+                 "— survivorship/look-ahead reintroduced (hard reject)"
+        ),
+    )
+
+
+# ──────────────────────────────────────────────────────────────────────
 # Composite gate runner
 # ──────────────────────────────────────────────────────────────────────
 
@@ -353,6 +386,7 @@ def run_all_gates(
     baseline_sortino: float,
     n_active_variants: int,
     *,
+    baseline_hyperparams: int = BASELINE_HYPERPARAMS,
     skip_sealed: bool = False,
     sealed_sortino: float | None = None,
     sealed_log_path: Path = SEALED_REVEAL_LOG,
@@ -361,13 +395,22 @@ def run_all_gates(
     `sealed_sortino` is provided, run the sealed reveal as the final gate
     (which mutates `sealed_reveals.csv`).
 
-    Order is important: cheaper gates first, sealed reveal last (it commits a
-    one-shot record).
+    `baseline_hyperparams` lets the caller pass the param count of the
+    CURRENT committed strategy so parsimony penalises only knobs ADDED
+    during the campaign (the principled reading of "beyond the baseline"),
+    rather than an absolute constant.
+
+    Order: structural integrity first (universe-respect — cheapest, hardest),
+    then statistical gates, sealed reveal last (it commits a one-shot record).
     """
     gates = [
+        universe_respect_gate(summary),
         bonferroni_gate(summary, n_active_variants),
         random_walk_mc_gate(summary),
-        parsimony_gate(summary, baseline_sortino),
+        parsimony_gate(
+            summary, baseline_sortino,
+            baseline_hyperparams=baseline_hyperparams,
+        ),
         sub_period_stationarity_gate(summary),
     ]
     if not skip_sealed and sealed_sortino is not None:
@@ -408,5 +451,6 @@ __all__ = [
     "compute_rw_mc_null",
     "parsimony_gate",
     "sub_period_stationarity_gate",
+    "universe_respect_gate",
     "run_all_gates",
 ]

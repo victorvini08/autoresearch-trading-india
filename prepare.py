@@ -25,6 +25,7 @@ import backtrader as bt
 import numpy as np
 import pandas as pd
 
+from backtest.anti_overfit import compute_rw_mc_null
 from backtest.engine import run_backtest
 from backtest.metrics import (
     calmar,
@@ -122,6 +123,85 @@ def _pit_universe(window_end: date) -> tuple[list[str], dict]:
     ubd = {d: frozenset(get_universe_at(d)) for d in sd}
     union = sorted(set().union(*ubd.values())) if ubd else []
     return union, ubd
+
+
+# Strategy params that are plumbing / structure, NOT tunable signal
+# hyperparameters — excluded from the parsimony count.
+_PLUMBING_PARAMS = frozenset({
+    "universe_db_path", "fundamentals_db_path", "macro_db_path",
+    "rebalance_weekday", "rebalance_period_weeks", "rebalance_week_parity",
+    "enforce_sector_cap", "universe_by_date",
+})
+
+
+def count_hyperparameters(strategy_cls: type) -> int:
+    """Count tunable signal hyperparameters on a strategy class (excludes
+    plumbing/structure). Used by the parsimony gate. Counted dynamically so
+    the loop cannot hide added knobs from the gate."""
+    try:
+        items = dict(strategy_cls.params._getitems())
+    except Exception:  # noqa: BLE001 — backtrader param introspection variance
+        return 0
+    return sum(
+        1 for k, v in items.items()
+        if k not in _PLUMBING_PARAMS and isinstance(v, (int, float))
+        and not isinstance(v, bool)
+    )
+
+
+def _universe_respected(all_trades: pd.DataFrame) -> bool:
+    """Audit-2026-05-15 #8 guard. True iff EVERY traded ticker was a member
+    of the point-in-time universe on its entry date. Computed here in the
+    IMMUTABLE evaluator from the trade log (not from the loop-editable
+    strategy), so a variant that ignores the injected universe_by_date and
+    trades off-universe names is caught no matter what its code looks like.
+    """
+    if all_trades is None or len(all_trades) == 0:
+        return True
+    if "ticker" not in all_trades.columns or "entry_date" not in all_trades.columns:
+        return True
+    sd = snapshot_dates()
+    if not sd:
+        return False  # trades exist but no universe defined at all
+    members_by = {d: set(get_universe_at(d)) for d in sd}
+    sd_sorted = sorted(sd)
+    import bisect
+    for row in all_trades.itertuples(index=False):
+        tkr = getattr(row, "ticker", None)
+        ed = getattr(row, "entry_date", None)
+        if tkr is None or ed is None:
+            continue
+        ed = _as_date(ed)
+        i = bisect.bisect_right(sd_sorted, ed) - 1
+        if i < 0:
+            return False  # traded before any snapshot existed
+        if str(tkr).upper() not in members_by[sd_sorted[i]]:
+            return False
+    return True
+
+
+def _sub_period_sortinos(
+    fold_val_starts: list[date],
+    per_fold_sortinos: list[float | None],
+    *,
+    months: int = 18,
+) -> tuple[float, ...]:
+    """Disjoint `months`-long buckets of fold val-starts → mean Sortino per
+    bucket. Feeds the sub-period-stationarity gate (regime robustness)."""
+    pairs = [
+        (vs, s) for vs, s in zip(fold_val_starts, per_fold_sortinos)
+        if s is not None
+    ]
+    if not pairs:
+        return ()
+    start = min(vs for vs, _ in pairs)
+    buckets: dict[int, list[float]] = {}
+    for vs, s in pairs:
+        idx = ((vs.year - start.year) * 12 + (vs.month - start.month)) // months
+        buckets.setdefault(idx, []).append(float(s))
+    return tuple(
+        float(np.mean(buckets[k])) for k in sorted(buckets)
+    )
 
 
 def _find_strategy_class(module: ModuleType) -> type:
@@ -258,6 +338,7 @@ def evaluate(strategy_module: ModuleType, mode: str = "research") -> dict:
     strategy_cls = _find_strategy_class(strategy_module)
 
     fold_scores: list[dict] = []
+    fold_val_starts: list[date] = []
     skipped_folds = 0
     for (_train_s, _train_e, val_s, val_e) in _walk_forward_folds(
         BACKTEST_START, TEST_BOUNDARY
@@ -274,6 +355,7 @@ def evaluate(strategy_module: ModuleType, mode: str = "research") -> dict:
         fold_scores.append(
             _score_window(strategy_cls, feeds, fold_ubd, score_start=val_s)
         )
+        fold_val_starts.append(val_s)
 
     if not fold_scores:
         raise RuntimeError(
@@ -398,7 +480,42 @@ def evaluate(strategy_module: ModuleType, mode: str = "research") -> dict:
         for s in fold_scores
     ]
 
+    # ── Anti-overfit gate inputs (computed in the IMMUTABLE evaluator so the
+    #    loop cannot fabricate them). Consumed by backtest.anti_overfit via
+    #    scripts.loop. The aggregate net daily-return series is the chained
+    #    walk-forward equity's bar returns (scored windows only, after costs).
+    chained_daily = chained_eq.pct_change().dropna().to_numpy()
+    if chained_daily.size >= 2:
+        def _sortino_arr(a: np.ndarray) -> float:
+            return float(sortino(pd.Series(a)))
+        orig_sortino = _sortino_arr(chained_daily)
+        rw_pct, rw = compute_rw_mc_null(
+            chained_daily, _sortino_arr, n_permutations=5000
+        )
+        # Permutation p-value (temporal-exchangeability null), +1 smoothing.
+        sortino_val_pvalue = float(
+            (np.sum(rw >= orig_sortino) + 1) / (len(rw) + 1)
+        )
+        rw_mc_null_pct = float(rw_pct)
+    else:
+        sortino_val_pvalue = 1.0
+        rw_mc_null_pct = 0.0
+
+    anti_overfit = {
+        "sortino_val_mean": val_sortino_mean,
+        "sortino_val_pvalue": sortino_val_pvalue,
+        "rw_mc_null_pct": rw_mc_null_pct,
+        "sub_period_sortinos": list(
+            _sub_period_sortinos(fold_val_starts, per_fold_sortinos)
+        ),
+        "n_hyperparameters": count_hyperparameters(strategy_cls),
+        "n_trades": int(side_panel["trade_count_total"]),
+        "aggregate_dd": aggregate_max_dd,
+        "universe_respected": _universe_respected(all_trades),
+    }
+
     out: dict = {
+        "anti_overfit": anti_overfit,
         "validation_sortino_mean": val_sortino_mean,
         "validation_folds": len(fold_scores),
         "per_fold_sortinos": per_fold_sortinos,

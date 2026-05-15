@@ -288,6 +288,55 @@ def _extract_json_obj(text: str) -> dict | None:
 # ---------------------------------------------------------------------------
 
 
+def evaluate_anti_overfit_gates(
+    metrics: dict,
+    *,
+    iter_id: str,
+    baseline_sortino: float | None,
+    n_active_variants: int,
+    baseline_hyperparams: int,
+):
+    """Build a StrategySummary from the immutable evaluator's anti_overfit
+    block and run the full non-sealed gate suite (sealed reveal stays a
+    human/promotion step). Returns (GateRun, one_line_reason).
+
+    The sealed reveal is intentionally skipped here — the nightly research
+    loop must NEVER touch the sealed 2025→2026 window; that is revealed once
+    at the human promotion gate (CLAUDE.md hard constraint §9).
+    """
+    from backtest.anti_overfit import StrategySummary, run_all_gates
+
+    ao = (metrics or {}).get("anti_overfit") or {}
+    val_mean = float(ao.get("sortino_val_mean", 0.0))
+    summary = StrategySummary(
+        iter_id=iter_id,
+        sortino_train_mean=val_mean,            # no separate train step here
+        sortino_val_mean=val_mean,
+        sortino_val_pvalue=float(ao.get("sortino_val_pvalue", 1.0)),
+        aggregate_dd=float(ao.get("aggregate_dd", 0.0)),
+        n_trades=int(ao.get("n_trades", 0)),
+        n_hyperparameters=int(ao.get("n_hyperparameters", 0)),
+        sub_period_sortinos=tuple(ao.get("sub_period_sortinos", []) or ()),
+        rw_mc_null_pct=float(ao.get("rw_mc_null_pct", 0.0)),
+        universe_respected=bool(ao.get("universe_respected", True)),
+    )
+    gate_run = run_all_gates(
+        summary,
+        baseline_sortino if baseline_sortino is not None else 0.0,
+        n_active_variants,
+        baseline_hyperparams=baseline_hyperparams,
+        skip_sealed=True,
+    )
+    failed = [g for g in gate_run.results if not g.passed]
+    reason = (
+        "anti-overfit gates passed"
+        if gate_run.passed
+        else "anti-overfit FAILED: "
+        + " · ".join(f"{g.name}({g.reason})" for g in failed)
+    )
+    return gate_run, reason
+
+
 def run_prepare_research() -> dict:
     """Run prepare.evaluate() in-process. Reloads strategy + prepare modules
     so each iteration's edited strategy.py takes effect.
@@ -628,6 +677,20 @@ def main(argv: list[str] | None = None) -> int:
     strategy_text = STRATEGY_PATH.read_text()
     attempts = recent_attempts()
 
+    # Parsimony baseline = hyperparameter count of the CURRENTLY COMMITTED
+    # strategy (this iteration's starting point), captured BEFORE the edit is
+    # applied. The parsimony gate then penalises only knobs the variant ADDS.
+    try:
+        import prepare as _prep
+        import strategy as _cur_strat
+        importlib.reload(_cur_strat)
+        baseline_hyperparams = _prep.count_hyperparameters(
+            _prep._find_strategy_class(_cur_strat)
+        )
+    except Exception:  # noqa: BLE001 — fall back to spec baseline
+        from backtest.anti_overfit import BASELINE_HYPERPARAMS
+        baseline_hyperparams = BASELINE_HYPERPARAMS
+
     print(f"[loop {args.iteration_id}] provider={args.provider}, "
           f"recent_attempts={len(attempts)}")
 
@@ -715,16 +778,30 @@ def main(argv: list[str] | None = None) -> int:
         last_agg_dd is None or new_agg_dd <= last_agg_dd + 0.10
     )
 
+    # Anti-overfit gate suite (the thing that was entirely UNWIRED before
+    # 2026-05-15). A variant is KEPT only if every gate passes — this is the
+    # whole defense against the loop hill-climbing validation noise.
+    gate_run, gate_reason = evaluate_anti_overfit_gates(
+        metrics,
+        iter_id=args.iteration_id,
+        baseline_sortino=last_sortino,
+        n_active_variants=len(attempts) + 1,
+        baseline_hyperparams=baseline_hyperparams,
+    )
+    gates_passed = gate_run.passed
+    metrics["anti_overfit_gates"] = gate_run.to_dict()
+
     if (
         risk_passed
         and improved
         and sortino_positive
         and sortino_in_range
         and dd_regression_ok
+        and gates_passed
     ):
         kept_reason = (
             f"sortino {new_sortino:.3f} > prev {last_sortino!r}, "
-            f"agg_dd {new_agg_dd:.1%}, catastrophe gate clear"
+            f"agg_dd {new_agg_dd:.1%}, catastrophe gate clear, {gate_reason}"
         )
         append_journal(journal_entry(
             args.iteration_id,
@@ -775,6 +852,8 @@ def main(argv: list[str] | None = None) -> int:
                 parts.append("catastrophe: " + " · ".join(violations))
             else:
                 parts.append("catastrophe gate failed")
+        if not gates_passed:
+            parts.append(gate_reason)
         reason = " | ".join(parts) if parts else "no improvement"
 
         append_journal(journal_entry(
