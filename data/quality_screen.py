@@ -64,7 +64,13 @@ def load_fundamentals(
 
     Returns {} if the DB or `fundamentals_quarterly` table doesn't exist
     (soft-degrade — pipeline still functions, screen becomes a no-op).
+
+    Accepts a str OR Path: loop-proposed strategies frequently pass the raw
+    `self.p.fundamentals_db_path` string (a `str`), which previously crashed
+    prepare.evaluate with "'str' object has no attribute 'exists'" and
+    wasted the iteration (observed 2026-05-15). Coerce defensively.
     """
+    fundamentals_db = Path(fundamentals_db)
     if not fundamentals_db.exists():
         logger.warning(
             "quality_screen: %s does not exist; screen is a no-op until "

@@ -283,6 +283,30 @@ def _extract_json_obj(text: str) -> dict | None:
     return None
 
 
+def _coerce_valid_python(code: str) -> str:
+    """Repair LLM-double-escaped code (2026-05-15 root cause).
+
+    Codex sometimes emits its JSON with the strategy source double-escaped,
+    so `new_strategy_py` arrives with literal two-char `\\n` / `\\t` / `\\"`
+    instead of real newlines — written verbatim it's a line-1 SyntaxError
+    and the iteration is wasted on a false reject. If the code as-received
+    does NOT parse but its unicode_escape-decoded form DOES, use the decoded
+    form. The dual guard (original invalid AND decoded valid) makes this
+    safe — legitimate code is never altered.
+    """
+    try:
+        ast.parse(code)
+        return code
+    except SyntaxError:
+        pass
+    try:
+        decoded = code.encode("utf-8", "ignore").decode("unicode_escape")
+        ast.parse(decoded)
+        return decoded
+    except (SyntaxError, ValueError, UnicodeDecodeError):
+        return code  # unrecoverable → validate_strategy_edit rejects cleanly
+
+
 # ---------------------------------------------------------------------------
 # prepare.py invocation — run as subprocess, parse JSON output
 # ---------------------------------------------------------------------------
@@ -358,9 +382,19 @@ def _prune_old_trade_dirs(keep: int = MAX_TRADE_HISTORY) -> None:
     """
     if not ITER_LOG_PATH.exists() or not ITER_DIR.exists():
         return
-    with ITER_LOG_PATH.open(newline="") as f:
-        rows = list(csv.DictReader(f))
-    recent_ids = {r["iteration_id"] for r in rows[-keep:]}
+    try:
+        with ITER_LOG_PATH.open(newline="") as f:
+            rows = list(csv.DictReader(f))
+        # Tolerate a stale/foreign header schema — housekeeping must NEVER
+        # abort an iteration (this KeyError'd the whole loop on 2026-05-15).
+        recent_ids = {
+            (r.get("iteration_id") or r.get("iter_id") or "")
+            for r in rows[-keep:]
+        }
+    except Exception as e:  # noqa: BLE001 — pure housekeeping, never fatal
+        print(f"[loop] _prune_old_trade_dirs skipped (non-fatal): {e}",
+              flush=True)
+        return
     for p in ITER_DIR.iterdir():
         if not p.is_dir() or p.name in recent_ids:
             continue
@@ -406,7 +440,25 @@ def persist_iteration(
             trades.to_csv(iter_subdir / "trades.csv", index=False)
 
     # Append one row to iterations/log.csv
+    # Self-heal a stale/foreign header. A committed log.csv with a different
+    # column schema made DictWriter append misaligned rows and DictReader
+    # crash _prune (2026-05-15). If the on-disk header != ITER_LOG_FIELDS,
+    # rotate it aside and start a correctly-headed file.
     is_new_log = not ITER_LOG_PATH.exists()
+    if not is_new_log:
+        try:
+            with ITER_LOG_PATH.open(newline="") as f:
+                hdr = (f.readline().strip().split(",")
+                       if f else [])
+            if hdr != ITER_LOG_FIELDS:
+                bak = ITER_LOG_PATH.with_suffix(
+                    f".csv.bak-{datetime.now():%Y%m%d%H%M%S}")
+                ITER_LOG_PATH.rename(bak)
+                print(f"[loop] iterations/log.csv had a stale header; "
+                      f"rotated to {bak.name}, starting fresh", flush=True)
+                is_new_log = True
+        except Exception as e:  # noqa: BLE001 — never fatal
+            print(f"[loop] log.csv header check skipped: {e}", flush=True)
     with ITER_LOG_PATH.open("a", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=ITER_LOG_FIELDS)
         if is_new_log:
@@ -646,6 +698,8 @@ def commit_reverted(iteration_id: str, reason: str) -> None:
     _git("commit", "-m", f"iter {iteration_id} reverted: {reason}")
 
 
+
+
 # ---------------------------------------------------------------------------
 # Main one-shot iteration
 # ---------------------------------------------------------------------------
@@ -692,7 +746,7 @@ def main(argv: list[str] | None = None) -> int:
         baseline_hyperparams = BASELINE_HYPERPARAMS
 
     print(f"[loop {args.iteration_id}] provider={args.provider}, "
-          f"recent_attempts={len(attempts)}")
+          f"recent_attempts={len(attempts)}", flush=True)
 
     provider = make_provider(args.provider)
     prompt = build_prompt(program, journal, strategy_text, attempts)
@@ -716,7 +770,7 @@ def main(argv: list[str] | None = None) -> int:
         print("[loop] REJECTED: unparseable LLM output")
         return 2
 
-    new_text = parsed["new_strategy_py"]
+    new_text = _coerce_valid_python(parsed["new_strategy_py"])
     ok, why = validate_strategy_edit(new_text, current_text=strategy_text)
     if not ok:
         append_journal(journal_entry(

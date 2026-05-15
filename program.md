@@ -53,6 +53,15 @@ orders fill next open — no look-ahead). Import from `llm.features`:
   yet; the quality screen soft-degrades to pass-all (the `quality_pct`
   knob was removed for this reason).
 
+**Output contract (STRICT — a violation wastes the whole iteration):**
+- `new_strategy_py` MUST be the complete, literal Python source of
+  `strategy.py` with REAL newlines — never escaped `\n`/`\t`/`\"`
+  sequences, never markdown fences, never a diff.
+- It MUST be syntactically valid Python (it will be `ast.parse`d) and keep
+  the class name and the `order_target_percent`-only trade contract.
+  Mentally compile it before returning — a syntax error = immediate reject,
+  no backtest, a wasted iteration.
+
 **Decision criteria for KEEP:**
 A variant is KEPT iff all gates pass:
 1. Walk-forward Sortino (net of costs) > baseline AND > 0
