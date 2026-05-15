@@ -62,6 +62,16 @@ def macro_regime(d: date, model_id: str | None = DEFAULT_MODEL_ID) -> str | None
     return out.get("regime") if out else None
 
 
+# Alias: strategy.py / docs have long referenced `macro_regime_for`, but the
+# function was only ever defined as `macro_regime` — so `from llm.features
+# import macro_regime_for` always raised ImportError, was swallowed by
+# strategy._regime_gate's bare except, and the regime gate was SILENTLY
+# permissive forever (even with a fully precomputed macro cache). Exposing
+# both names fixes that without editing the loop-editable strategy and is
+# robust to whichever name future loop edits use. (Bug found 2026-05-15.)
+macro_regime_for = macro_regime
+
+
 # Curated point-in-time macro signals with REAL data coverage (verified
 # 2026-05-15). Deliberately EXCLUDES policy/repo rate (only 16 rows, frozen
 # at 2022-07 → would carry a dead value forward) and FII/DII flows (1 row;
