@@ -238,3 +238,31 @@ This is the autoresearch loop's persistent memory. Every iteration appends an en
 **Learning:** Sortino scored 1.368 with no prior kept baseline. Aggregate DD was 84.1%; negative folds were 11/20; trades=39. Do not reuse this exact setup: it failed the catastrophe gate, so the result is not a usable edge even if the hypothesis was economically plausible. Decision reason: catastrophe: max drawdown: 84.1% > 50% (account-wipe territory) | anti-overfit FAILED: sub_period_stationarity(min/max ratio of |Sortino| across 3 sub-periods = 0.04).
 
 ---
+
+## Iteration 2026-05-16-361c56b — REVERTED
+
+**Hypothesis:** Treating n_positions as fixed risk slots and applying the 25% sector cap to retained holdings as well as new entries should improve validation Sortino by preventing risk-off or cap-bound rebalances from concentrating capital into too few names.
+
+**Change:** I changed portfolio construction so retained names and new buys pass through one sector-capped selection pool, and each selected name gets the fixed slot weight 0.99 / n_positions so unfilled slots remain cash.
+
+**Decision:** REVERTED — catastrophe: min trades: 14 < 20 — too sparse to evaluate | anti-overfit FAILED: bonferroni(p=0.9998 >= alpha/N=0.0056) · sub_period_stationarity(min/max ratio of |Sortino| across 3 sub-periods = 0.17)
+
+**Result:**
+- validation_sortino_mean: 1.5050858372164977
+- validation_folds: 20
+- per_fold_sortinos: [8.1347, 3.458, 0.0747, 1.4897, -0.7748, 1.1945, -1.6737, -3.5439, -3.0928, -2.4832, 3.9549, 15.3119, 7.4317, 1.6856, 0.1893, 5.3613, 0.7359, -1.3262, -2.9873, -3.0386]
+- calmar_mean: 1.3672834672640217
+- hit_rate_mean: 0.175
+- profit_factor_mean: 4.939333601287776
+- trade_count_total: 14
+- aggregate_max_dd: 0.2482551840455244
+- worst_fold_max_dd: 0.08333832854516199
+- max_position_frac_peak: 0.16148340022877344
+- lower_quartile_fold_calmar: -1.8375109970927737
+- n_negative_folds: 8/20
+- risk.passed: False
+- risk.violations: ['min trades: 14 < 20 — too sparse to evaluate']
+
+**Learning:** Sortino scored 1.505 with no prior kept baseline. Aggregate DD was 24.8%; negative folds were 8/20; trades=14. Do not reuse this exact setup: it failed the catastrophe gate, so the result is not a usable edge even if the hypothesis was economically plausible. Decision reason: catastrophe: min trades: 14 < 20 — too sparse to evaluate | anti-overfit FAILED: bonferroni(p=0.9998 >= alpha/N=0.0056) · sub_period_stationarity(min/max ratio of |Sortino| across 3 sub-periods = 0.17).
+
+---
