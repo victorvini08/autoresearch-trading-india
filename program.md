@@ -24,15 +24,34 @@
 - `n_positions` (target position count; 4-10 acceptable range)
 - `rebalance_freq` (biweekly default; may propose weekly/monthly with full justification)
 
-**Data the strategy may use:**
-- Price OHLCV history (from `storage/prices.duckdb`)
-- Macro regime classification (from `llm/features.py` → `macro_regime` for date)
-- Per-ticker sentiment classification (from `llm/features.py` → `sentiment` for (ticker, date))
-- Per-ticker events classification (from `llm/features.py` → `events` for (ticker, date))
-- FII / DII flows (from `storage/macro.duckdb`)
-- India VIX (from `storage/macro.duckdb`)
-- Quality metrics (from `data/quality_screen.py` outputs)
-- Sector classification (from `data/sectors.py`)
+**Data the strategy may use** — all accessors are point-in-time
+(most-recent value on/before the rebalance date; signals are as-of-close,
+orders fill next open — no look-ahead). Import from `llm.features`:
+
+- Price OHLCV history (`storage/prices.duckdb`)
+- `macro_regime(date)` → `'risk_on'|'neutral'|'risk_off'|'shock'|None`
+  (holistic 4-class label; `None` until the macro cache is precomputed)
+- `macro_signals(date)` → dict of **numeric** macro signals with real
+  data coverage (absent keys simply omitted, never zero-filled). Keys:
+  `india_vix`, `india_vix_pct_252d`, `nifty50_close`, `nifty50_200dma`,
+  `nifty50_pct_vs_200dma`, `usd_inr`, `usd_inr_1w_change_pct`,
+  `gdelt_tone_mean`, `gdelt_tone_negfrac`, `gdelt_epu_policy`,
+  `gdelt_centralbank`, `gdelt_tariff_trade`, `gdelt_inflation`.
+  Convenience scalars: `india_vix_percentile(date)` (0..1, high = vol
+  stress), `nifty_vs_200dma_pct(date)` (trend regime). Prefer these
+  numeric signals for richer/continuous regime logic than the 4-class
+  label; the parsimony + anti-overfit gates police added complexity.
+- `sentiment(ticker, date)`, `events(ticker, date)`, `news_volume(ticker,
+  date)` (per-ticker; sentiment/events are `None`/default until their
+  caches are precomputed)
+- Sector classification (`data/sectors.py`)
+
+**NOT available — do NOT write logic depending on these:**
+- FII / DII flows — only ~1 recent row; 5y history deferred.
+- Policy / repo rate — 16 stale rows (frozen 2022-07); excluded.
+- Quality / fundamentals (ROE, D/E, op-margin) — no fundamentals ingest
+  yet; the quality screen soft-degrades to pass-all (the `quality_pct`
+  knob was removed for this reason).
 
 **Decision criteria for KEEP:**
 A variant is KEPT iff all gates pass:

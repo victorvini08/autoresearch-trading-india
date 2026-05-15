@@ -62,6 +62,55 @@ def macro_regime(d: date, model_id: str | None = DEFAULT_MODEL_ID) -> str | None
     return out.get("regime") if out else None
 
 
+# Curated point-in-time macro signals with REAL data coverage (verified
+# 2026-05-15). Deliberately EXCLUDES policy/repo rate (only 16 rows, frozen
+# at 2022-07 → would carry a dead value forward) and FII/DII flows (1 row;
+# historical backfill deferred). Computed by the SAME audited
+# llm.classify._macro_snapshot the regime classifier uses — single source of
+# truth, so no divergence and the established as-of-D-close → next-open
+# point-in-time convention is preserved (no look-ahead).
+_MACRO_SIGNAL_KEYS = frozenset({
+    "india_vix", "india_vix_pct_252d",
+    "nifty50_close", "nifty50_200dma", "nifty50_pct_vs_200dma",
+    "usd_inr", "usd_inr_1w_change_pct",
+    "gdelt_tone_mean", "gdelt_tone_negfrac",
+    "gdelt_epu_policy", "gdelt_centralbank",
+    "gdelt_tariff_trade", "gdelt_inflation",
+})
+
+
+def macro_signals(d: date) -> dict:
+    """Point-in-time numeric macro signals as of `d` (most-recent value
+    on/before d — same convention & source as the regime classifier). Only
+    keys with genuine data coverage are returned; absent signals are omitted
+    (never zero-filled). Strategy code can gate/scale on these instead of
+    only the 4-class `macro_regime` label, e.g.:
+
+        s = macro_signals(today)
+        if s.get("india_vix_pct_252d", 0.0) > 0.90:   # vol-stress regime
+            allow_new = False
+
+    NOT available (do not rely on): FII/DII flows, policy/repo rate —
+    insufficient history (see program.md).
+    """
+    from llm.classify import _macro_snapshot  # lazy: avoid import cycle
+
+    snap = _macro_snapshot(d)
+    return {k: v for k, v in snap.items() if k in _MACRO_SIGNAL_KEYS}
+
+
+def india_vix_percentile(d: date) -> float | None:
+    """India VIX rank within its trailing-252-session window, 0..1
+    (None if unavailable). High ⇒ volatility-stress regime."""
+    return macro_signals(d).get("india_vix_pct_252d")
+
+
+def nifty_vs_200dma_pct(d: date) -> float | None:
+    """Nifty 50 percent above(+) / below(-) its 200-DMA (None if
+    unavailable). Trend-regime proxy."""
+    return macro_signals(d).get("nifty50_pct_vs_200dma")
+
+
 def sentiment(
     ticker: str, d: date, model_id: str | None = DEFAULT_MODEL_ID
 ) -> dict | None:
