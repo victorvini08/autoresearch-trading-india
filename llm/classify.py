@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import re
 from datetime import date, timedelta
 from typing import Iterable, Iterator, TypeVar
@@ -70,6 +71,29 @@ _S_REPO = "INTDSRINM193N"      # FRED India short-term policy rate proxy
 _S_USDINR = "DEXINUS"          # FRED USD/INR daily
 
 _DEFAULT_CHUNK_SIZE = 50
+
+
+def _skip_model_id(provider: Provider) -> str | None:
+    """model_id used for the precompute cache-SKIP lookup.
+
+    Default (None): model-agnostic — a cell already classified by ANY
+    provider is reused, so a Codex-filled half-cache is continued by a
+    later Claude run instead of being re-computed from scratch. This is
+    consistent with llm.features reading the cache model-agnostically by
+    default (these coarse outputs — 4-class regime / [-1,1] sentiment /
+    7 flags — are treated as model-interchangeable). Writes are still
+    tagged with the running provider's real model_id (audit/ablation
+    provenance is preserved).
+
+    Set LLM_STRICT_MODEL_CACHE=1 to restore strict per-model skip (each
+    provider re-classifies independently) — needed only for a clean
+    single-model ablation study. Supersedes the original blanket
+    interpretation of hard-constraint #7 per explicit user decision
+    2026-05-15.
+    """
+    if os.getenv("LLM_STRICT_MODEL_CACHE") in ("1", "true", "True"):
+        return provider.model_id
+    return None
 _MIN_RETRY_CHUNK_SIZE = 5
 
 T = TypeVar("T")
@@ -290,7 +314,9 @@ def classify_macro_regime_batch(
         macro_signals = _macro_snapshot(d)
         headlines = recent_news_by_date.get(d, [])
         _, single_hash = build_macro_regime_prompt(d_str, macro_signals, headlines)
-        cached = cache_get(d_str, MACRO_TICKER_SENTINEL, single_hash, provider.model_id)
+        cached = cache_get(
+            d_str, MACRO_TICKER_SENTINEL, single_hash, _skip_model_id(provider)
+        )
         if cached is not None:
             out[d] = cached
         else:
@@ -435,7 +461,7 @@ def classify_sentiment_batch(
             continue
         _, single_hash = build_sentiment_prompt(ticker, d_str, news_items)
         key_ticker = sentiment_ticker_key(ticker)
-        cached = cache_get(d_str, key_ticker, single_hash, provider.model_id)
+        cached = cache_get(d_str, key_ticker, single_hash, _skip_model_id(provider))
         if cached is not None:
             out[(ticker, d)] = cached
         else:
@@ -587,7 +613,7 @@ def classify_events_batch(
             continue
         _, single_hash = build_events_prompt(ticker, d_str, news_items)
         key_ticker = events_ticker_key(ticker)
-        cached = cache_get(d_str, key_ticker, single_hash, provider.model_id)
+        cached = cache_get(d_str, key_ticker, single_hash, _skip_model_id(provider))
         if cached is not None:
             out[(ticker, d)] = cached
         else:

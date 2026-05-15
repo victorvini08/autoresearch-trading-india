@@ -47,7 +47,7 @@ LLM-driven autoresearch swing-trading system for Indian equities, delivery (CNC)
 4. **FRACTION_CHANGE_THRESHOLD = 0.005** on `target_fraction` (not `target_qty`) suppresses mark-drift churn. Do not remove.
 5. **Cash-ledger entries write on `fill_date`, not `signal_date`** (US repo learnings §4.3 — get_cash over-counts if we use signal_date).
 6. **Journal parser uses literal-line match for `**Decision:** KEPT`** — never substring (US repo learnings §4.4).
-7. **LLM cache key includes `model_id`** — swapping models must invalidate the affected slice.
+7. **LLM cache rows are still WRITTEN keyed by `model_id`** (audit/ablation provenance preserved). But as of 2026-05-15 (explicit user decision) the precompute cache-SKIP lookup is **model-agnostic by default**: a cell already classified by ANY provider is reused, so a Codex-filled half-cache is *continued* by a later Claude run instead of recomputed. This matches `llm.features` reading the cache model-agnostically (these coarse 4-class/[-1,1]/7-flag outputs are treated as model-interchangeable). Set `LLM_STRICT_MODEL_CACHE=1` to restore strict per-model isolation for a clean single-model ablation. (Supersedes the original "swapping models invalidates the slice" rule.)
 8. **Anti-overfit gates are atomic.** A variant that fails ANY gate is REJECTED, not partially accepted.
 9. **Sealed test set (2024-01 → 2026-05) is revealed ONCE per promotion** — no retries on the same variant.
 
