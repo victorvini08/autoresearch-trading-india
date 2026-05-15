@@ -24,7 +24,7 @@ import hashlib
 import logging
 import re
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from xml.etree import ElementTree as ET
 
@@ -299,6 +299,16 @@ def ingest_bse_for_universe(
     universe: list[UniverseRow] = load_universe(universe_db, snap_date)
     scrip_map = build_scrip_map()
 
+    # BSE's AnnGetData caps the date range — a multi-year span returns
+    # RWCNT:0 (empty). Verified 2026-05-15: 5y → 0 rows, 1y → 253. So we
+    # walk [from_d, to_d] in <= 180-day windows per ticker.
+    def _windows(s: date, e: date, days: int = 180):
+        cur = s
+        while cur <= e:
+            w_end = min(cur + timedelta(days=days - 1), e)
+            yield cur, w_end
+            cur = w_end + timedelta(days=1)
+
     total = 0
     unresolved = 0
     for u in universe:
@@ -306,12 +316,20 @@ def ingest_bse_for_universe(
         if not code:
             unresolved += 1
             continue
-        try:
-            anns = fetch_bse_announcements(code, from_d, to_d, u.ticker)
-        except Exception as e:
-            logger.warning("BSE fetch failed for %s (%s): %s", u.ticker, code, e)
-            time.sleep(polite_delay_sec * 4)
-            continue
+        anns: list = []
+        for w_start, w_end in _windows(from_d, to_d):
+            try:
+                anns.extend(
+                    fetch_bse_announcements(code, w_start, w_end, u.ticker)
+                )
+            except Exception as e:
+                logger.warning(
+                    "BSE fetch failed for %s (%s) %s..%s: %s",
+                    u.ticker, code, w_start, w_end, e,
+                )
+                time.sleep(polite_delay_sec * 4)
+                continue
+            time.sleep(polite_delay_sec)
         articles = [
             Article(
                 article_id=_hash_id(a.subject or a.headline[:80], "bse", a.dt),
