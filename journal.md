@@ -296,3 +296,31 @@ separate lineages.
 **Learning:** Sortino scored 0.252 with no prior kept baseline. Aggregate DD was 86.1%; negative folds were 11/20; trades=58. Do not reuse this exact setup: it failed the catastrophe gate, so the result is not a usable edge even if the hypothesis was economically plausible. Decision reason: catastrophe: max drawdown: 86.1% > 50% (account-wipe territory) | anti-overfit FAILED: bonferroni(p=0.9982 >= alpha/N=0.0045) · sub_period_stationarity(min/max ratio of |Sortino| across 3 sub-periods = 0.27).
 
 ---
+
+## Iteration 2026-05-16-9152566 — REVERTED
+
+**Hypothesis:** Adding a short-horizon absolute-trend confirmation for new residual-reversal entries will improve validation Sortino by filtering out oversold names that are still breaking down while leaving retained positions, PIT universe handling, and turnover controls unchanged.
+
+**Change:** I changed new-entry selection so candidates must have the latest close at or above their 20-day in-feed average before sector-cap selection, using the existing ADV lookback as a non-tuned stability check.
+
+**Decision:** REVERTED — catastrophe: gross exposure: max 101.6% > 100% (cash account — leverage error) · max drawdown: 58.5% > 50% (account-wipe territory) | anti-overfit FAILED: bonferroni(p=0.9940 >= alpha/N=0.0042)
+
+**Result:**
+- validation_sortino_mean: 1.2550544461426543
+- validation_folds: 20
+- per_fold_sortinos: [10.8658, 3.8209, 1.4175, 0.8402, -1.2755, 0.1012, -0.0812, 0.5197, -2.7091, -3.0048, 2.4604, 2.3486, 1.2542, 0.4238, -0.2209, 0.4855, 10.33, 0.7496, -1.2777, -1.947]
+- calmar_mean: 2.1439041157407566
+- hit_rate_mean: 0.38166666666666665
+- profit_factor_mean: 2.470237441117267
+- trade_count_total: 55
+- aggregate_max_dd: 0.5852857451197399
+- worst_fold_max_dd: 0.43014570468668045
+- max_position_frac_peak: 1.1670458792767393
+- lower_quartile_fold_calmar: -1.0395501494394457
+- n_negative_folds: 8/20
+- risk.passed: False
+- risk.violations: ['gross exposure: max 101.6% > 100% (cash account — leverage error)', 'max drawdown: 58.5% > 50% (account-wipe territory)']
+
+**Learning:** Sortino scored 1.255 with no prior kept baseline. Aggregate DD was 58.5%; negative folds were 8/20; trades=55. Do not reuse this exact setup: it failed the catastrophe gate, so the result is not a usable edge even if the hypothesis was economically plausible. Decision reason: catastrophe: gross exposure: max 101.6% > 100% (cash account — leverage error) · max drawdown: 58.5% > 50% (account-wipe territory) | anti-overfit FAILED: bonferroni(p=0.9940 >= alpha/N=0.0042).
+
+---
