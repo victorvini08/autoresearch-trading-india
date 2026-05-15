@@ -26,6 +26,8 @@ storage/*.duckdb
 storage/*.duckdb.wal
 storage/*.sqlite
 storage/*.sqlite-journal
+storage/bse_scrip_map.json
+storage/dhan_scrip_master.csv
 !storage/.gitkeep
 
 # Autoresearch loop artifacts (regenerable from log.csv + per-iter dirs)

@@ -258,6 +258,86 @@ def write_articles(news_db: Path, articles: list[Article]) -> int:
 # ──────────────────────────────────────────────────────────────────────
 
 
+def ingest_bse_for_universe(
+    news_db: Path,
+    universe_db: Path,
+    from_d: date,
+    to_d: date,
+    *,
+    as_of_universe: date | None = None,
+    polite_delay_sec: float = 0.5,
+) -> dict[str, int]:
+    """PRIMARY historical-news path. For each ticker in the universe snapshot,
+    resolve its BSE scrip code (ISIN-first) and pull BSE announcements for
+    [from_d, to_d], writing them as Article rows with source='bse'.
+
+    BSE's API has 9+ years of per-scrip regulatory disclosures, no bot-wall —
+    unlike NSE's recent-only live API or Akamai-blocked moneycontrol.
+    """
+    import time
+
+    from data.bse import (
+        build_scrip_map,
+        fetch_bse_announcements,
+        resolve_scrip_code,
+    )
+    from data.universe import UniverseRow, load_universe
+
+    snap_date = as_of_universe
+    if snap_date is None:
+        # use the latest snapshot available
+        conn = duckdb.connect(str(universe_db), read_only=True)
+        try:
+            row = conn.execute("SELECT MAX(as_of_date) FROM universe_snapshot").fetchone()
+        finally:
+            conn.close()
+        snap_date = row[0] if row and row[0] else None
+    if snap_date is None:
+        logger.error("no universe snapshot; run data.universe.compute_universe first")
+        return {"bse": -1}
+
+    universe: list[UniverseRow] = load_universe(universe_db, snap_date)
+    scrip_map = build_scrip_map()
+
+    total = 0
+    unresolved = 0
+    for u in universe:
+        code = resolve_scrip_code(scrip_map, isin=u.isin, nse_symbol=u.ticker)
+        if not code:
+            unresolved += 1
+            continue
+        try:
+            anns = fetch_bse_announcements(code, from_d, to_d, u.ticker)
+        except Exception as e:
+            logger.warning("BSE fetch failed for %s (%s): %s", u.ticker, code, e)
+            time.sleep(polite_delay_sec * 4)
+            continue
+        articles = [
+            Article(
+                article_id=_hash_id(a.subject or a.headline[:80], "bse", a.dt),
+                dt=a.dt,
+                source="bse",
+                ticker=u.ticker,
+                title=a.subject or a.headline[:120],
+                url=(
+                    f"https://www.bseindia.com/xml-data/corpfiling/AttachLive/{a.attachment}"
+                    if a.attachment
+                    else ""
+                ),
+                summary=a.headline[:1000],
+                body="",
+            )
+            for a in anns
+        ]
+        total += write_articles(news_db, articles)
+        time.sleep(polite_delay_sec)
+    logger.info(
+        "BSE backfill %s..%s: %d articles, %d tickers unresolved",
+        from_d, to_d, total, unresolved,
+    )
+    return {"bse": total, "unresolved": unresolved}
+
+
 def ingest_today(news_db: Path) -> dict[str, int]:
     """Daily forward run: Pulse RSS + NSE filings for today."""
     counts: dict[str, int] = {}
@@ -379,6 +459,7 @@ __all__ = [
     "fetch_nse_filings",
     "write_articles",
     "ingest_today",
+    "ingest_bse_for_universe",
     "count_news",
     "read_news",
 ]

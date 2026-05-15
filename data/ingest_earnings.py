@@ -75,10 +75,24 @@ def _ensure_schema(conn: duckdb.DuckDBPyConnection) -> None:
             period_end_date DATE,
             title VARCHAR,
             source VARCHAR DEFAULT 'nse_filing',
+            eps_estimate DOUBLE,
+            eps_reported DOUBLE,
+            surprise_pct DOUBLE,
             PRIMARY KEY (ticker, announcement_date)
         )
         """
     )
+    # Tolerate a pre-existing table from an older schema (add columns if absent)
+    existing = {
+        r[0]
+        for r in conn.execute(
+            "SELECT column_name FROM information_schema.columns "
+            "WHERE table_name='earnings_calendar'"
+        ).fetchall()
+    }
+    for col in ("eps_estimate", "eps_reported", "surprise_pct"):
+        if col not in existing:
+            conn.execute(f"ALTER TABLE earnings_calendar ADD COLUMN {col} DOUBLE")
 
 
 def extract_from_news(news_db: Path, earnings_db: Path | None = None) -> int:
@@ -189,10 +203,93 @@ def load_calendar(
     ]
 
 
+def ingest_yfinance_earnings(
+    tickers: list[str],
+    earnings_db: Path,
+    *,
+    limit: int = 60,
+    polite_delay_sec: float = 0.3,
+) -> int:
+    """PRIMARY earnings path. Pull historical earnings dates + EPS surprise
+    per ticker from Yahoo Finance (`<TICKER>.NS`).
+
+    `get_earnings_dates` returns a DataFrame indexed by the earnings datetime
+    with columns `EPS Estimate`, `Reported EPS`, `Surprise(%)`. Yahoo carries
+    5-18 years of dates for NSE blue-chips — far deeper than any free Indian
+    filing API, and the surprise% directly feeds the beat/miss event signal.
+
+    Idempotent on (ticker, announcement_date). `source='yfinance'`.
+    """
+    import time
+
+    import yfinance as yf
+
+    rows: list[tuple] = []
+    for t in tickers:
+        try:
+            yt = yf.Ticker(f"{t}.NS")
+            df = yt.get_earnings_dates(limit=limit)
+        except Exception as e:
+            logger.warning("yfinance earnings %s failed: %s", t, e)
+            time.sleep(polite_delay_sec * 3)
+            continue
+        if df is None or df.empty:
+            continue
+        for ts, r in df.iterrows():
+            d = ts.date() if hasattr(ts, "date") else ts
+            def _f(v):
+                try:
+                    fv = float(v)
+                    return None if fv != fv else fv  # NaN → None
+                except (TypeError, ValueError):
+                    return None
+            rows.append(
+                (
+                    t,
+                    d,
+                    None,                         # period_end_date (not from yf)
+                    "Earnings (yfinance)",
+                    "yfinance",
+                    _f(r.get("EPS Estimate")),
+                    _f(r.get("Reported EPS")),
+                    _f(r.get("Surprise(%)")),
+                )
+            )
+        time.sleep(polite_delay_sec)
+
+    if not rows:
+        return 0
+    conn = duckdb.connect(str(earnings_db))
+    try:
+        _ensure_schema(conn)
+        conn.execute("BEGIN TRANSACTION")
+        try:
+            for row in rows:
+                conn.execute(
+                    """
+                    INSERT OR REPLACE INTO earnings_calendar
+                      (ticker, announcement_date, period_end_date, title,
+                       source, eps_estimate, eps_reported, surprise_pct)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    row,
+                )
+            conn.execute("COMMIT")
+        except Exception:
+            conn.execute("ROLLBACK")
+            raise
+    finally:
+        conn.close()
+    logger.info("yfinance earnings: wrote %d rows for %d tickers", len(rows), len(tickers))
+    return len(rows)
+
+
 def ingest_earnings(news_db: Path | None = None, earnings_db: Path | None = None) -> int:
     """Predecessor-compatible alias for `extract_from_news`.
 
-    Uses the default storage paths if not supplied.
+    Uses the default storage paths if not supplied. The yfinance path
+    (`ingest_yfinance_earnings`) is the primary source for 5y backfill;
+    this news-extraction remains as a same-day cross-source supplement.
     """
     news_db = news_db or Path("storage/news.duckdb")
     return extract_from_news(news_db=news_db, earnings_db=earnings_db)
@@ -203,4 +300,5 @@ __all__ = [
     "extract_from_news",
     "load_calendar",
     "ingest_earnings",
+    "ingest_yfinance_earnings",
 ]

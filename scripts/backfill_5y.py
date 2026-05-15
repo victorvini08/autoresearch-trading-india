@@ -86,9 +86,38 @@ def _macro_long() -> dict:
     return out
 
 
+def _bse_news_5y() -> dict:
+    """PRIMARY 5y per-ticker news: BSE announcements API (9+ years, no bot-wall)."""
+    from data.ingest_news import ingest_bse_for_universe
+
+    news_db = Path("storage/news.duckdb")
+    universe_db = Path("storage/universe.duckdb")
+    end = date.today()
+    start = end - timedelta(days=5 * 365 + 30)
+    logger.info("BSE news backfill %s → %s (universe-scoped)", start, end)
+    return ingest_bse_for_universe(news_db, universe_db, start, end)
+
+
+def _earnings_5y() -> int:
+    """PRIMARY 5y earnings: yfinance .NS get_earnings_dates for the universe."""
+    from data.ingest_earnings import ingest_yfinance_earnings
+    from data.universe import get_live_universe
+
+    universe_db = Path("storage/universe.duckdb")
+    earnings_db = Path("storage/news.duckdb")  # earnings_calendar lives alongside news
+    tickers = get_live_universe(universe_db)
+    if not tickers:
+        logger.error("no universe snapshot; run compute_universe first")
+        return -1
+    logger.info("yfinance earnings backfill for %d tickers", len(tickers))
+    return ingest_yfinance_earnings(tickers, earnings_db, limit=60)
+
+
 _SOURCES = {
     "bhav": _bhav_5y,
     "filings": _filings_5y,
+    "bse_news": _bse_news_5y,
+    "earnings": _earnings_5y,
     "rbi": _rbi_5y,
     "sebi": _sebi_5y,
     "macro_long": _macro_long,
