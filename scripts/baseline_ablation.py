@@ -65,7 +65,7 @@ def _format_journal_entry(label: str, result: dict) -> str:
         f"- turnover_mean: {side.get('turnover_mean'):.3f}\n"
         f"- trade_count_total: {side.get('trade_count_total')}\n"
         f"- pre_tax_return_mean: {side.get('pre_tax_return_mean'):.3f}\n"
-        f"- post_tax_return_mean_30pct: {side.get('post_tax_return_mean_30pct'):.3f}\n"
+        f"- post_tax_return_mean_stcg15: {side.get('post_tax_return_mean_stcg15'):.3f}\n"
         f"- risk.passed: {risk.get('passed')}\n"
         f"- risk.violations: {risk.get('violations')}\n\n"
         f"**Learning:** Floor reference for Phase 3 iterations. "

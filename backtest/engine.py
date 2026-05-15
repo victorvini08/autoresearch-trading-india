@@ -1,17 +1,21 @@
-"""Backtrader cerebro wrapper. Configures broker with the indmoney cost model
-and a percentage-slippage adjustment, runs the strategy across all feeds, and
-returns a structured result dict.
+"""Backtrader cerebro wrapper. Configures the broker with the Dhan delivery
+cost model and a percentage-slippage adjustment, runs the strategy across all
+feeds, and returns a structured result dict.
 """
 from __future__ import annotations
 
 import backtrader as bt
 import pandas as pd
 
-from .costs import DEFAULT_SLIPPAGE_BPS, commission_usd
+from .costs import DEFAULT_SLIPPAGE_BPS, commission_inr
 
 
-class _IndmoneyCommission(bt.CommInfoBase):
-    """indmoney US-stocks commission: 0.25% + 18% GST, capped at $25 brokerage."""
+class DhanDeliveryCommission(bt.CommInfoBase):
+    """Dhan CNC (delivery) cost model: brokerage ₹0, STT 0.1% (sell),
+    DP ₹14.75/scrip (sell), NSE exchange 0.00345%, GST 18%, stamp 0.015%
+    (buy). Computed by `backtest.costs.commission_inr`. Applied to every
+    simulated fill so the walk-forward Sortino is net of real Indian costs.
+    """
 
     params = (
         ("commtype", bt.CommInfoBase.COMM_FIXED),
@@ -21,7 +25,7 @@ class _IndmoneyCommission(bt.CommInfoBase):
     def _getcommission(self, size, price, pseudoexec):  # type: ignore[override]
         order_value = abs(size * price)
         side = "BUY" if size >= 0 else "SELL"
-        return commission_usd(order_value, side)
+        return commission_inr(order_value, side)
 
 
 class TradeRecorder(bt.Analyzer):
@@ -123,7 +127,7 @@ def run_backtest(
     cerebro = bt.Cerebro(stdstats=False)
     cerebro.addstrategy(strategy_cls)
     cerebro.broker.set_cash(initial_cash)
-    cerebro.broker.addcommissioninfo(_IndmoneyCommission())
+    cerebro.broker.addcommissioninfo(DhanDeliveryCommission())
 
     if slippage_bps > 0:
         cerebro.broker.set_slippage_perc(slippage_bps / 10_000, slip_open=True)

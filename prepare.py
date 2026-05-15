@@ -200,7 +200,7 @@ def evaluate(strategy_module: ModuleType, mode: str = "research") -> dict:
         "turnover_mean": float(np.mean([s["turnover"] for s in fold_scores])) if fold_scores else 0.0,
         "trade_count_total": int(sum(s["trade_count"] for s in fold_scores)),
         "pre_tax_return_mean": pre_tax_return_mean,
-        "post_tax_return_mean_30pct": post_tax_return_mean,
+        "post_tax_return_mean_stcg15": post_tax_return_mean,
     }
 
     all_eq = (

@@ -104,13 +104,13 @@ def test_side_panel_includes_pretax_and_posttax_returns(monkeypatch):
     result = evaluate(strat_mod, mode="research")
     sp = result["side_panel"]
     assert "pre_tax_return_mean" in sp
-    assert "post_tax_return_mean_30pct" in sp
+    assert "post_tax_return_mean_stcg15" in sp
     # When pre-tax is positive, post-tax must be lower; when negative, equal.
     if sp["pre_tax_return_mean"] > 0:
-        assert sp["post_tax_return_mean_30pct"] < sp["pre_tax_return_mean"]
+        assert sp["post_tax_return_mean_stcg15"] < sp["pre_tax_return_mean"]
     elif sp["pre_tax_return_mean"] < 0:
         # Losses don't get refunded in our simple model
-        assert sp["post_tax_return_mean_30pct"] <= sp["pre_tax_return_mean"]
+        assert sp["post_tax_return_mean_stcg15"] <= sp["pre_tax_return_mean"]
 
 
 def test_validate_risk_now_receives_non_empty_positions_df():
