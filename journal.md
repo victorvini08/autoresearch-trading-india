@@ -72,3 +72,31 @@ separate lineages.
 **Learning:** Sortino scored 0.071 with no prior kept baseline. Aggregate DD was 87.0%; negative folds were 12/20; trades=60. Do not reuse this exact setup: it failed the catastrophe gate, so the result is not a usable edge even if the hypothesis was economically plausible. Decision reason: catastrophe: max drawdown: 87.0% > 50% (account-wipe territory) | anti-overfit FAILED: bonferroni(p=0.9872 >= alpha/N=0.0167) · random_walk_mc(only 24.42% percentile vs RW null) · sub_period_stationarity(min/max ratio of |Sortino| across 3 sub-periods = 0.24).
 
 ---
+
+## Iteration 2026-05-16-626dc61 — REVERTED
+
+**Hypothesis:** Using residual t-stat scores instead of raw cumulative residual scores will improve mean validation Sortino by avoiding high-idiosyncratic-volatility falling knives whose oversold signal is mostly noise.
+
+**Change:** Changed reversion_scores to divide each formation-window residual shock by that ticker's own pre-formation residual volatility before the final cross-sectional z-score, with no new hyperparameters.
+
+**Decision:** REVERTED — catastrophe: max drawdown: 57.0% > 50% (account-wipe territory) | anti-overfit FAILED: bonferroni(p=0.9830 >= alpha/N=0.0125)
+
+**Result:**
+- validation_sortino_mean: 1.1599273984215848
+- validation_folds: 20
+- per_fold_sortinos: [8.5191, 3.8836, 0.8374, 0.9052, -0.3008, -1.5688, 0.3249, 6.0651, -0.5381, -1.7002, 3.1029, 1.5344, 2.9028, 5.7172, -0.8921, 0.2466, 3.6339, -0.3238, -2.7134, -6.4372]
+- calmar_mean: 3.2769144963472705
+- hit_rate_mean: 0.41083333333333333
+- profit_factor_mean: 8.114490894097813
+- trade_count_total: 61
+- aggregate_max_dd: 0.569684012509127
+- worst_fold_max_dd: 0.3399065474713948
+- max_position_frac_peak: 1.0211215738374773
+- lower_quartile_fold_calmar: -1.3605134689769902
+- n_negative_folds: 8/20
+- risk.passed: False
+- risk.violations: ['max drawdown: 57.0% > 50% (account-wipe territory)']
+
+**Learning:** Sortino scored 1.160 with no prior kept baseline. Aggregate DD was 57.0%; negative folds were 8/20; trades=61. Do not reuse this exact setup: it failed the catastrophe gate, so the result is not a usable edge even if the hypothesis was economically plausible. Decision reason: catastrophe: max drawdown: 57.0% > 50% (account-wipe territory) | anti-overfit FAILED: bonferroni(p=0.9830 >= alpha/N=0.0125).
+
+---
