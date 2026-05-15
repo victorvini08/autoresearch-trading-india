@@ -324,3 +324,31 @@ separate lineages.
 **Learning:** Sortino scored 1.255 with no prior kept baseline. Aggregate DD was 58.5%; negative folds were 8/20; trades=55. Do not reuse this exact setup: it failed the catastrophe gate, so the result is not a usable edge even if the hypothesis was economically plausible. Decision reason: catastrophe: gross exposure: max 101.6% > 100% (cash account — leverage error) · max drawdown: 58.5% > 50% (account-wipe territory) | anti-overfit FAILED: bonferroni(p=0.9940 >= alpha/N=0.0042).
 
 ---
+
+## Iteration 2026-05-16-1791ad5 — REVERTED
+
+**Hypothesis:** Applying the 25% sector cap to the entire target book, including retained positions and sparse baskets, will improve validation Sortino by reducing sector-cluster and single-name drawdowns without adding a new signal parameter.
+
+**Change:** I changed final portfolio construction so retained names and new entries are capped together by sector, with per-name sizing capped at the sector limit when fewer than four names qualify.
+
+**Decision:** REVERTED — anti-overfit FAILED: universe_respect(variant traded tickers outside the point-in-time universe — survivorship/look-ahead reintroduced (hard reject)) · bonferroni(p=0.9578 >= alpha/N=0.0038) · sub_period_stationarity(min/max ratio of |Sortino| across 3 sub-periods = 0.06)
+
+**Result:**
+- validation_sortino_mean: 0.11498623269635548
+- validation_folds: 20
+- per_fold_sortinos: [3.5262, 3.7324, 2.472, -0.5347, -0.7857, -2.8796, -0.3673, 0.172, -2.1628, -2.7191, 0.3007, 2.2823, 1.9606, 0.3841, -0.594, -0.501, -0.5714, -0.7368, -0.1692, -0.509]
+- calmar_mean: -0.022281150876833127
+- hit_rate_mean: 0.4010119047619048
+- profit_factor_mean: 0.7822077378993411
+- trade_count_total: 85
+- aggregate_max_dd: 0.32525268853865985
+- worst_fold_max_dd: 0.14935408979248976
+- max_position_frac_peak: 0.27486088174851864
+- lower_quartile_fold_calmar: -0.9895379959108361
+- n_negative_folds: 12/20
+- risk.passed: True
+- risk.violations: []
+
+**Learning:** Sortino scored 0.115 with no prior kept baseline. Aggregate DD was 32.5%; negative folds were 12/20; trades=85. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: anti-overfit FAILED: universe_respect(variant traded tickers outside the point-in-time universe — survivorship/look-ahead reintroduced (hard reject)) · bonferroni(p=0.9578 >= alpha/N=0.0038) · sub_period_stationarity(min/max ratio of |Sortino| across 3 sub-periods = 0.06).
+
+---
