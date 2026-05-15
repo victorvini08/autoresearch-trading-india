@@ -22,6 +22,7 @@ logic.
 
 from __future__ import annotations
 
+import bisect
 import logging
 from datetime import date
 from pathlib import Path
@@ -39,6 +40,27 @@ from data.sectors import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def resolve_active_universe(
+    universe_by_date: dict | None,
+    sorted_dates: list[date] | None,
+    today: date,
+) -> set[str] | None:
+    """Resolve the point-in-time eligible universe (audit-2026-05-15 Fix B).
+
+    - None              → no PIT universe injected; all loaded feeds eligible.
+    - most-recent ≤ today → that snapshot's membership.
+    - today before the earliest snapshot → empty set (nothing eligible yet;
+      NEVER fall forward to a future snapshot — that would reintroduce the
+      look-ahead this fix exists to remove).
+    """
+    if not universe_by_date or not sorted_dates:
+        return None
+    i = bisect.bisect_right(sorted_dates, today) - 1
+    if i < 0:
+        return set()
+    return set(universe_by_date[sorted_dates[i]])
 
 
 class IndiaMomentumQualityRegime(bt.Strategy):
@@ -65,6 +87,14 @@ class IndiaMomentumQualityRegime(bt.Strategy):
         # Sector cap: when True, sector_map is loaded from `data.sectors` using
         # the per-ticker industry tag carried on the data feeds.
         ("enforce_sector_cap", True),
+        # Point-in-time universe injected by the evaluator / live runner:
+        # {snapshot_date: frozenset(tickers)}. When set, only names in the
+        # most-recent snapshot ON OR BEFORE the rebalance date are eligible
+        # for ranking/entry (exits of dropped names still fire). When None,
+        # every loaded feed is eligible (standalone / unit-test behaviour).
+        # This is the audit-2026-05-15 Fix B guard against survivorship /
+        # frozen-universe look-ahead and must not be removed by the loop.
+        ("universe_by_date", None),
     )
 
     # ──────────────────────────────────────────────────────────
@@ -81,6 +111,19 @@ class IndiaMomentumQualityRegime(bt.Strategy):
         # Pin rebalance week parity to the first Friday on or after start
         # so we don't drift across data-feed start variations.
         self._week_parity_initialized = False
+        # Sorted snapshot dates for the point-in-time universe (Fix B).
+        ubd = self.p.universe_by_date
+        self._univ_dates: list[date] | None = (
+            sorted(ubd) if ubd else None
+        )
+
+    def _active_universe(self, today: date) -> set[str] | None:
+        """Tickers eligible for ranking/entry as of `today`. Thin wrapper over
+        the pure resolver so the (bug-prone) point-in-time lookup is unit-
+        testable without a backtrader scaffold."""
+        return resolve_active_universe(
+            self.p.universe_by_date, self._univ_dates, today
+        )
 
     @staticmethod
     def _ticker_of(d) -> str:
@@ -134,13 +177,18 @@ class IndiaMomentumQualityRegime(bt.Strategy):
             return None
         return (c_recent / c_start) - 1.0
 
-    def _rank_universe(self) -> list[tuple[str, float]]:
+    def _rank_universe(
+        self, active: set[str] | None = None
+    ) -> list[tuple[str, float]]:
         scores: list[tuple[str, float]] = []
         for d in self.datas:
+            t = self._ticker_of(d)
+            if active is not None and t not in active:
+                continue  # not in the point-in-time universe as of today
             mom = self._momentum_for(d)
             if mom is None:
                 continue
-            scores.append((self._ticker_of(d), mom))
+            scores.append((t, mom))
         scores.sort(key=lambda t: t[1], reverse=True)
         return scores
 
@@ -171,8 +219,10 @@ class IndiaMomentumQualityRegime(bt.Strategy):
 
         today = self.datas[0].datetime.date(0)
 
-        # 1. Rank by 12-1 momentum
-        ranked = self._rank_universe()
+        # 1. Rank by 12-1 momentum, restricted to the point-in-time universe
+        #    as of today (Fix B: no survivorship / frozen-universe look-ahead)
+        active = self._active_universe(today)
+        ranked = self._rank_universe(active)
         if not ranked:
             return
 

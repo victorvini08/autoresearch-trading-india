@@ -36,7 +36,7 @@ from backtest.metrics import (
 )  # max_drawdown also used directly to compute the chained-fold aggregate DD
 from backtest.risk import validate as validate_risk
 from data.ingest_prices import read_prices
-from data.universe import get_universe_at
+from data.universe import get_universe_at, snapshot_dates
 
 BACKTEST_START = date(2020, 1, 1)
 # India rebuild: NSE bhav archive starts cleanly in late 2019; 2020-01-01 is
@@ -95,6 +95,23 @@ def _load_feeds(
     return feeds
 
 
+def _pit_universe(window_end: date) -> tuple[list[str], dict]:
+    """Point-in-time universe for a window ending `window_end`.
+
+    Returns (sorted member union, {snapshot_date: frozenset(tickers)}) using
+    ONLY snapshots dated on/before `window_end` — never a future snapshot.
+    The strategy resolves the most-recent snapshot ≤ each rebalance date from
+    this map. This is audit-2026-05-15 Fix B: it replaces the single frozen
+    get_universe_at(BACKTEST_START) that made the whole walk-forward run on
+    today's universe. Empty union ⇒ the window predates any snapshot (the
+    pre-2021-11 data-starved period); the caller skips such folds.
+    """
+    sd = [d for d in snapshot_dates() if d <= window_end]
+    ubd = {d: frozenset(get_universe_at(d)) for d in sd}
+    union = sorted(set().union(*ubd.values())) if ubd else []
+    return union, ubd
+
+
 def _find_strategy_class(module: ModuleType) -> type:
     """Return the single bt.Strategy subclass defined in `module`."""
     candidates = [
@@ -115,10 +132,21 @@ def _find_strategy_class(module: ModuleType) -> type:
 
 
 def _score_window(
-    strategy_cls: type, feeds: dict[str, pd.DataFrame]
+    strategy_cls: type,
+    feeds: dict[str, pd.DataFrame],
+    universe_by_date: dict | None = None,
 ) -> dict:
-    """Run strategy on a single time window; return per-window scoring dict."""
-    result = run_backtest(strategy_cls, feeds, initial_cash=INITIAL_CASH)
+    """Run strategy on a single time window; return per-window scoring dict.
+
+    `universe_by_date` ({snapshot_date: frozenset(tickers)}) is forwarded to
+    the strategy so it restricts entries to the point-in-time universe at
+    each rebalance (audit-2026-05-15 Fix B).
+    """
+    result = run_backtest(
+        strategy_cls, feeds, initial_cash=INITIAL_CASH,
+        strategy_kwargs={"universe_by_date": universe_by_date}
+        if universe_by_date else None,
+    )
     daily = result["daily_returns"]
     eq = result["equity_curve"]
     trades = result["trades"]
@@ -165,14 +193,28 @@ def evaluate(strategy_module: ModuleType, mode: str = "research") -> dict:
         raise ValueError(f"mode must be 'research' or 'promotion', got {mode!r}")
 
     strategy_cls = _find_strategy_class(strategy_module)
-    universe = get_universe_at(BACKTEST_START)
 
     fold_scores: list[dict] = []
+    skipped_folds = 0
     for (_train_s, _train_e, val_s, val_e) in _walk_forward_folds(
         BACKTEST_START, TEST_BOUNDARY
     ):
-        feeds = _load_feeds(val_s, val_e, universe)
-        fold_scores.append(_score_window(strategy_cls, feeds))
+        members, fold_ubd = _pit_universe(val_e)
+        if not members:
+            # Window predates any universe snapshot (data-starved early
+            # period). Skip rather than fabricate membership.
+            skipped_folds += 1
+            continue
+        feeds = _load_feeds(val_s, val_e, members)
+        fold_scores.append(_score_window(strategy_cls, feeds, fold_ubd))
+
+    if not fold_scores:
+        raise RuntimeError(
+            f"No scorable folds: all {skipped_folds} validation windows "
+            "predate the earliest universe snapshot. Backfill universe "
+            "snapshots (scripts.backfill_universe) and/or extend price "
+            "history — see audit 2026-05-15."
+        )
 
     val_sortinos = [s["sortino"] for s in fold_scores if np.isfinite(s["sortino"])]
     val_sortino_mean = float(np.mean(val_sortinos)) if val_sortinos else 0.0
@@ -304,8 +346,9 @@ def evaluate(strategy_module: ModuleType, mode: str = "research") -> dict:
     }
 
     if mode == "promotion":
-        feeds = _load_feeds(TEST_BOUNDARY, BACKTEST_END, universe)
-        test_score = _score_window(strategy_cls, feeds)
+        members, test_ubd = _pit_universe(BACKTEST_END)
+        feeds = _load_feeds(TEST_BOUNDARY, BACKTEST_END, members)
+        test_score = _score_window(strategy_cls, feeds, test_ubd)
         out["test_sortino"] = test_score["sortino"]
         out["test_calmar"] = test_score["calmar"]
         out["test_max_dd"] = test_score["max_dd"]

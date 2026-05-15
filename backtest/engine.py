@@ -119,13 +119,17 @@ def run_backtest(
     feeds: dict[str, pd.DataFrame],
     initial_cash: float = 100_000.0,
     slippage_bps: float = DEFAULT_SLIPPAGE_BPS,
+    strategy_kwargs: dict | None = None,
 ) -> dict:
     """Run a backtest. `feeds` is {ticker: ohlcv_df indexed by date}.
+
+    `strategy_kwargs` are forwarded as backtrader strategy params (e.g. the
+    point-in-time `universe_by_date` injected by the evaluator).
 
     Returns: dict with equity_curve, daily_returns, trades, trade_count, final_value.
     """
     cerebro = bt.Cerebro(stdstats=False)
-    cerebro.addstrategy(strategy_cls)
+    cerebro.addstrategy(strategy_cls, **(strategy_kwargs or {}))
     cerebro.broker.set_cash(initial_cash)
     cerebro.broker.addcommissioninfo(DhanDeliveryCommission())
 

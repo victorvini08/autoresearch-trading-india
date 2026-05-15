@@ -345,6 +345,20 @@ def latest_universe_date(universe_db: Path) -> date | None:
 DEFAULT_UNIVERSE_DB = Path("storage/universe.duckdb")
 
 
+def snapshot_dates(universe_db: Path = DEFAULT_UNIVERSE_DB) -> list[date]:
+    """All as_of_dates that have a stored (non-empty) snapshot, ascending."""
+    if not universe_db.exists():
+        return []
+    conn = duckdb.connect(str(universe_db), read_only=True)
+    try:
+        rows = conn.execute(
+            "SELECT DISTINCT as_of_date FROM universe_snapshot ORDER BY as_of_date"
+        ).fetchall()
+    finally:
+        conn.close()
+    return [r[0] for r in rows]
+
+
 def get_universe_at(as_of_date: date, universe_db: Path = DEFAULT_UNIVERSE_DB) -> list[str]:
     """Return the list of NSE tickers in the universe snapshot for `as_of_date`.
 
@@ -399,11 +413,84 @@ def get_live_universe(universe_db: Path = DEFAULT_UNIVERSE_DB) -> list[str]:
     return get_universe_at(last, universe_db)
 
 
+_CONSTITUENTS_CACHE = Path("storage/nifty500_cache.json")
+
+
+def _load_or_fetch_constituents() -> list[dict[str, str]]:
+    """Fetch the current Nifty 500 list once for enrichment, with an on-disk
+    cache fallback so a transient network failure can't abort a long backfill.
+    Membership does NOT depend on this — it is sector/ISIN enrichment only."""
+    import json
+
+    try:
+        c = fetch_nifty500_constituents()
+        if c:
+            _CONSTITUENTS_CACHE.parent.mkdir(parents=True, exist_ok=True)
+            _CONSTITUENTS_CACHE.write_text(json.dumps(c))
+            return c
+    except Exception as e:  # noqa: BLE001 — network/parse; fall back to cache
+        logger.warning("nifty500 fetch failed (%s); using cache", e)
+    if _CONSTITUENTS_CACHE.exists():
+        return json.loads(_CONSTITUENTS_CACHE.read_text())
+    raise RuntimeError(
+        "nifty500 constituents unavailable (no network, no cache). "
+        "Membership is unaffected but sector/ISIN enrichment needs this once."
+    )
+
+
+def _add_months(d: date, n: int) -> date:
+    m = d.month - 1 + n
+    return date(d.year + m // 12, m % 12 + 1, 1)
+
+
+def backfill_snapshots(
+    prices_db: Path,
+    universe_db: Path,
+    start: date,
+    end: date,
+    *,
+    step_months: int = 1,
+    constituents: list[dict[str, str]] | None = None,
+) -> dict[date, int]:
+    """Compute & store a POINT-IN-TIME universe snapshot on the 1st of each
+    month in [start, end], plus one exactly at `end`.
+
+    This is Fix A for the 2026-05-15 audit: without per-date snapshots,
+    get_universe_at falls back to the single latest snapshot for every
+    historical date, so the whole walk-forward ran on today's universe.
+
+    Idempotent: compute_universe delete-then-inserts per as_of_date, so
+    re-running is safe and resumes cleanly. Constituents (current Nifty 500,
+    enrichment only) is fetched once and reused for every snapshot.
+    Returns {as_of_date: n_members}.
+    """
+    if constituents is None:
+        constituents = _load_or_fetch_constituents()
+    out: dict[date, int] = {}
+    d = date(start.year, start.month, 1)
+    while d <= end:
+        rows = compute_universe(
+            d, prices_db, universe_db, constituents=constituents
+        )
+        out[d] = len(rows)
+        logger.info("universe snapshot %s: %d members", d, len(rows))
+        d = _add_months(d, step_months)
+    if end not in out:
+        rows = compute_universe(
+            end, prices_db, universe_db, constituents=constituents
+        )
+        out[end] = len(rows)
+        logger.info("universe snapshot %s (end): %d members", end, len(rows))
+    return out
+
+
 __all__ = [
     "UniverseRow",
     "DEFAULT_UNIVERSE_DB",
     "fetch_nifty500_constituents",
     "compute_universe",
+    "backfill_snapshots",
+    "snapshot_dates",
     "load_universe",
     "latest_universe_date",
     "get_universe_at",
