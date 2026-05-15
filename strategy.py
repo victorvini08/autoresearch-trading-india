@@ -8,12 +8,14 @@ literature. The autoresearch loop may mutate this file; it must NOT mutate
 Rebalance: biweekly (every other Friday). On non-rebalance bars the strategy
 returns early — no `order_target_percent` call.
 
-Hyperparameters (5):
+Tunable signal hyperparameters:
   - lookback_days (252) + skip_days (21) — 12-1 momentum
   - retention_mult (2.0) — held names retained if still in top retention_mult × decile
-  - quality_pct (50) — ROE percentile floor among candidates
   - regime_pct (95), fii_threshold_cr (-15000) — regime gate thresholds
   - n_positions (6) — target portfolio size
+  - sector_cap (0.25) — max single-sector weight
+  (quality_pct removed 2026-05-15 — dead knob until a fundamentals ingest
+   exists; the screen still runs soft-degraded. See params block.)
 
 Trade contract: every position-change goes through `self.order_target_percent`.
 Never `self.buy()` / `self.close()`. Required by `scripts.signal_today` capture
@@ -30,6 +32,7 @@ from pathlib import Path
 import backtrader as bt
 
 from data.quality_screen import (
+    DEFAULT_ROE_PERCENTILE,
     apply_quality_screen,
     load_fundamentals,
 )
@@ -70,7 +73,12 @@ class IndiaMomentumQualityRegime(bt.Strategy):
         ("lookback_days", 252),
         ("skip_days", 21),
         ("retention_mult", 2.0),
-        ("quality_pct", 50),
+        # quality_pct removed 2026-05-15: the quality screen is a no-op until
+        # a fundamentals ingest exists (storage/fundamentals.duckdb), so this
+        # was a dead tunable knob that the now-live parsimony gate would
+        # penalise. The screen call still runs (soft-degrades to pass-all)
+        # at DEFAULT_ROE_PERCENTILE; reinstate the param when fundamentals
+        # are wired so the loop can tune a signal that actually fires.
         ("regime_pct", 95),
         ("fii_threshold_cr", -15000.0),
         ("n_positions", 6),
@@ -237,7 +245,7 @@ class IndiaMomentumQualityRegime(bt.Strategy):
             candidate_tickers,
             fundamentals,
             sector_map=self._sector_map,
-            roe_percentile=self.p.quality_pct,
+            roe_percentile=DEFAULT_ROE_PERCENTILE,
         )
         if not passed_quality:
             passed_quality = candidate_tickers  # soft-degrade

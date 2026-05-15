@@ -73,9 +73,35 @@ def test_bonferroni_tightens_with_more_variants():
 # ── prepare.py pure helpers feeding the gates ───────────────────────────
 def test_count_hyperparameters_excludes_plumbing():
     n = prepare.count_hyperparameters(IndiaMomentumQualityRegime)
-    # The signal knobs (lookback, skip, retention, quality, regime, fii,
-    # n_positions, sector_cap) — not db paths / weekday / universe_by_date.
-    assert n == 8
+    # Signal knobs after quality_pct removal (2026-05-15): lookback, skip,
+    # retention, regime_pct, fii_threshold_cr, n_positions, sector_cap = 7.
+    # Excludes db paths / weekday / parity / enforce_sector_cap /
+    # universe_by_date.
+    assert n == 7
+
+
+def test_universe_respected_tolerates_decision_vs_fill_lag(monkeypatch):
+    """A name in the universe at the DECISION bar but rotated out of the
+    snapshot active at the FILL date (entry_date) must NOT be flagged — the
+    order was legitimately decided when the name was a member (observed:
+    FACT decided 2023-09-29, filled 2023-10-03). A name absent from BOTH
+    the fill and decision snapshots IS a real violation."""
+    snaps = [date(2023, 9, 1), date(2023, 10, 1)]
+    monkeypatch.setattr(prepare, "snapshot_dates", lambda: snaps)
+    monkeypatch.setattr(
+        prepare, "get_universe_at",
+        lambda d: ["FACT", "AAA"] if d == date(2023, 9, 1) else ["AAA"],
+    )
+    # Decided 2023-09-29 (Sep snapshot, FACT in), filled 2023-10-03.
+    lagged = pd.DataFrame(
+        {"ticker": ["FACT"], "entry_date": [date(2023, 10, 3)]}
+    )
+    assert prepare._universe_respected(lagged) is True
+    # Genuinely off-universe: not in Sep or Oct snapshot.
+    bogus = pd.DataFrame(
+        {"ticker": ["ZZZ"], "entry_date": [date(2023, 10, 3)]}
+    )
+    assert prepare._universe_respected(bogus) is False
 
 
 def test_universe_respected_detects_off_universe_trade(monkeypatch):

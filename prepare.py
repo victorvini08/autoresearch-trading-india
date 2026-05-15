@@ -149,12 +149,27 @@ def count_hyperparameters(strategy_cls: type) -> int:
     )
 
 
+_UNIVERSE_FILL_LAG_DAYS = 7
+
+
 def _universe_respected(all_trades: pd.DataFrame) -> bool:
     """Audit-2026-05-15 #8 guard. True iff EVERY traded ticker was a member
-    of the point-in-time universe on its entry date. Computed here in the
-    IMMUTABLE evaluator from the trade log (not from the loop-editable
-    strategy), so a variant that ignores the injected universe_by_date and
-    trades off-universe names is caught no matter what its code looks like.
+    of the point-in-time universe at its DECISION time. Computed here in the
+    IMMUTABLE evaluator from the trade log (not the loop-editable strategy),
+    so a variant that ignores the injected universe_by_date and trades
+    off-universe names is caught regardless of how its code is written.
+
+    Decision-vs-fill: the strategy selects on the rebalance bar but the order
+    fills next-trading-open, so entry_date is the FILL date — up to a long
+    weekend + holiday after the decision. If that lag crosses a monthly
+    snapshot boundary on which the name legitimately rotated out, checking
+    only the entry-date snapshot would false-flag a perfectly legal pick
+    (observed: FACT, decided 2023-09-29 when in the Sep universe, filled
+    2023-10-03 after it rotated out of the Oct snapshot). So a trade is
+    respected if the ticker was a member at entry_date OR in the snapshot
+    active ~`_UNIVERSE_FILL_LAG_DAYS` earlier (i.e. at the decision bar).
+    Snapshots change only monthly, so this still catches a genuinely
+    off-universe pick (absent from BOTH the entry and decision snapshots).
     """
     if all_trades is None or len(all_trades) == 0:
         return True
@@ -166,17 +181,27 @@ def _universe_respected(all_trades: pd.DataFrame) -> bool:
     members_by = {d: set(get_universe_at(d)) for d in sd}
     sd_sorted = sorted(sd)
     import bisect
+
+    def _members_at(d: date) -> set[str] | None:
+        i = bisect.bisect_right(sd_sorted, d) - 1
+        return members_by[sd_sorted[i]] if i >= 0 else None
+
     for row in all_trades.itertuples(index=False):
         tkr = getattr(row, "ticker", None)
         ed = getattr(row, "entry_date", None)
         if tkr is None or ed is None:
             continue
         ed = _as_date(ed)
-        i = bisect.bisect_right(sd_sorted, ed) - 1
-        if i < 0:
+        t = str(tkr).upper()
+        m_fill = _members_at(ed)
+        m_decision = _members_at(ed - timedelta(days=_UNIVERSE_FILL_LAG_DAYS))
+        if m_fill is None and m_decision is None:
             return False  # traded before any snapshot existed
-        if str(tkr).upper() not in members_by[sd_sorted[i]]:
-            return False
+        if (m_fill is not None and t in m_fill) or (
+            m_decision is not None and t in m_decision
+        ):
+            continue
+        return False  # off-universe at BOTH decision and fill → real violation
     return True
 
 
