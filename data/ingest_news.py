@@ -418,8 +418,22 @@ def _upsert(rows: list[dict]) -> int:
     return write_articles(DB_PATH, articles)
 
 
-def count_news(ticker: str | None, on_date) -> int:
-    """Number of articles for `ticker` on the given date (None matches macro news)."""
+def count_news(
+    ticker: str | None, on_date, *, include_low_signal: bool = False
+) -> int:
+    """Number of *tradeable-signal* articles for `ticker` on the given date
+    (None matches macro news).
+
+    By default, procedural BSE/NSE compliance filings (newspaper-publication
+    notices, postal ballots, trading-window closures, SAST 29/31 disclosures,
+    BRSR/annual-report submissions, ESOP allotments, ...) are excluded — see
+    data.news_filter. They are not tradeable signal, and excluding them here
+    lets a day with only procedural filings count as a no-news day (which
+    short-circuits the LLM classifiers — the dominant precompute cost). Pass
+    include_low_signal=True for the raw count.
+    """
+    from data.news_filter import is_low_signal
+
     if isinstance(on_date, str):
         on_date = datetime.fromisoformat(on_date).date()
     if not DB_PATH.exists():
@@ -427,23 +441,37 @@ def count_news(ticker: str | None, on_date) -> int:
     conn = duckdb.connect(str(DB_PATH), read_only=True)
     try:
         if ticker is None:
-            row = conn.execute(
-                "SELECT COUNT(*) FROM articles WHERE dt = ? AND ticker IS NULL",
+            rows = conn.execute(
+                "SELECT source, title, COALESCE(summary, '') FROM articles "
+                "WHERE dt = ? AND ticker IS NULL",
                 (on_date,),
-            ).fetchone()
+            ).fetchall()
         else:
-            row = conn.execute(
-                "SELECT COUNT(*) FROM articles WHERE ticker = ? AND dt = ?",
+            rows = conn.execute(
+                "SELECT source, title, COALESCE(summary, '') FROM articles "
+                "WHERE ticker = ? AND dt = ?",
                 (ticker.upper(), on_date),
-            ).fetchone()
+            ).fetchall()
     finally:
         conn.close()
-    return int(row[0]) if row else 0
+    if include_low_signal:
+        return len(rows)
+    return sum(1 for src, title, summ in rows if not is_low_signal(src, title, summ))
 
 
-def read_news(ticker: str | None, start, end):
-    """Return articles for `ticker` over [start, end] inclusive (DataFrame)."""
+def read_news(ticker: str | None, start, end, *, include_low_signal: bool = False):
+    """Return *tradeable-signal* articles for `ticker` over [start, end]
+    inclusive (DataFrame).
+
+    By default, procedural BSE/NSE compliance filings are filtered out (see
+    data.news_filter / count_news for rationale). This is the read path the
+    LLM sentiment/events classifiers use, so the filter directly halves the
+    non-empty (ticker, date) cell count they must process. Pass
+    include_low_signal=True for the unfiltered table.
+    """
     import pandas as pd
+
+    from data.news_filter import is_low_signal
 
     if isinstance(start, str):
         start = datetime.fromisoformat(start).date()
@@ -467,7 +495,13 @@ def read_news(ticker: str | None, start, end):
             ).fetchdf()
     finally:
         conn.close()
-    return df
+    if include_low_signal or df.empty:
+        return df
+    mask = ~df.apply(
+        lambda r: is_low_signal(r["source"], r["title"], r["summary"] or ""),
+        axis=1,
+    )
+    return df[mask].reset_index(drop=True)
 
 
 __all__ = [
