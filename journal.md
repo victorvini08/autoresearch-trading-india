@@ -34,3 +34,27 @@ This is the autoresearch loop's persistent memory. Every iteration appends an en
 ---
 
 (future iteration entries will be appended below this line by `scripts/loop.py`)
+
+## Iteration smoke-codex-1778866545 — REJECTED
+
+**Hypothesis:** Ranking candidates by volatility-adjusted 12-1 momentum instead of raw 12-1 momentum should improve validation Sortino by reducing concentration in high-beta winners that later mean-revert or crash.
+
+**Change:** Changed the momentum score to divide 12-1 return by realized daily volatility over the same lookback window, using existing lookback and skip parameters without adding a new hyperparameter.
+
+**Decision:** REJECTED — validation failed: syntax error: unexpected character after line continuation character (line 1)
+
+**Learning:** No scored strategy inference: the iteration failed before prepare.py produced validation metrics. Treat this as an implementation failure, not evidence about the hypothesis. Failure reason: validation failed: syntax error: unexpected character after line continuation character (line 1).
+
+---
+
+## Iteration 2026-05-15-50c1342 — REJECTED
+
+**Hypothesis:** Replacing raw 12-1 momentum with volatility-adjusted 12-1 momentum will improve mean validation Sortino by favoring steadier trend leaders and reducing exposure to high-beta reversals without adding a new hyperparameter.
+
+**Change:** Changed the ranking score to divide 12-1 return by realized daily volatility over the same lookback window, preserving the existing cadence, sector cap, retention buffer, and order_target_percent-only trade contract.
+
+**Decision:** REJECTED — prepare.py crashed: 'str' object has no attribute 'exists'
+
+**Learning:** No scored strategy inference: the iteration failed before prepare.py produced validation metrics. Treat this as an implementation failure, not evidence about the hypothesis. Failure reason: prepare.py crashed: 'str' object has no attribute 'exists'.
+
+---
