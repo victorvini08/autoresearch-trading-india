@@ -21,10 +21,9 @@ env/
 # uv
 .uv/
 
-# DuckDB / SQLite data stores (regenerable from sources)
-storage/*.duckdb
+# DuckDB / SQLite data stores — now tracked via Git LFS (see .gitattributes)
+# so a fresh clone gets the populated DBs. Transient WAL/journal stay ignored.
 storage/*.duckdb.wal
-storage/*.sqlite
 storage/*.sqlite-journal
 storage/bse_scrip_map.json
 storage/dhan_scrip_master.csv

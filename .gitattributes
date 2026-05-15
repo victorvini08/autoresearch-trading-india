@@ -1,0 +1,2 @@
+storage/*.duckdb filter=lfs diff=lfs merge=lfs -text
+storage/*.sqlite filter=lfs diff=lfs merge=lfs -text
