@@ -72,7 +72,7 @@ def load_fundamentals(
     """
     fundamentals_db = Path(fundamentals_db)
     if not fundamentals_db.exists():
-        logger.warning(
+        logger.debug(
             "quality_screen: %s does not exist; screen is a no-op until "
             "fundamentals ingest is wired",
             fundamentals_db,
@@ -85,7 +85,7 @@ def load_fundamentals(
             "WHERE table_name = 'fundamentals_quarterly'"
         ).fetchone()
         if not tbl:
-            logger.warning(
+            logger.debug(
                 "quality_screen: fundamentals_quarterly table missing; no-op"
             )
             return {}

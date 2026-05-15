@@ -8,6 +8,7 @@ from pathlib import Path
 from data.quality_screen import (
     FundamentalsRow,
     apply_quality_screen,
+    load_fundamentals,
 )
 from data.sectors import SectorAssignment
 
@@ -33,6 +34,16 @@ def test_soft_degrade_passes_all_when_fundamentals_empty() -> None:
     assert passed == ["A", "B", "C"]
     assert all(r.passed for r in results.values())
     assert all("no_fundamentals_data" in r.reasons for r in results.values())
+
+
+def test_missing_fundamentals_db_does_not_warn(caplog, tmp_path) -> None:
+    """Missing fundamentals DB is expected in v1 paper and must not spam logs."""
+    missing = tmp_path / "fundamentals.duckdb"
+
+    out = load_fundamentals(missing, ["A", "B"], date(2026, 5, 15))
+
+    assert out == {}
+    assert "quality_screen:" not in caplog.text
 
 
 def test_excludes_high_de_non_financial() -> None:
