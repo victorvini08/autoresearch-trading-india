@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import importlib
 import inspect
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from types import ModuleType
 
 import backtrader as bt
@@ -50,6 +50,18 @@ TEST_BOUNDARY = date(2025, 1, 1)
 TRAIN_DAYS = 504
 VAL_DAYS = 126
 SLIDE_DAYS = 63
+
+# Indicator burn-in (audit 2026-05-15 Fix 1). 12-1 momentum needs ~274
+# trading days of prior history before it produces ANY signal; a 126-calendar
+# (~85-trading-day) val window alone leaves it permanently None → the
+# strategy never trades and every metric scores an inert book. We therefore
+# load WARMUP_CALENDAR_DAYS of history BEFORE each scored window so the
+# strategy enters it already warmed and invested (as it always is live), then
+# score ONLY the in-window slice (see _score_window `score_start`). 520
+# calendar days ≈ 370 trading days, comfortably > 274 with holiday margin.
+# Excluded from scoring, so over-provisioning costs only load time, never
+# correctness.
+WARMUP_CALENDAR_DAYS = 520
 INITIAL_CASH = 50_000.0
 
 # Personal-take-home estimate. Indian resident on Indian (domestic) equities:
@@ -131,16 +143,37 @@ def _find_strategy_class(module: ModuleType) -> type:
     return candidates[0]
 
 
+def _as_date(x) -> date:
+    """Normalize a date / datetime / Timestamp / ISO-string to date."""
+    if isinstance(x, date) and not isinstance(x, datetime):
+        return x
+    if isinstance(x, datetime):
+        return x.date()
+    ts = pd.Timestamp(x)
+    return ts.date()
+
+
 def _score_window(
     strategy_cls: type,
     feeds: dict[str, pd.DataFrame],
     universe_by_date: dict | None = None,
+    score_start: date | None = None,
 ) -> dict:
     """Run strategy on a single time window; return per-window scoring dict.
 
     `universe_by_date` ({snapshot_date: frozenset(tickers)}) is forwarded to
     the strategy so it restricts entries to the point-in-time universe at
     each rebalance (audit-2026-05-15 Fix B).
+
+    `score_start` (audit-2026-05-15 Fix 1): when set, the feeds include an
+    indicator-burn-in runway BEFORE this date. The strategy trades through
+    the warm-up (entering `score_start` already invested, as it always is
+    live), but ALL metrics are computed ONLY from `score_start` onward —
+    warm-up bars/trades are excluded so they cannot leak into Sortino,
+    drawdown, returns, turnover, or the chained equity curve downstream.
+    Metric *definitions* are unchanged; only the window they see is the
+    intended val/test window. score_start=None ⇒ legacy behaviour (whole
+    fed window scored), preserving signal_today / existing tests.
     """
     result = run_backtest(
         strategy_cls, feeds, initial_cash=INITIAL_CASH,
@@ -148,8 +181,38 @@ def _score_window(
         if universe_by_date else None,
     )
     daily = result["daily_returns"]
-    eq = result["equity_curve"]
     trades = result["trades"]
+    gross = result["gross_exposure_daily"]
+    trade_count = result["trade_count"]
+
+    if score_start is not None:
+        # Slice raw daily returns to the scored window, then REBUILD the
+        # equity curve from the slice so every downstream consumer
+        # (Sortino, max_dd, chained equity, pre_tax_return_mean, risk,
+        # gross exposure) sees only in-window P&L. The cut happens here —
+        # before _score_window returns — because evaluate() reuses these
+        # objects in many places (Codex review 2026-05-15).
+        if len(daily) > 0:
+            d_mask = [_as_date(i) >= score_start for i in daily.index]
+            daily = daily[pd.Series(d_mask, index=daily.index)]
+        eq = (1 + daily).cumprod() * INITIAL_CASH if len(daily) > 0 \
+            else pd.Series(dtype=float)
+        if len(gross) > 0:
+            g_mask = [_as_date(i) >= score_start for i in gross.index]
+            gross = gross[pd.Series(g_mask, index=gross.index)]
+        if len(trades) > 0 and "exit_date" in trades.columns:
+            keep = trades["exit_date"].map(
+                lambda v: v is not None
+                and not pd.isna(v)
+                and _as_date(v) >= score_start
+            )
+            trades = trades[keep].reset_index(drop=True)
+        # Closed round-trips realised in-window (TradeRecorder keys by
+        # exit_date) — the consistent count for hit_rate/profit_factor.
+        trade_count = int(len(trades))
+    else:
+        eq = result["equity_curve"]
+
     avg_eq = float(eq.mean()) if len(eq) > 0 else INITIAL_CASH
 
     return {
@@ -159,10 +222,10 @@ def _score_window(
         "hit_rate": hit_rate(trades),
         "profit_factor": profit_factor(trades),
         "turnover": turnover(trades, avg_eq),
-        "trade_count": result["trade_count"],
+        "trade_count": trade_count,
         "equity_curve": eq,
         "trades": trades,
-        "gross_exposure_daily": result["gross_exposure_daily"],
+        "gross_exposure_daily": gross,
     }
 
 
@@ -205,8 +268,12 @@ def evaluate(strategy_module: ModuleType, mode: str = "research") -> dict:
             # period). Skip rather than fabricate membership.
             skipped_folds += 1
             continue
-        feeds = _load_feeds(val_s, val_e, members)
-        fold_scores.append(_score_window(strategy_cls, feeds, fold_ubd))
+        feeds = _load_feeds(
+            val_s - timedelta(days=WARMUP_CALENDAR_DAYS), val_e, members
+        )
+        fold_scores.append(
+            _score_window(strategy_cls, feeds, fold_ubd, score_start=val_s)
+        )
 
     if not fold_scores:
         raise RuntimeError(
@@ -347,8 +414,13 @@ def evaluate(strategy_module: ModuleType, mode: str = "research") -> dict:
 
     if mode == "promotion":
         members, test_ubd = _pit_universe(BACKTEST_END)
-        feeds = _load_feeds(TEST_BOUNDARY, BACKTEST_END, members)
-        test_score = _score_window(strategy_cls, feeds, test_ubd)
+        feeds = _load_feeds(
+            TEST_BOUNDARY - timedelta(days=WARMUP_CALENDAR_DAYS),
+            BACKTEST_END, members,
+        )
+        test_score = _score_window(
+            strategy_cls, feeds, test_ubd, score_start=TEST_BOUNDARY
+        )
         out["test_sortino"] = test_score["sortino"]
         out["test_calmar"] = test_score["calmar"]
         out["test_max_dd"] = test_score["max_dd"]

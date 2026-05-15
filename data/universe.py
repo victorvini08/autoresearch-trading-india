@@ -1,25 +1,33 @@
 """Indian-equities universe construction.
 
-The universe is the **top 200 names by 20-day Average Daily Value (ADV) drawn
-from the Nifty 500**, filtered for tradeability. It is recomputed monthly and
-snapshot-locked at each historical rebalance date so that backtests see the
-universe membership that actually existed on each historical day (no
-look-ahead / survivorship bias).
+The universe is the **top 200 names by 20-day Average Daily Value (ADV),
+ranked point-in-time from the full NSE EQ bhav** (every name actively
+trading before the as-of date), filtered for tradeability. It is recomputed
+monthly and snapshot-locked at each historical rebalance date so backtests
+see the membership that actually existed on each day (no look-ahead /
+survivorship bias — audit 2026-05-15).
 
-Source of truth: `https://niftyindices.com/IndexConstituent/ind_nifty500list.csv`
-(free, public; refreshed by NSE Indices semi-annually with intermediate
-reconstitutions when needed).
+The current Nifty 500 CSV
+(`https://niftyindices.com/IndexConstituent/ind_nifty500list.csv`) is used
+ONLY for sector/ISIN enrichment, NEVER for membership (using today's list
+historically was the survivorship bug; see compute_universe).
 
 Filters (in order, all must pass):
 
-  1. Series == 'EQ'           — excludes SME, BE, T, Z groups
-  2. Listing-age >= 504 td    — ≈2 years of price history available
+  1. Series == 'EQ'           — enforced upstream at price ingest
+                                  (parse_bhav_csv); daily_bars is EQ-only
+  2. Listing-age >= MIN_LISTING_TRADING_DAYS — derived from the strategy's
+                                  signal need (12-1 momentum lookback+skip),
+                                  NOT an arbitrary 2yr (audit 2026-05-15
+                                  Fix 2: the old 504 threw away ~11 months
+                                  of usable backtest for no statistical gain)
   3. Trading-days >= 90%      — of last 250 sessions had trades (not
                                   suspended / circuited persistently)
-  4. Free-float mcap >= ₹1000 cr — exclude manipulability candidates
-  5. 20-day ADV >= ₹10 cr     — liquidity floor; ensures ₹50k buy/sell is
-                                  < 0.05% of daily volume
-  6. Sort by ADV desc, take top 200
+  4. 20-day ADV >= ₹10 cr     — liquidity floor; ensures ₹50k buy/sell is
+                                  < 0.05% of daily volume (also the de-facto
+                                  junk/IPO-pop guard now that listing-age is
+                                  signal-derived)
+  5. Sort by ADV desc, take top 200
 
 This file does NOT fetch price data on its own — it consumes the price tables
 that `data.ingest_prices` populates. Universe rebuild is the first thing the
@@ -52,7 +60,17 @@ _BROWSER_UA = (
 
 # Filter thresholds (canonical; loop may experiment with smaller universes
 # downstream but the ingest universe stays at these values).
-MIN_LISTING_TRADING_DAYS = 504        # ~2 years
+#
+# Listing-age is DERIVED from the strategy's signal requirement, not an
+# arbitrary calendar span. 12-1 momentum needs lookback (252) + skip (21) + 1
+# trading days of history to produce a signal; we add a ~26-session buffer so
+# an eligible name has a little stable history beyond the bare minimum (mutes
+# IPO-pop). The old hard-coded 504 (~2yr) was untethered to anything the
+# strategy does and, given price history starts 2019-06, pushed the first
+# full-200 universe from 2022-06 out to 2023-05 — ~11 months of usable
+# backtest discarded for zero statistical benefit (audit 2026-05-15 Fix 2).
+# The ₹10cr ADV floor + 90%-trading-days ratio remain the junk/IPO guards.
+MIN_LISTING_TRADING_DAYS = 300        # ≈ 252 + 21 + 1 + ~26-session buffer
 MIN_TRADING_DAYS_RATIO = 0.90         # of last 250 sessions
 MIN_FREE_FLOAT_MCAP_CR = 1_000        # ₹1,000 crore
 MIN_ADV_CR = 10                       # ₹10 crore (20-day rolling)
