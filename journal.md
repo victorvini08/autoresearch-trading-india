@@ -198,3 +198,15 @@ This is the autoresearch loop's persistent memory. Every iteration appends an en
 **Learning:** Sortino scored 2.287 with no prior kept baseline. Aggregate DD was 64.7%; negative folds were 7/20; trades=65. Do not reuse this exact setup: it failed the catastrophe gate, so the result is not a usable edge even if the hypothesis was economically plausible. Decision reason: catastrophe: max drawdown: 64.7% > 50% (account-wipe territory) | anti-overfit FAILED: bonferroni(p=0.9882 >= alpha/N=0.0083) · sub_period_stationarity(min/max ratio of |Sortino| across 3 sub-periods = 0.16).
 
 ---
+
+## Iteration 2026-05-16-f0acc10 — REJECTED
+
+**Hypothesis:** Using the existing regime gate as a full de-risking switch, rather than only blocking new entries, should reduce aggregate drawdown and improve validation Sortino by exiting momentum holdings during risk_off or shock regimes.
+
+**Change:** Changed the rebalance selection so a failed regime gate liquidates held positions instead of retaining them, while preserving the existing ranking, sector cap, cadence, parameters, and order_target_percent-only contract.
+
+**Decision:** REJECTED — prepare.py crashed: Query interrupted
+
+**Learning:** No scored strategy inference: the iteration failed before prepare.py produced validation metrics. Treat this as an implementation failure, not evidence about the hypothesis. Failure reason: prepare.py crashed: Query interrupted.
+
+---
