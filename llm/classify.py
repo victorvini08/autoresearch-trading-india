@@ -140,6 +140,20 @@ def _macro_snapshot(d: date, macro_db: Path = _MACRO_DB) -> dict[str, float]:
         snap["fii_net_20d_cr"] = round(sum(r[1] for r in last20), 1)
         snap["dii_net_20d_cr"] = round(sum(r[2] for r in last20), 1)
 
+    # GDELT policy/narrative dimension — complementary to the numeric
+    # market signals above (it catches systemic-fear / policy-uncertainty
+    # regimes the VIX/Nifty/FII series miss). Rows are keyed by the decision
+    # date they are valid for, so reading "most recent on/before d" is
+    # point-in-time correct. Absent → key omitted (prompt treats as silent).
+    for series_id in (
+        "gdelt_tone_mean", "gdelt_tone_negfrac",
+        "gdelt_epu_policy", "gdelt_centralbank",
+        "gdelt_tariff_trade", "gdelt_inflation",
+    ):
+        pts = read_macro_window(macro_db, series_id, start, end)
+        if pts:
+            snap[series_id] = round(pts[-1][1], 4)
+
     return snap
 
 
