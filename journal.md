@@ -240,3 +240,31 @@ separate lineages.
 **Learning:** Sortino scored 1.483 with no prior kept baseline. Aggregate DD was 25.1%; negative folds were 7/20; trades=106. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: anti-overfit FAILED: universe_respect(variant traded tickers outside the point-in-time universe — survivorship/look-ahead reintroduced (hard reject)) · bonferroni(p=1.0000 >= alpha/N=0.0056).
 
 ---
+
+## Iteration 2026-05-16-61d1b22 — REVERTED
+
+**Hypothesis:** Prioritizing oversold new-entry candidates whose latest close has already stabilized will improve mean validation Sortino by replacing some still-falling residual losers with early-reversion setups without adding parameters or turnover.
+
+**Change:** I added a one-bar rebound priority for new entries: candidates with current close greater than or equal to the prior close are passed to sector-cap selection first, while retained positions, PIT universe handling, and sizing remain unchanged.
+
+**Decision:** REVERTED — catastrophe: gross exposure: max 103.6% > 100% (cash account — leverage error) · max drawdown: 61.2% > 50% (account-wipe territory) | anti-overfit FAILED: bonferroni(p=0.9876 >= alpha/N=0.0050)
+
+**Result:**
+- validation_sortino_mean: 1.5628148134356263
+- validation_folds: 20
+- per_fold_sortinos: [6.9897, 2.9878, -0.2905, 0.9052, -0.0634, -1.3287, 2.4714, 6.5187, -0.9377, -3.1668, -2.3814, 0.641, 0.8985, 1.0219, 1.103, 0.4318, 19.0097, 0.3164, -2.4225, -1.4479]
+- calmar_mean: 2.338499788516152
+- hit_rate_mean: 0.3775
+- profit_factor_mean: 1.441925170219892
+- trade_count_total: 61
+- aggregate_max_dd: 0.6120789556696081
+- worst_fold_max_dd: 0.41596878990984604
+- max_position_frac_peak: 1.088378944825857
+- lower_quartile_fold_calmar: -1.298506803181767
+- n_negative_folds: 8/20
+- risk.passed: False
+- risk.violations: ['gross exposure: max 103.6% > 100% (cash account — leverage error)', 'max drawdown: 61.2% > 50% (account-wipe territory)']
+
+**Learning:** Sortino scored 1.563 with no prior kept baseline. Aggregate DD was 61.2%; negative folds were 8/20; trades=61. Do not reuse this exact setup: it failed the catastrophe gate, so the result is not a usable edge even if the hypothesis was economically plausible. Decision reason: catastrophe: gross exposure: max 103.6% > 100% (cash account — leverage error) · max drawdown: 61.2% > 50% (account-wipe territory) | anti-overfit FAILED: bonferroni(p=0.9876 >= alpha/N=0.0050).
+
+---
