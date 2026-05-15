@@ -170,3 +170,31 @@ This is the autoresearch loop's persistent memory. Every iteration appends an en
 **Learning:** Sortino scored 1.708 with no prior kept baseline. Aggregate DD was 69.1%; negative folds were 9/20; trades=67. Do not reuse this exact setup: it failed the catastrophe gate, so the result is not a usable edge even if the hypothesis was economically plausible. Decision reason: catastrophe: gross exposure: max 120.4% > 100% (cash account — leverage error) · max drawdown: 69.1% > 50% (account-wipe territory) | anti-overfit FAILED: universe_respect(variant traded tickers outside the point-in-time universe — survivorship/look-ahead reintroduced (hard reject)) · bonferroni(p=1.0000 >= alpha/N=0.0100) · random_walk_mc(only 67.18% percentile vs RW null) · sub_period_stationarity(min/max ratio of |Sortino| across 3 sub-periods = 0.22).
 
 ---
+
+## Iteration 2026-05-16-f1dd62e — REVERTED
+
+**Hypothesis:** Increasing diversification to ten equal-weight positions should reduce fold-level drawdowns and improve mean validation Sortino versus the current six-name concentration while staying inside the existing n_positions hyperparameter range.
+
+**Change:** I changed only the existing n_positions parameter from 6 to 10, leaving the ranking, retention, regime gate, sector cap, cadence, and order_target_percent-only contract unchanged.
+
+**Decision:** REVERTED — catastrophe: max drawdown: 64.7% > 50% (account-wipe territory) | anti-overfit FAILED: bonferroni(p=0.9882 >= alpha/N=0.0083) · sub_period_stationarity(min/max ratio of |Sortino| across 3 sub-periods = 0.16)
+
+**Result:**
+- validation_sortino_mean: 2.2868682447822124
+- validation_folds: 20
+- per_fold_sortinos: [11.8299, 2.3938, 0.4165, 0.8087, -0.925, -1.7644, -1.5502, -1.9836, -2.3353, -2.2431, 5.3624, 19.4051, 5.8167, 5.2924, 3.1728, 2.1833, 1.4909, 1.3719, -3.7313, 0.7258]
+- calmar_mean: 8.657005544446779
+- hit_rate_mean: 0.44523809523809527
+- profit_factor_mean: 3.2923815059584984
+- trade_count_total: 65
+- aggregate_max_dd: 0.6471321681388055
+- worst_fold_max_dd: 0.36097871984213514
+- max_position_frac_peak: 0.6442447448440024
+- lower_quartile_fold_calmar: -1.663648708434562
+- n_negative_folds: 7/20
+- risk.passed: False
+- risk.violations: ['max drawdown: 64.7% > 50% (account-wipe territory)']
+
+**Learning:** Sortino scored 2.287 with no prior kept baseline. Aggregate DD was 64.7%; negative folds were 7/20; trades=65. Do not reuse this exact setup: it failed the catastrophe gate, so the result is not a usable edge even if the hypothesis was economically plausible. Decision reason: catastrophe: max drawdown: 64.7% > 50% (account-wipe territory) | anti-overfit FAILED: bonferroni(p=0.9882 >= alpha/N=0.0083) · sub_period_stationarity(min/max ratio of |Sortino| across 3 sub-periods = 0.16).
+
+---
