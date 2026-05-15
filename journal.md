@@ -184,3 +184,31 @@ separate lineages.
 **Learning:** Sortino scored 3.185 with no prior kept baseline. Aggregate DD was 58.9%; negative folds were 6/20; trades=60. Do not reuse this exact setup: it failed the catastrophe gate, so the result is not a usable edge even if the hypothesis was economically plausible. Decision reason: catastrophe: gross exposure: max 101.7% > 100% (cash account — leverage error) · max drawdown: 58.9% > 50% (account-wipe territory) | anti-overfit FAILED: bonferroni(p=0.8660 >= alpha/N=0.0071) · sub_period_stationarity(min/max ratio of |Sortino| across 3 sub-periods = 0.01).
 
 ---
+
+## Iteration 2026-05-16-a27ed61 — REVERTED
+
+**Hypothesis:** Sizing selected names against the intended slot count rather than the number of currently selected names will improve mean validation Sortino by keeping cash when the regime gate or sector cap leaves sparse signals, reducing concentrated falling-knife exposure without adding a parameter.
+
+**Change:** Changed target sizing from 0.99 divided by len(selected) to 0.99 divided by n_positions, so empty slots remain cash instead of levering up the remaining residual-reversal bets.
+
+**Decision:** REVERTED — anti-overfit FAILED: universe_respect(variant traded tickers outside the point-in-time universe — survivorship/look-ahead reintroduced (hard reject)) · bonferroni(p=0.9738 >= alpha/N=0.0063) · random_walk_mc(only 46.48% percentile vs RW null) · sub_period_stationarity(min/max ratio of |Sortino| across 3 sub-periods = 0.13)
+
+**Result:**
+- validation_sortino_mean: 0.5413993321742143
+- validation_folds: 20
+- per_fold_sortinos: [10.9447, 4.2213, 0.4274, 0.7367, -0.8658, -1.7499, -0.7268, 0.2028, -0.8637, -1.1338, 0.0376, 2.4552, 1.9134, -0.3134, -1.2913, -0.8393, 0.3719, 0.9017, -2.4795, -1.1214]
+- calmar_mean: 0.4631821177322097
+- hit_rate_mean: 0.3765873015873016
+- profit_factor_mean: 2.680559056163559
+- trade_count_total: 112
+- aggregate_max_dd: 0.3165885464298234
+- worst_fold_max_dd: 0.1235288882901726
+- max_position_frac_peak: 0.18165511243730334
+- lower_quartile_fold_calmar: -1.2174111041364544
+- n_negative_folds: 11/20
+- risk.passed: True
+- risk.violations: []
+
+**Learning:** Sortino scored 0.541 with no prior kept baseline. Aggregate DD was 31.7%; negative folds were 11/20; trades=112. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: anti-overfit FAILED: universe_respect(variant traded tickers outside the point-in-time universe — survivorship/look-ahead reintroduced (hard reject)) · bonferroni(p=0.9738 >= alpha/N=0.0063) · random_walk_mc(only 46.48% percentile vs RW null) · sub_period_stationarity(min/max ratio of |Sortino| across 3 sub-periods = 0.13).
+
+---
