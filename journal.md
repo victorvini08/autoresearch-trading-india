@@ -122,3 +122,31 @@ This is the autoresearch loop's persistent memory. Every iteration appends an en
 **Learning:** No scored strategy inference: the iteration failed before prepare.py produced validation metrics. Treat this as an implementation failure, not evidence about the hypothesis. Failure reason: validation failed: disallowed import: pathlib.
 
 ---
+
+## Iteration 2026-05-16-28121b1 — REVERTED
+
+**Hypothesis:** A parameter-free Faber-style Nifty 200DMA trend overlay that liquidates all positions when Nifty 50 closes below its 200DMA will truncate the structural ~78% concentrated-long-only catastrophe drawdown, reduce negative-fold count, and improve mean validation Sortino without consuming any parsimony budget.
+
+**Change:** Added _nifty_above_200dma(today) using llm.features.nifty_vs_200dma_pct with a fixed 0.0 crossing (canonical Faber 2007 threshold, no new hyperparameter), moved held-position computation before the 200DMA check to enable clean early-exit liquidation, and removed the disallowed pathlib import by passing fundamentals_db_path as a string directly to load_fundamentals.
+
+**Decision:** REVERTED — catastrophe: max drawdown: 86.4% > 50% (account-wipe territory) | anti-overfit FAILED: sub_period_stationarity(min/max ratio of |Sortino| across 3 sub-periods = 0.02)
+
+**Result:**
+- validation_sortino_mean: 1.2226461221135445
+- validation_folds: 20
+- per_fold_sortinos: [10.2078, 4.2456, 1.044, -0.4525, -3.5735, -2.0113, -3.4524, -4.2897, -2.4906, -2.185, 1.7866, 14.9913, 7.6339, 3.128, 2.8153, 3.1902, 0.7265, -0.4423, -3.2094, -3.2096]
+- calmar_mean: 5.63899541603786
+- hit_rate_mean: 0.24500000000000002
+- profit_factor_mean: 0.46706373444576477
+- trade_count_total: 32
+- aggregate_max_dd: 0.8635885353748112
+- worst_fold_max_dd: 0.4021710423452941
+- max_position_frac_peak: 1.2186307069176447
+- lower_quartile_fold_calmar: -2.0368618152186424
+- n_negative_folds: 10/20
+- risk.passed: False
+- risk.violations: ['max drawdown: 86.4% > 50% (account-wipe territory)']
+
+**Learning:** Sortino scored 1.223 with no prior kept baseline. Aggregate DD was 86.4%; negative folds were 10/20; trades=32. Do not reuse this exact setup: it failed the catastrophe gate, so the result is not a usable edge even if the hypothesis was economically plausible. Decision reason: catastrophe: max drawdown: 86.4% > 50% (account-wipe territory) | anti-overfit FAILED: sub_period_stationarity(min/max ratio of |Sortino| across 3 sub-periods = 0.02).
+
+---
