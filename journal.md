@@ -3095,3 +3095,32 @@ structural learnings are codified in `program.md`. Explore freely.
 **Learning:** Sortino changed from 3.404 to 3.404 (+0.000). Aggregate DD was 13.6% versus previous kept 13.6%; negative folds were 2/13; trades=190. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 3.404 did not improve on prev 3.4038275153908293.
 
 ---
+
+## Iteration 2026-05-17-18c678e — REVERTED
+
+**Hypothesis:** Adding a PIT-safe portfolio exposure haircut during broad-market stress should improve mean validation Sortino by reducing downside participation in weak NSE regimes while preserving the proven stock ranker and fixed-slot construction.
+
+**Change:** I added a no-new-parameter market-stress multiplier that cuts gross exposure when the active universe has weak 63-day breadth and negative median trend, leaving selection, sector cap, PIT filtering, and order_target_percent-only execution unchanged.
+
+**Decision:** REVERTED — sortino 3.192 did not improve on prev 3.4038275153908293
+
+**Result:**
+- evaluator_version: 2026-05-16-univfloor
+- validation_sortino_mean: 3.191569364222781
+- validation_folds: 13
+- per_fold_sortinos: [4.9178, 0.221, -1.1496, 4.8258, 8.8569, 6.5403, 6.0217, 5.237, 2.3849, 0.6771, 2.0021, 1.708, -0.7524]
+- calmar_mean: 6.896216688644638
+- hit_rate_mean: 0.5235735418427725
+- profit_factor_mean: 5.294498254967012
+- trade_count_total: 187
+- aggregate_max_dd: 0.13417393664607882
+- worst_fold_max_dd: 0.11571297308319804
+- max_position_frac_peak: 0.06438980758096938
+- lower_quartile_fold_calmar: 1.2834969077492755
+- n_negative_folds: 2/13
+- risk.passed: True
+- risk.violations: []
+
+**Learning:** Sortino changed from 3.404 to 3.192 (-0.212). Aggregate DD was 13.4% versus previous kept 13.6%; negative folds were 2/13; trades=187. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 3.192 did not improve on prev 3.4038275153908293.
+
+---
