@@ -135,3 +135,45 @@ def test_validate_risk_now_receives_non_empty_positions_df():
     )
     assert result["passed"] is False
     assert any("gross" in v.lower() for v in result["violations"])
+
+
+# ── Regression: 2026-05-16 thin-universe + evaluator-version fixes ────────
+
+
+def test_min_active_universe_uses_thinnest_in_window() -> None:
+    """The pre-2022-07 PIT universe is ~5 names; the strategy is squeezed
+    into the thinnest snapshot active during the validation window, so the
+    fold-skip floor must see that 5, not the historical union."""
+    from prepare import _min_active_universe
+
+    thin = frozenset(f"T{i}" for i in range(5))
+    full = frozenset(f"S{i}" for i in range(200))
+    ubd = {date(2021, 1, 1): thin, date(2022, 7, 1): full}
+
+    # window entirely in the 5-name era → 5
+    assert _min_active_universe(ubd, date(2021, 6, 1), date(2021, 12, 1)) == 5
+    # window straddling the 5→200 jump still sees the thin snapshot at start
+    assert _min_active_universe(ubd, date(2022, 3, 1), date(2022, 9, 1)) == 5
+    # window entirely in the full era → 200
+    assert _min_active_universe(ubd, date(2022, 8, 1), date(2023, 1, 1)) == 200
+    # no snapshot predating the window → data-starved sentinel 0
+    assert _min_active_universe({}, date(2021, 1, 1), date(2021, 6, 1)) == 0
+
+
+def test_thin_universe_folds_are_below_floor() -> None:
+    """A 5-name fold is below MIN_FOLD_UNIVERSE and must be skipped; a
+    200-name fold is above it and must be scored."""
+    from prepare import MIN_FOLD_UNIVERSE, _min_active_universe
+
+    thin = frozenset(f"T{i}" for i in range(5))
+    full = frozenset(f"S{i}" for i in range(200))
+    ubd = {date(2021, 1, 1): thin, date(2022, 7, 1): full}
+
+    assert _min_active_universe(ubd, date(2021, 6, 1), date(2021, 12, 1)) < MIN_FOLD_UNIVERSE
+    assert _min_active_universe(ubd, date(2022, 8, 1), date(2023, 1, 1)) >= MIN_FOLD_UNIVERSE
+
+
+def test_evaluator_version_is_stamped() -> None:
+    from prepare import EVALUATOR_VERSION
+
+    assert isinstance(EVALUATOR_VERSION, str) and EVALUATOR_VERSION

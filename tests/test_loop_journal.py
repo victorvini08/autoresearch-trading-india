@@ -195,3 +195,54 @@ def test_validate_strategy_edit_no_op_check_is_optional():
     other branches don't break when this loop.py merges."""
     ok, why = validate_strategy_edit(_VALID_STRATEGY_PY)
     assert ok is True, f"expected ok, got: {why}"
+
+
+# ── Regression: 2026-05-16 evaluator-version re-anchor ───────────────────
+
+from scripts.loop import last_accepted_aggregate_dd
+
+_JOURNAL = """## iter-old
+
+**Decision:** KEPT — old harness baseline
+
+**Result:**
+- evaluator_version: 2026-05-15-prefix
+- validation_sortino_mean: 2.172
+- aggregate_max_dd: 0.22
+
+---
+## iter-new
+
+**Decision:** KEPT — clean re-anchor
+
+**Result:**
+- evaluator_version: 2026-05-16-univfloor
+- validation_sortino_mean: 1.45
+- aggregate_max_dd: 0.18
+
+---
+"""
+
+
+def test_baseline_ignores_stale_evaluator_version():
+    # Asking for the current evaluator must return the CLEAN re-anchored
+    # baseline, not the poisoned 2.172 from the old harness.
+    assert last_accepted_sortino(
+        _JOURNAL, require_evaluator_version="2026-05-16-univfloor"
+    ) == 1.45
+    assert last_accepted_aggregate_dd(
+        _JOURNAL, require_evaluator_version="2026-05-16-univfloor"
+    ) == 0.18
+
+
+def test_baseline_none_when_no_block_matches_version():
+    # A brand-new evaluator version has no comparable KEPT yet → re-anchor
+    # (None lets the first iteration set a fresh baseline).
+    assert last_accepted_sortino(
+        _JOURNAL, require_evaluator_version="2026-99-99-future"
+    ) is None
+
+
+def test_baseline_unfiltered_still_returns_latest_kept():
+    # Backward compatible: no version filter → most recent KEPT as before.
+    assert last_accepted_sortino(_JOURNAL) == 1.45
