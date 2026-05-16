@@ -3965,3 +3965,32 @@ structural learnings are codified in `program.md`. Explore freely.
 **Learning:** Sortino changed from 3.628 to 1.671 (-1.956). Aggregate DD was 13.9% versus previous kept 15.1%; negative folds were 5/13; trades=188. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 1.671 did not improve on prev 3.6277126896862444 | anti-overfit FAILED: bonferroni(p=0.0825 >= alpha/N=0.0100).
 
 ---
+
+## Iteration 2026-05-17-25655c0 — REVERTED
+
+**Hypothesis:** Adding a PIT-safe minimum trend-efficiency floor will improve validation Sortino by excluding choppy positive-momentum names whose gains came through unstable paths rather than persistent accumulation.
+
+**Change:** I tightened the existing 63-day trend-efficiency eligibility check from -0.05 to 0.02 while leaving cadence, ranking weights, fixed-slot sizing, PIT universe enforcement, sector cap, and order_target_percent-only execution unchanged.
+
+**Decision:** REVERTED — sortino 3.613 did not improve on prev 3.6277126896862444
+
+**Result:**
+- evaluator_version: 2026-05-16-univfloor
+- validation_sortino_mean: 3.6125821636152526
+- validation_folds: 13
+- per_fold_sortinos: [5.1914, 0.3163, -0.9846, 5.6849, 9.6958, 6.8286, 5.9485, 5.5371, 2.3815, 0.5568, 1.9883, 1.7262, 2.0927]
+- calmar_mean: 7.450367572413736
+- hit_rate_mean: 0.5513883363996487
+- profit_factor_mean: 6.159421839754112
+- trade_count_total: 188
+- aggregate_max_dd: 0.1511863714656785
+- worst_fold_max_dd: 0.12589683175444755
+- max_position_frac_peak: 0.06427130110377423
+- lower_quartile_fold_calmar: 1.6078656238728861
+- n_negative_folds: 1/13
+- risk.passed: True
+- risk.violations: []
+
+**Learning:** Sortino changed from 3.628 to 3.613 (-0.015). Aggregate DD was 15.1% versus previous kept 15.1%; negative folds were 1/13; trades=188. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 3.613 did not improve on prev 3.6277126896862444.
+
+---
