@@ -1234,3 +1234,32 @@ structural learnings are codified in `program.md`. Explore freely.
 **Learning:** Sortino changed from 2.925 to 2.861 (-0.064). Aggregate DD was 6.5% versus previous kept 5.5%; negative folds were 3/13; trades=62. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 2.861 did not improve on prev 2.9249943159478287.
 
 ---
+
+## Iteration 2026-05-17-0cc1dce — REVERTED
+
+**Hypothesis:** Capping the fixed-slot momentum book's gross exposure when India VIX is in an extreme percentile and the Nifty 50 is below its 200-DMA will improve validation Sortino by preserving the residual-momentum rank while avoiding fully funded long exposure in systemic stress.
+
+**Change:** I added a macro-stress gross cap using india_vix_percentile and nifty_vs_200dma_pct, with PIT-safe active/inactive slot and sector accounting so the cap leaves cash without issuing off-universe orders.
+
+**Decision:** REVERTED — sortino 2.840 did not improve on prev 2.9249943159478287
+
+**Result:**
+- evaluator_version: 2026-05-16-univfloor
+- validation_sortino_mean: 2.8400811893953724
+- validation_folds: 13
+- per_fold_sortinos: [-0.8114, -0.6574, -0.5988, 6.4825, 9.5822, 4.5961, 4.7629, 5.3543, 1.6472, 0.311, 2.1922, 2.2468, 1.8135]
+- calmar_mean: 1.504573623618125
+- hit_rate_mean: 0.5628205128205128
+- profit_factor_mean: 0.7058520157358108
+- trade_count_total: 34
+- aggregate_max_dd: 0.06026967415828252
+- worst_fold_max_dd: 0.037656525595110964
+- max_position_frac_peak: 0.038388982240395816
+- lower_quartile_fold_calmar: 0.29688666233220307
+- n_negative_folds: 3/13
+- risk.passed: True
+- risk.violations: []
+
+**Learning:** Sortino changed from 2.925 to 2.840 (-0.085). Aggregate DD was 6.0% versus previous kept 5.5%; negative folds were 3/13; trades=34. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 2.840 did not improve on prev 2.9249943159478287.
+
+---
