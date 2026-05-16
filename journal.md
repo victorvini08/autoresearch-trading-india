@@ -570,3 +570,31 @@ This is the autoresearch loop's persistent memory. Every iteration appends an en
 **Learning:** Sortino changed from 2.172 to 1.792 (-0.381). Aggregate DD was 28.6% versus previous kept 22.2%; negative folds were 5/20; trades=323. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 1.792 did not improve on prev 2.172090958313302 | anti-overfit FAILED: bonferroni(p=0.0076 >= alpha/N=0.0050) · parsimony(baseline params=7, strategy=7; needs Sortino +0.00, has +-0.38).
 
 ---
+
+## Iteration 2026-05-16-c6abf7a — REVERTED
+
+**Hypothesis:** Replacing raw 52-week-high proximity with volatility-adjusted proximity (score = proximity / (1 + annualized_21d_realized_vol)) will improve mean validation Sortino by selecting stocks whose price path to the 52-week high was orderly (low vol, steady trend) over those that arrived there via a volatile spike — which is more likely to revert — consistent with George & Hwang (2004) anchoring-bias being strongest when the signal is unambiguous.
+
+**Change:** Modified `_high52_proximity_for` to compute a trailing 21-bar annualized realized volatility (anchored at skip_days ago to avoid look-ahead) and divide the proximity score by (1 + realized_vol), penalizing spike-driven near-highs while rewarding smooth uptrends; added `import math` (whitelisted); zero new hyperparameters, graceful fallback to plain proximity when insufficient bars for vol computation.
+
+**Decision:** REVERTED — sortino 1.865 did not improve on prev 2.172090958313302 | anti-overfit FAILED: bonferroni(p=0.0234 >= alpha/N=0.0050) · parsimony(baseline params=7, strategy=7; needs Sortino +0.00, has +-0.31)
+
+**Result:**
+- validation_sortino_mean: 1.8652598274737415
+- validation_folds: 20
+- per_fold_sortinos: [10.9726, 4.2385, 0.3582, 0.7687, -0.8172, -0.6607, 0.8289, 1.57, 0.6899, -2.1696, 3.0738, 4.425, 2.1058, 5.3617, 5.5514, 1.7842, 0.7118, 1.4321, -0.3446, -2.5752]
+- calmar_mean: 2.3128621919230428
+- hit_rate_mean: 0.3229892559131689
+- profit_factor_mean: 1.6748521392682842
+- trade_count_total: 230
+- aggregate_max_dd: 0.19939200870934268
+- worst_fold_max_dd: 0.14184105194783447
+- max_position_frac_peak: 0.19296424776512208
+- lower_quartile_fold_calmar: 0.24632865368435009
+- n_negative_folds: 5/20
+- risk.passed: True
+- risk.violations: []
+
+**Learning:** Sortino changed from 2.172 to 1.865 (-0.307). Aggregate DD was 19.9% versus previous kept 22.2%; negative folds were 5/20; trades=230. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 1.865 did not improve on prev 2.172090958313302 | anti-overfit FAILED: bonferroni(p=0.0234 >= alpha/N=0.0050) · parsimony(baseline params=7, strategy=7; needs Sortino +0.00, has +-0.31).
+
+---
