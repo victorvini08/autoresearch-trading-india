@@ -386,3 +386,15 @@ structural learnings are codified in `program.md`. Explore freely.
 **Learning:** Sortino scored 1.925 with no prior kept baseline. Aggregate DD was 13.6%; negative folds were 6/13; trades=118. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: anti-overfit FAILED: bonferroni(p=0.0375 >= alpha/N=0.0100) · sub_period_stationarity(signed min/max Sortino ratio across 2 sub-periods = 0.0565 (need ≥ 0.20); sub-periods = [+2.712, +0.153]).
 
 ---
+
+## Iteration 2026-05-17-278d67a — REJECTED
+
+**Hypothesis:** Replacing residual reversal with a breadth-gated defensive momentum and low-downside-volatility carry rank will improve validation Sortino by keeping long exposure in smoother NSE winners while automatically cutting gross in weak market breadth regimes.
+
+**Change:** I changed the strategy to rank active PIT-universe names by intermediate momentum, downside stability, drawdown control and liquidity, scale gross by internal breadth plus macro stress, enforce the sector cap across retained and new names, and size by fixed slots.
+
+**Decision:** REJECTED — prepare.py crashed: name 'ticker' is not defined
+
+**Learning:** No scored strategy inference: the iteration failed before prepare.py produced validation metrics. Treat this as an implementation failure, not evidence about the hypothesis. Failure reason: prepare.py crashed: name 'ticker' is not defined.
+
+---
