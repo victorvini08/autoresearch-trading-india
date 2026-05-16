@@ -203,12 +203,14 @@ def momentum_quality_scores(
     '''Rank positive 12-1 style momentum by quality of the path.
 
     Higher score favors names with positive long and medium relative strength,
-    current price still near its trailing high, smaller drawdown, lower
+    positive stock-specific momentum after removing the active-universe market
+    return, current price still near its trailing high, smaller drawdown, lower
     downside volatility, and momentum accumulated across many skip-length
     segments rather than one isolated jump. All components are cross-sectional
     percentile ranks, so no scale fitting is needed.
     '''
     rows: dict[str, dict[str, float]] = {}
+    returns_by_ticker: dict[str, np.ndarray] = {}
     skip = max(1, int(skip_days))
     lookback = max(skip + 21, int(lookback_days))
 
@@ -237,6 +239,7 @@ def momentum_quality_scores(
         returns = closes[1:] / closes[:-1] - 1.0
         trailing_high = float(np.max(closes))
         high_proximity = now / trailing_high if trailing_high > 0.0 else 0.0
+        returns_by_ticker[t] = returns
         rows[t] = {
             'long_mom': long_mom,
             'mid_mom': mid_mom,
@@ -250,8 +253,25 @@ def momentum_quality_scores(
     if len(rows) < 2:
         return {}
 
+    market_returns = np.vstack([returns_by_ticker[t] for t in rows]).mean(axis=0)
+    market_signal = market_returns[:-skip] if skip < market_returns.size else market_returns
+    market_var = float(np.var(market_signal))
+    for t in rows:
+        stock_returns = returns_by_ticker[t]
+        stock_signal = stock_returns[:-skip] if skip < stock_returns.size else stock_returns
+        if stock_signal.size != market_signal.size or stock_signal.size == 0:
+            rows[t]['residual_mom'] = 0.0
+            continue
+        if market_var > 0.0:
+            beta = float(np.cov(stock_signal, market_signal, ddof=0)[0, 1] / market_var)
+        else:
+            beta = 1.0
+        residual = stock_signal - beta * market_signal
+        rows[t]['residual_mom'] = float(np.sum(residual))
+
     long_rank = _rank_metric(rows, 'long_mom', True)
     mid_rank = _rank_metric(rows, 'mid_mom', True)
+    residual_rank = _rank_metric(rows, 'residual_mom', True)
     high_rank = _rank_metric(rows, 'high_proximity', True)
     dd_rank = _rank_metric(rows, 'max_drawdown', False)
     downvol_rank = _rank_metric(rows, 'downside_vol', False)
@@ -263,6 +283,7 @@ def momentum_quality_scores(
         scores[t] = (
             long_rank[t]
             + mid_rank[t]
+            + residual_rank[t]
             + high_rank[t]
             + dd_rank[t]
             + downvol_rank[t]
