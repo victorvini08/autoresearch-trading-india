@@ -78,20 +78,24 @@ you see is on the real ≥200-name universe — don't reason about that early ga
 
 ---
 
-## Hyperparameters the loop may tune
+## Parameterization is yours to design
 
-- `lookback_days`, `skip_days` — momentum signal
-- `retention_mult` — selection retention buffer
-- `regime_pct`, `fii_threshold_cr` — regime gate thresholds
-- `n_positions` — target position count; valid range **15–35**, default 25.
-  Below ~15 fails the catastrophe gate (concentration); diversification is
-  signal-agnostic.
-- `rebalance_freq` — biweekly default; weekly/monthly allowed with justification.
+There is no prescribed list of knobs to tune. Invent whatever signal,
+parameters, and structure you can justify from the data below — the
+parsimony gate counts hyperparameters dynamically and polices added
+complexity, so you are free to add, remove, or rethink parameters entirely.
+Don't merely perturb the current strategy's constants; if the reject reasons
+say "no edge", change the *thesis*, not a number.
 
-(`quality_pct` was removed — no fundamentals ingest; the quality screen
-soft-passes.)
+Two parameter facts are **constraints, not tuning suggestions**:
+- **Position count ≥ ~15** (default 25, sane range 15–35). Fewer concentrates
+  the book and structurally trips the catastrophe drawdown gate —
+  diversification is signal-agnostic.
+- **Biweekly rebalance is the default cadence.** Weekly/monthly is allowed but
+  must clear the gates and be justified (DP charge ₹14.75/scrip/sell is a real
+  cost at this capital).
 
-## Data available
+## Data available — this is your search space
 
 All accessors are point-in-time (most-recent value ≤ rebalance date; signals
 as-of-close, orders fill next open — no look-ahead). Import from `llm.features`:
