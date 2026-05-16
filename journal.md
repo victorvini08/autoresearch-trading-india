@@ -234,3 +234,31 @@ This is the autoresearch loop's persistent memory. Every iteration appends an en
 **Learning:** Sortino scored 1.933 with no prior kept baseline. Aggregate DD was 21.3%; negative folds were 6/20; trades=333. Keep compounding on this change, but future iterations should still explain whether the gain came from better return, lower downside, or fewer fragile folds. Decision reason: sortino 1.933 > prev None, agg_dd 21.3%, catastrophe gate clear, anti-overfit gates passed.
 
 ---
+
+## Iteration 2026-05-16-224b0c4 — KEPT
+
+**Hypothesis:** Replacing the LLM macro_regime gate — which either blocks all new entries when the cache row is absent (returns None) or allows all entries when it throws — with the deterministic Nifty 50 200-DMA trend filter (nifty50_pct_vs_200dma > 0 from macro_signals, which has real price-data coverage throughout the backtest window) will make the bear-market guard actually work, reducing new-entry losses in the 6 negative folds and improving mean validation Sortino without changing the cross-sectional 52-week proximity ranking signal.
+
+**Change:** Replaced _regime_gate to read nifty50_pct_vs_200dma from macro_signals instead of macro_regime_for: positive value (Nifty above 200DMA) allows new entries, zero-or-negative blocks them, with graceful fallback to True when the macro DB is unavailable; also updated _regime_cache type from dict[date,str] to dict[date,bool] and added per-call memoization to avoid redundant DB reads on the same rebalance date.
+
+**Decision:** KEPT — sortino 2.172 > prev 1.933431293775231, agg_dd 22.2%, catastrophe gate clear, anti-overfit gates passed
+
+**Result:**
+- validation_sortino_mean: 2.172090958313302
+- validation_folds: 20
+- per_fold_sortinos: [10.9726, 4.2385, 0.3582, 0.7687, -0.8172, -0.5528, 0.4111, -0.4923, 1.5587, -2.3272, 4.9112, 11.2162, 3.1341, 3.8208, 5.4293, 1.6074, 0.4337, 1.6485, -0.3075, -2.5701]
+- calmar_mean: 3.4307496059067644
+- hit_rate_mean: 0.4030257631446087
+- profit_factor_mean: 1.894437452959771
+- trade_count_total: 348
+- aggregate_max_dd: 0.22169253664442026
+- worst_fold_max_dd: 0.14184105194783447
+- max_position_frac_peak: 0.20137086447217914
+- lower_quartile_fold_calmar: -0.47584757926680854
+- n_negative_folds: 6/20
+- risk.passed: True
+- risk.violations: []
+
+**Learning:** Sortino changed from 1.933 to 2.172 (+0.239). Aggregate DD was 22.2% versus previous kept 21.3%; negative folds were 6/20; trades=348. Keep compounding on this change, but future iterations should still explain whether the gain came from better return, lower downside, or fewer fragile folds. Decision reason: sortino 2.172 > prev 1.933431293775231, agg_dd 22.2%, catastrophe gate clear, anti-overfit gates passed.
+
+---

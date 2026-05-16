@@ -1,4 +1,4 @@
-"""India autoresearch strategy — 52-week-high proximity + quality + sector cap + regime gate.
+"""India autoresearch strategy — 52-week-high proximity + quality + sector cap + Nifty 200-DMA gate.
 
 The ranking signal is 52-week high proximity: current_price / max_close_over_lookback_window.
 Range (0, 1]. Higher = stock is closer to its 52-week high = stronger anchoring-bias
@@ -6,12 +6,19 @@ momentum continuation (George & Hwang 2004). This is bounded, non-magnitude-bias
 and structurally distinct from the raw 12-1 return signal that repeatedly showed
 Bonferroni p≈1.0 on the Indian top-200 universe.
 
+Regime gate: Nifty 50 200-DMA trend filter (nifty50_pct_vs_200dma > 0 → allow new entries).
+Replaces the LLM macro_regime_for gate, which is unreliable during backtesting: when the
+cache row is absent macro_regime_for returns None → None not in (risk_on, neutral) → gate
+blocks ALL new entries; when it throws → fallback True → gate allows ALL entries. The
+200-DMA filter reads from macro_signals which has real price-data coverage throughout the
+backtest window and is deterministic.
+
 Rebalance: biweekly (every other Friday).
 
 Tunable hyperparameters:
   - lookback_days (252) + skip_days (21) — proximity window
   - retention_mult (2.0) — held names retained if still in top N
-  - regime_pct (95), fii_threshold_cr (-15000) — regime gate thresholds
+  - regime_pct (95), fii_threshold_cr (-15000) — kept for API compat (not used in gate)
   - n_positions (25), sector_cap (0.25)
 
 Trade contract: every position-change goes through `self.order_target_percent`.
@@ -63,7 +70,7 @@ def resolve_active_universe(
 
 
 class IndiaMomentumQualityRegime(bt.Strategy):
-    """Cross-sectional 52-week-high proximity + quality + sector cap + regime gate."""
+    """Cross-sectional 52-week-high proximity + quality + sector cap + Nifty 200-DMA gate."""
 
     params = (
         ("lookback_days", 252),
@@ -89,7 +96,7 @@ class IndiaMomentumQualityRegime(bt.Strategy):
         self._sector_map = self._load_sector_map()
         self._last_rebalance_date: date | None = None
         self._fund_cache: dict[date, dict] = {}
-        self._regime_cache: dict[date, str] = {}
+        self._regime_cache: dict[date, bool] = {}
         self._week_parity_initialized = False
         ubd = self.p.universe_by_date
         self._univ_dates: list[date] | None = (
@@ -172,14 +179,26 @@ class IndiaMomentumQualityRegime(bt.Strategy):
         return scores
 
     def _regime_gate(self, today: date) -> bool:
-        try:
-            from llm.features import macro_regime_for  # type: ignore
+        """Allow new entries only when Nifty 50 trades above its 200-day moving average.
 
-            regime = macro_regime_for(today)
-            self._regime_cache[today] = regime
-            return regime in ("risk_on", "neutral")
+        Uses nifty50_pct_vs_200dma from macro_signals, which has real price-data coverage
+        throughout the backtest window (computed from NSE price data, not an LLM job).
+        Positive value means Nifty is trending up → allow new buys.
+        Fallback is True (allow) when macro DB is unavailable.
+        """
+        if today in self._regime_cache:
+            return self._regime_cache[today]
+        result = True
+        try:
+            from llm.features import macro_signals  # type: ignore
+
+            signals = macro_signals(today)
+            if signals and "nifty50_pct_vs_200dma" in signals:
+                result = signals["nifty50_pct_vs_200dma"] > 0.0
         except Exception:
-            return True
+            pass
+        self._regime_cache[today] = result
+        return result
 
     def next(self) -> None:
         if not self._is_rebalance_today():
