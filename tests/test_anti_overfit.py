@@ -6,12 +6,15 @@ import csv
 from pathlib import Path
 
 import numpy as np
+import pandas as pd
 import pytest
 
 from backtest.anti_overfit import (
     BASELINE_HYPERPARAMS,
     DEFAULT_PARSIMONY_DELTA_SORTINO,
+    RW_MC_PERMUTATIONS,
     StrategySummary,
+    _sortino_rows,
     bonferroni_gate,
     compute_rw_mc_null,
     has_been_revealed,
@@ -22,6 +25,7 @@ from backtest.anti_overfit import (
     sealed_test_gate,
     sub_period_stationarity_gate,
 )
+from backtest.metrics import sortino as _scalar_sortino
 
 
 def _summary(
@@ -227,3 +231,59 @@ def test_bonferroni_default_alpha_is_0_10() -> None:
     PASSES now; it would have failed at the old 0.05/10=0.005."""
     res = bonferroni_gate(_summary(pvalue=0.009), n_active_variants=10)
     assert res.passed
+
+
+# ── Regression: vectorized RW-MC (2026-05-16 speedup) ────────────────────
+
+
+def test_sortino_rows_matches_scalar_sortino_exactly() -> None:
+    """The vectorized per-row Sortino MUST equal backtest.metrics.sortino for
+    every row, including the edge cases the scalar function special-cases:
+    no negative returns (+inf / 0.0), exactly one negative (std ddof=1 → NaN
+    → treated as 0 → floored), and normal rows."""
+    rng = np.random.default_rng(123)
+    rows = [
+        rng.standard_normal(64),               # normal
+        np.abs(rng.standard_normal(64)) + 0.1,  # no downside, mean>0 → +inf
+        -np.abs(rng.standard_normal(64)),       # all negative
+        np.r_[np.full(63, 0.01), -0.02],        # exactly ONE negative
+        np.r_[np.full(62, 0.01), -0.02, -0.03],  # exactly TWO negatives
+        np.zeros(64),                           # all zero → no downside, mean 0
+        rng.standard_normal(64) * 5.0,          # high variance
+    ]
+    M = np.vstack(rows)
+    vec = _sortino_rows(M)
+    for i, r in enumerate(rows):
+        scal = _scalar_sortino(pd.Series(r))
+        v = vec[i]
+        if np.isinf(scal) or np.isinf(v):
+            assert np.isinf(scal) and np.isinf(v) and np.sign(scal) == np.sign(v), (
+                f"row {i}: inf mismatch scalar={scal} vec={v}"
+            )
+        else:
+            assert np.isclose(v, scal, rtol=1e-9, atol=1e-12), (
+                f"row {i}: scalar={scal} vec={v}"
+            )
+
+
+def test_compute_rw_mc_null_default_is_2000_permutations() -> None:
+    rng = np.random.default_rng(1)
+    returns = rng.standard_normal(256) + 0.05
+    _, rw = compute_rw_mc_null(returns, rng=rng)
+    assert RW_MC_PERMUTATIONS == 2000
+    assert rw.shape == (2000,)
+
+
+def test_compute_rw_mc_null_still_discriminates_after_vectorization() -> None:
+    """End-to-end: a strong edge lands in the upper tail, pure noise does
+    not — the vectorized path preserves the gate's discriminating power."""
+    rng = np.random.default_rng(9)
+    strong = 0.3 + 0.2 * rng.standard_normal(256)
+    strong_pct, rw = compute_rw_mc_null(strong, n_permutations=2000, rng=rng)
+    assert strong_pct > 0.90
+    assert np.std(rw) > 1e-3                       # non-degenerate
+    assert len(np.unique(np.round(rw, 6))) > 100
+
+    flat = rng.standard_normal(256)
+    flat_pct, _ = compute_rw_mc_null(flat, n_permutations=2000, rng=rng)
+    assert flat_pct < strong_pct
