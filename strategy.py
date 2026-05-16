@@ -48,7 +48,7 @@ class IndiaMomentumQualityRegime(bt.Strategy):
         ('vol_days', 63),
         ('max_drawdown_days', 63),
         ('defensive_days', 42),
-        ('n_positions', 18),
+        ('n_positions', 16),
         ('gross_exposure', 0.90),
         ('sector_cap', 0.25),
         ('rebalance_weekday', 4),
