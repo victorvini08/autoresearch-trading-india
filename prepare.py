@@ -36,6 +36,7 @@ from backtest.metrics import (
     sortino,
     turnover,
 )  # max_drawdown also used directly to compute the chained-fold aggregate DD
+from backtest.risk import MIN_TRADES as _CATASTROPHE_MIN_TRADES
 from backtest.risk import validate as validate_risk
 from data.ingest_prices import read_prices
 from data.universe import get_universe_at, snapshot_dates
@@ -52,6 +53,28 @@ TEST_BOUNDARY = date(2025, 1, 1)
 TRAIN_DAYS = 504
 VAL_DAYS = 126
 SLIDE_DAYS = 63
+
+# Evaluator fingerprint. Changing the walk-forward rules, the universe-floor,
+# or the gate semantics "changes the rules of the game": every KEPT baseline
+# recorded under a different version was computed on a DIFFERENT evaluator and
+# is NOT a valid comparison anchor (program.md §"evaluator change"). The loop
+# stamps this into the journal and only compares against KEPT rows carrying
+# the CURRENT version — so a stale poisoned baseline (e.g. the 2.172 spike
+# inflated by the pre-2026-05-16 5-name-universe folds) is auto-discarded on
+# every branch the moment it picks up this evaluator, with no journal surgery.
+# Bump this whenever a change here would alter a prior iteration's score.
+EVALUATOR_VERSION = "2026-05-16-univfloor"
+
+# Minimum point-in-time universe size for a walk-forward fold to be SCORED.
+# The PIT universe is ~5 names until 2022-07 (broad NSE coverage starts
+# 2021-04; the top-200-by-ADV snapshots jump 5→200 on 2022-07-01). A
+# cross-sectional strategy on ~5 names is pure noise: no edge (Bonferroni
+# p≈1.0), no diversification (60–90% drawdowns), and a thin-vs-full sub-period
+# split that makes sub_period_stationarity structurally unpassable. The old
+# guard skipped only EMPTY universes, so ~4 quarterly folds ran on 5 names and
+# poisoned every backtest. 50 cleanly separates the degenerate 5-name era from
+# the real ≥200-name era with margin. (audit 2026-05-16)
+MIN_FOLD_UNIVERSE = 50
 
 # Indicator burn-in (audit 2026-05-15 Fix 1). 12-1 momentum needs ~274
 # trading days of prior history before it produces ANY signal; a 126-calendar
@@ -136,6 +159,29 @@ def _pit_universe(window_end: date) -> tuple[list[str], dict]:
     ubd = {d: frozenset(get_universe_at(d)) for d in sd}
     union = sorted(set().union(*ubd.values())) if ubd else []
     return union, ubd
+
+
+def _min_active_universe(
+    fold_ubd: dict[date, frozenset], val_s: date, val_e: date
+) -> int:
+    """Smallest PIT snapshot the strategy could be FORCED to trade during
+    [val_s, val_e].
+
+    The strategy resolves, at each rebalance bar, the most-recent snapshot
+    ≤ that bar. So the snapshots actually in play across the validation
+    window are: the one active at val_s (latest ≤ val_s) plus every snapshot
+    dated within (val_s, val_e]. A fold is degenerate iff the THINNEST of
+    these is below the floor — that is the universe the strategy is squeezed
+    into at its worst rebalance in the window. Returns 0 if no snapshot
+    predates the window at all (data-starved — skip).
+    """
+    if not fold_ubd:
+        return 0
+    keys = sorted(fold_ubd)
+    at_or_before_start = [d for d in keys if d <= val_s]
+    relevant = [at_or_before_start[-1]] if at_or_before_start else [keys[0]]
+    relevant += [d for d in keys if val_s < d <= val_e]
+    return min(len(fold_ubd[d]) for d in relevant)
 
 
 # Strategy params that are plumbing / structure, NOT tunable signal
@@ -453,7 +499,10 @@ def evaluate(strategy_module: ModuleType, mode: str = "research") -> dict:
         BACKTEST_START, TEST_BOUNDARY
     ):
         members, fold_ubd = _pit_universe(val_e)
-        if not members:
+        if (
+            not members
+            or _min_active_universe(fold_ubd, val_s, val_e) < MIN_FOLD_UNIVERSE
+        ):
             skipped_folds += 1
             continue
         plan.append(
@@ -464,9 +513,11 @@ def evaluate(strategy_module: ModuleType, mode: str = "research") -> dict:
     if not plan:
         raise RuntimeError(
             f"No scorable folds: all {skipped_folds} validation windows "
-            "predate the earliest universe snapshot. Backfill universe "
-            "snapshots (scripts.backfill_universe) and/or extend price "
-            "history — see audit 2026-05-15."
+            f"predate the earliest universe snapshot or fall below the "
+            f"MIN_FOLD_UNIVERSE={MIN_FOLD_UNIVERSE} floor (data-starved / "
+            "5-name era). Backfill universe snapshots "
+            "(scripts.backfill_universe) and/or extend price history — see "
+            "audit 2026-05-15 / 2026-05-16."
         )
 
     # ── Resolve per-fold feeds. Fast path (real span-bounded loader): ONE
@@ -661,8 +712,24 @@ def evaluate(strategy_module: ModuleType, mode: str = "research") -> dict:
     #    loop cannot fabricate them). Consumed by backtest.anti_overfit via
     #    scripts.loop. The aggregate net daily-return series is the chained
     #    walk-forward equity's bar returns (scored windows only, after costs).
+    #
+    # Compute short-circuit (audit 2026-05-16): the 5000-permutation MC is the
+    # single dominant cost per iteration. A variant that already fails a CHEAP,
+    # deterministic disqualifier — non-positive Sortino (won't compound),
+    # < min-trades (catastrophe-sparse), or off-universe (hard reject) — is
+    # going to be REVERTED no matter what the MC says. Skipping the MC for
+    # those and assigning the worst-case null (p=1.0, pct=0.0) is consistent
+    # (bonferroni/rw_mc would fail anyway) and stops the loop burning compute
+    # on doomed variants. Genuine candidates still get the full MC.
+    universe_ok = _universe_respected(all_trades)
+    n_trades_total = int(side_panel["trade_count_total"])
+    cheap_disqualified = (
+        val_sortino_mean <= 0.0
+        or n_trades_total < _CATASTROPHE_MIN_TRADES
+        or not universe_ok
+    )
     chained_daily = chained_eq.pct_change().dropna().to_numpy()
-    if chained_daily.size >= 2:
+    if chained_daily.size >= 2 and not cheap_disqualified:
         def _sortino_arr(a: np.ndarray) -> float:
             return float(sortino(pd.Series(a)))
         orig_sortino = _sortino_arr(chained_daily)
@@ -686,13 +753,14 @@ def evaluate(strategy_module: ModuleType, mode: str = "research") -> dict:
             _sub_period_sortinos(fold_val_starts, per_fold_sortinos)
         ),
         "n_hyperparameters": count_hyperparameters(strategy_cls),
-        "n_trades": int(side_panel["trade_count_total"]),
+        "n_trades": n_trades_total,
         "aggregate_dd": aggregate_max_dd,
-        "universe_respected": _universe_respected(all_trades),
+        "universe_respected": universe_ok,
     }
 
     out: dict = {
         "anti_overfit": anti_overfit,
+        "evaluator_version": EVALUATOR_VERSION,
         "validation_sortino_mean": val_sortino_mean,
         "validation_folds": len(fold_scores),
         "per_fold_sortinos": per_fold_sortinos,
