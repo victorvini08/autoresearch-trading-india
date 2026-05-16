@@ -1529,3 +1529,32 @@ structural learnings are codified in `program.md`. Explore freely.
 **Learning:** Sortino changed from 2.917 to 3.105 (+0.187). Aggregate DD was 10.4% versus previous kept 10.3%; negative folds were 2/13; trades=178. Keep compounding on this change, but future iterations should still explain whether the gain came from better return, lower downside, or fewer fragile folds. Decision reason: sortino 3.105 > prev 2.917301771816021, agg_dd 10.4%, catastrophe gate clear, anti-overfit gates passed.
 
 ---
+
+## Iteration 2026-05-17-ae9eed8 — REVERTED
+
+**Hypothesis:** Adding a PIT-safe one-week cooling bonus will improve validation Sortino by preferring persistent intermediate uptrends that have paused mildly rather than chased or broken down.
+
+**Change:** I added a no-new-parameter fast-pullback quality term centered on a mild one-week dip while keeping the existing exhaustion penalty, universe enforcement, fixed-slot sizing, sector cap, and order_target_percent-only contract unchanged.
+
+**Decision:** REVERTED — sortino 3.022 did not improve on prev 3.104746404728241
+
+**Result:**
+- evaluator_version: 2026-05-16-univfloor
+- validation_sortino_mean: 3.0221745714129824
+- validation_folds: 13
+- per_fold_sortinos: [4.0275, -0.0302, -1.305, 4.5906, 8.8307, 6.4967, 5.4628, 4.9278, 2.6307, 0.452, 1.8509, 1.8107, -0.457]
+- calmar_mean: 5.971657105068022
+- hit_rate_mean: 0.5334430275606746
+- profit_factor_mean: 6.600412708490394
+- trade_count_total: 179
+- aggregate_max_dd: 0.11167681440326849
+- worst_fold_max_dd: 0.09053100146341213
+- max_position_frac_peak: 0.05206448366251404
+- lower_quartile_fold_calmar: 0.8371993008608819
+- n_negative_folds: 3/13
+- risk.passed: True
+- risk.violations: []
+
+**Learning:** Sortino changed from 3.105 to 3.022 (-0.083). Aggregate DD was 11.2% versus previous kept 10.4%; negative folds were 3/13; trades=179. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 3.022 did not improve on prev 3.104746404728241.
+
+---
