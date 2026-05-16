@@ -3269,3 +3269,32 @@ structural learnings are codified in `program.md`. Explore freely.
 **Learning:** Sortino changed from 3.598 to 3.258 (-0.340). Aggregate DD was 12.4% versus previous kept 13.6%; negative folds were 2/13; trades=211. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 3.258 did not improve on prev 3.5982902404874557.
 
 ---
+
+## Iteration 2026-05-17-36fa1f2 — REVERTED
+
+**Hypothesis:** Adding a PIT-safe gap-adjusted fill-risk penalty will improve validation Sortino by favoring momentum names whose signal is less dependent on the current close being far above the prior close, reducing next-open reversal risk without changing gross exposure or fixed-slot sizing.
+
+**Change:** I added a no-new-parameter close-gap quality term to the existing score, penalizing candidates with stretched current-close versus prior-close moves while preserving the existing universe, sector-cap, cadence, and order_target_percent-only contract.
+
+**Decision:** REVERTED — sortino 3.430 did not improve on prev 3.5982902404874557
+
+**Result:**
+- evaluator_version: 2026-05-16-univfloor
+- validation_sortino_mean: 3.4299851793194835
+- validation_folds: 13
+- per_fold_sortinos: [3.652, -0.0728, -0.9618, 5.5251, 9.7462, 6.6448, 5.9526, 5.2593, 2.3797, 0.6727, 2.0021, 1.7051, 2.0849]
+- calmar_mean: 7.390763532787539
+- hit_rate_mean: 0.5564991381167851
+- profit_factor_mean: 5.869812237579589
+- trade_count_total: 189
+- aggregate_max_dd: 0.13582530924838682
+- worst_fold_max_dd: 0.11728339561855498
+- max_position_frac_peak: 0.0646215671969394
+- lower_quartile_fold_calmar: 1.6224601257970628
+- n_negative_folds: 2/13
+- risk.passed: True
+- risk.violations: []
+
+**Learning:** Sortino changed from 3.598 to 3.430 (-0.168). Aggregate DD was 13.6% versus previous kept 13.6%; negative folds were 2/13; trades=189. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 3.430 did not improve on prev 3.5982902404874557.
+
+---
