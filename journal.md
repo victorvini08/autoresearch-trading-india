@@ -456,3 +456,32 @@ structural learnings are codified in `program.md`. Explore freely.
 **Learning:** Sortino scored 0.295 with no prior kept baseline. Aggregate DD was 15.8%; negative folds were 7/13; trades=99. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: anti-overfit FAILED: bonferroni(p=0.4268 >= alpha/N=0.0100) · random_walk_mc(only 57.35% percentile vs RW null) · sub_period_stationarity(signed min/max Sortino ratio across 2 sub-periods = -1.6462 (need ≥ 0.20); sub-periods = [+1.589, -2.615]).
 
 ---
+
+## Iteration 2026-05-17-03d9b97 — REVERTED
+
+**Hypothesis:** Replacing pure residual falling-knife entries with news-clean pullbacks inside established intermediate uptrends will improve validation Sortino by buying temporary weakness in proven winners while avoiding event-driven crashes and weak breadth regimes.
+
+**Change:** I changed the strategy to rank PIT-universe names by trend, normalized pullback, downside stability, drawdown control, high proximity, liquidity, and optional LLM news vetoes, with fixed-slot gross scaled by breadth and macro regime stress while preserving order_target_percent sizing and the 25% sector cap.
+
+**Decision:** REVERTED — anti-overfit FAILED: bonferroni(p=0.0235 >= alpha/N=0.0100)
+
+**Result:**
+- evaluator_version: 2026-05-16-univfloor
+- validation_sortino_mean: 2.0452539617389713
+- validation_folds: 13
+- per_fold_sortinos: [2.7668, -1.5466, -2.7314, 0.503, 4.6025, 4.5095, 3.8011, 6.8001, 4.1214, 0.0607, 3.561, 1.5684, -1.4282]
+- calmar_mean: 0.8257992143267074
+- hit_rate_mean: 0.6257256844083543
+- profit_factor_mean: 3.9554471390164734
+- trade_count_total: 307
+- aggregate_max_dd: 0.08201846474655111
+- worst_fold_max_dd: 0.04128222287435777
+- max_position_frac_peak: 0.04043791699789258
+- lower_quartile_fold_calmar: 0.025566346538434814
+- n_negative_folds: 3/13
+- risk.passed: True
+- risk.violations: []
+
+**Learning:** Sortino scored 2.045 with no prior kept baseline. Aggregate DD was 8.2%; negative folds were 3/13; trades=307. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: anti-overfit FAILED: bonferroni(p=0.0235 >= alpha/N=0.0100).
+
+---
