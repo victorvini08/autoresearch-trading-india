@@ -1176,3 +1176,32 @@ structural learnings are codified in `program.md`. Explore freely.
 **Learning:** Sortino changed from 2.925 to 1.327 (-1.598). Aggregate DD was 10.3% versus previous kept 5.5%; negative folds were 5/13; trades=183. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 1.327 did not improve on prev 2.9249943159478287 | anti-overfit FAILED: bonferroni(p=0.0315 >= alpha/N=0.0125).
 
 ---
+
+## Iteration 2026-05-17-02f2f5c — REVERTED
+
+**Hypothesis:** Adding a no-new-parameter skipped-month reversal rank to the kept residual momentum-quality book will improve validation Sortino by buying long-term stock-specific winners after a controlled pause rather than after the most crowded short-term extension.
+
+**Change:** I added a cross-sectional rank that favors lower returns over the skipped month while preserving the existing long-term momentum, quality, breadth scaling, fixed-slot sizing, PIT universe handling, and sector-cap construction.
+
+**Decision:** REVERTED — sortino 2.846 did not improve on prev 2.9249943159478287
+
+**Result:**
+- evaluator_version: 2026-05-16-univfloor
+- validation_sortino_mean: 2.846365371191439
+- validation_folds: 13
+- per_fold_sortinos: [-0.5661, -0.5047, -1.1443, 5.0105, 8.972, 3.4216, 3.7565, 7.2079, 2.4895, 0.4078, 1.7798, 4.9949, 1.1771]
+- calmar_mean: 1.9719822659491073
+- hit_rate_mean: 0.47051282051282056
+- profit_factor_mean: 4.102261781951206
+- trade_count_total: 53
+- aggregate_max_dd: 0.07698219422462207
+- worst_fold_max_dd: 0.04608072768896089
+- max_position_frac_peak: 0.03992722284078641
+- lower_quartile_fold_calmar: 0.3706284882423949
+- n_negative_folds: 3/13
+- risk.passed: True
+- risk.violations: []
+
+**Learning:** Sortino changed from 2.925 to 2.846 (-0.079). Aggregate DD was 7.7% versus previous kept 5.5%; negative folds were 3/13; trades=53. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 2.846 did not improve on prev 2.9249943159478287.
+
+---
