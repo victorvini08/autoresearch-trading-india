@@ -1,10 +1,10 @@
-"""Strategy B - long-only cross-sectional momentum-quality carry.
+'''Strategy B - long-only cross-sectional momentum-quality carry.
 
 Branch: mean-reversion-quant-strategy. This variant deliberately changes the
 entry thesis away from residual falling-knife reversion: it owns liquid NSE
 names with persistent 12-1 style relative strength, smooth downside behavior,
-and limited drawdown, then keeps the book diversified with fixed risk slots
-and a whole-book sector cap.
+segment-level trend consistency, and limited drawdown, then keeps the book
+diversified with fixed risk slots and a whole-book sector cap.
 
 Rebalance: biweekly (every other Friday). On non-rebalance bars the strategy
 returns early; every position change goes through ``order_target_percent``.
@@ -14,7 +14,7 @@ Trade contract:
   - Trade only the injected point-in-time universe.
   - Size each selected name from fixed risk slots: gross / n_positions.
   - Never size from len(selected); unused or blocked slots remain cash.
-"""
+'''
 
 from __future__ import annotations
 
@@ -39,13 +39,13 @@ def resolve_active_universe(
     sorted_dates: list[date] | None,
     today: date,
 ) -> set[str] | None:
-    """Resolve the point-in-time eligible universe.
+    '''Resolve the point-in-time eligible universe.
 
     - None -> no PIT universe injected; all loaded feeds eligible.
     - most-recent <= today -> that snapshot's membership.
     - today before earliest snapshot -> empty set. Never fall forward to a
       future snapshot.
-    """
+    '''
     if not universe_by_date or not sorted_dates:
         return None
     i = bisect.bisect_right(sorted_dates, today) - 1
@@ -173,19 +173,41 @@ def _downside_volatility(returns: np.ndarray) -> float:
     return float(np.sqrt(np.mean(downside * downside)))
 
 
+def _trend_consistency(closes: np.ndarray, skip: int) -> float:
+    trend_closes = closes[:-skip] if skip > 0 else closes
+    chunk = max(1, skip)
+    if trend_closes.size <= chunk:
+        return 0.0
+
+    segment_returns: list[float] = []
+    start = 0
+    while start + chunk < trend_closes.size:
+        end = start + chunk
+        base = float(trend_closes[start])
+        if base > 0.0:
+            segment_returns.append(float(trend_closes[end]) / base - 1.0)
+        start = end
+
+    if not segment_returns:
+        return 0.0
+    positive = np.asarray(segment_returns, dtype=float) > 0.0
+    return float(np.mean(positive))
+
+
 def momentum_quality_scores(
     close_by_ticker: dict[str, list[float]],
     adv_by_ticker: dict[str, float],
     lookback_days: int,
     skip_days: int,
 ) -> dict[str, float]:
-    """Rank positive 12-1 style momentum by quality of the path.
+    '''Rank positive 12-1 style momentum by quality of the path.
 
     Higher score favors names with positive long and medium relative strength,
-    current price still near its trailing high, smaller drawdown, and lower
-    downside volatility. All components are cross-sectional percentile ranks,
-    so no scale fitting is needed.
-    """
+    current price still near its trailing high, smaller drawdown, lower
+    downside volatility, and momentum accumulated across many skip-length
+    segments rather than one isolated jump. All components are cross-sectional
+    percentile ranks, so no scale fitting is needed.
+    '''
     rows: dict[str, dict[str, float]] = {}
     skip = max(1, int(skip_days))
     lookback = max(skip + 21, int(lookback_days))
@@ -216,23 +238,25 @@ def momentum_quality_scores(
         trailing_high = float(np.max(closes))
         high_proximity = now / trailing_high if trailing_high > 0.0 else 0.0
         rows[t] = {
-            "long_mom": long_mom,
-            "mid_mom": mid_mom,
-            "high_proximity": high_proximity,
-            "max_drawdown": _max_drawdown(closes),
-            "downside_vol": _downside_volatility(returns),
-            "adv": float(adv_by_ticker.get(t, 0.0)),
+            'long_mom': long_mom,
+            'mid_mom': mid_mom,
+            'high_proximity': high_proximity,
+            'max_drawdown': _max_drawdown(closes),
+            'downside_vol': _downside_volatility(returns),
+            'trend_consistency': _trend_consistency(closes, skip),
+            'adv': float(adv_by_ticker.get(t, 0.0)),
         }
 
     if len(rows) < 2:
         return {}
 
-    long_rank = _rank_metric(rows, "long_mom", True)
-    mid_rank = _rank_metric(rows, "mid_mom", True)
-    high_rank = _rank_metric(rows, "high_proximity", True)
-    dd_rank = _rank_metric(rows, "max_drawdown", False)
-    downvol_rank = _rank_metric(rows, "downside_vol", False)
-    adv_rank = _rank_metric(rows, "adv", True)
+    long_rank = _rank_metric(rows, 'long_mom', True)
+    mid_rank = _rank_metric(rows, 'mid_mom', True)
+    high_rank = _rank_metric(rows, 'high_proximity', True)
+    dd_rank = _rank_metric(rows, 'max_drawdown', False)
+    downvol_rank = _rank_metric(rows, 'downside_vol', False)
+    consistency_rank = _rank_metric(rows, 'trend_consistency', True)
+    adv_rank = _rank_metric(rows, 'adv', True)
 
     scores: dict[str, float] = {}
     for t in rows:
@@ -242,6 +266,7 @@ def momentum_quality_scores(
             + high_rank[t]
             + dd_rank[t]
             + downvol_rank[t]
+            + consistency_rank[t]
             + 0.25 * adv_rank[t]
         )
     return scores
@@ -250,12 +275,12 @@ def momentum_quality_scores(
 def breadth_scaled_gross(
     close_by_ticker: dict[str, list[float]], lookback_days: int
 ) -> float:
-    """Conservative gross exposure from cross-sectional market health.
+    '''Conservative gross exposure from cross-sectional market health.
 
     The book remains long-only, but when fewer names are above their own
     intermediate moving average and the median three-month return is weak,
     the fixed slots are funded with less gross instead of concentrating risk.
-    """
+    '''
     above = 0
     usable = 0
     short_rets: list[float] = []
@@ -289,25 +314,25 @@ def breadth_scaled_gross(
 
 
 class IndiaResidualReversalStatArb(bt.Strategy):
-    """Long-only PIT-universe momentum-quality carry with fixed slots."""
+    '''Long-only PIT-universe momentum-quality carry with fixed slots.'''
 
     _ADV_WINDOW = 20
 
     params = (
-        ("beta_window", 252),
-        ("formation_days", 21),
-        ("retention_mult", 2.0),
-        ("entry_pct", 0.30),
-        ("regime_pct", 95),
-        ("n_positions", 25),
-        ("sector_cap", 0.25),
-        ("rebalance_weekday", 4),
-        ("rebalance_period_weeks", 2),
-        ("rebalance_week_parity", 0),
-        ("universe_db_path", "storage/universe.duckdb"),
-        ("macro_db_path", "storage/macro.duckdb"),
-        ("enforce_sector_cap", True),
-        ("universe_by_date", None),
+        ('beta_window', 252),
+        ('formation_days', 21),
+        ('retention_mult', 2.0),
+        ('entry_pct', 0.30),
+        ('regime_pct', 95),
+        ('n_positions', 25),
+        ('sector_cap', 0.25),
+        ('rebalance_weekday', 4),
+        ('rebalance_period_weeks', 2),
+        ('rebalance_week_parity', 0),
+        ('universe_db_path', 'storage/universe.duckdb'),
+        ('macro_db_path', 'storage/macro.duckdb'),
+        ('enforce_sector_cap', True),
+        ('universe_by_date', None),
     )
 
     def __init__(self) -> None:
@@ -325,18 +350,18 @@ class IndiaResidualReversalStatArb(bt.Strategy):
 
     @staticmethod
     def _ticker_of(d) -> str:
-        name = getattr(d, "_name", "") or getattr(d, "name", "") or ""
+        name = getattr(d, '_name', '') or getattr(d, 'name', '') or ''
         return name.upper()
 
     def _load_sector_map(self) -> dict[str, SectorAssignment]:
         rows = []
         for d in self.datas:
-            ind = getattr(d, "_industry", None) or getattr(d, "industry", None)
+            ind = getattr(d, '_industry', None) or getattr(d, 'industry', None)
             t = self._ticker_of(d)
 
             class _Row:
                 ticker = t
-                industry = ind or ""
+                industry = ind or ''
 
             rows.append(_Row())
         return assign_sectors(rows)
@@ -349,7 +374,7 @@ class IndiaResidualReversalStatArb(bt.Strategy):
         if not self._week_parity_initialized:
             self._week_parity_initialized = True
             object.__setattr__(
-                self.params, "rebalance_week_parity", iso_week % 2
+                self.params, 'rebalance_week_parity', iso_week % 2
             )
             return True
         return iso_week % 2 == self.p.rebalance_week_parity
@@ -472,7 +497,7 @@ class IndiaResidualReversalStatArb(bt.Strategy):
 
         self._last_rebalance_date = today
         logger.debug(
-            "rebalance %s: scored=%d, selected=%d, held=%d, gross=%.2f, slot=%.4f",
+            'rebalance %s: scored=%d, selected=%d, held=%d, gross=%.2f, slot=%.4f',
             today,
             len(scores),
             len(selected),
@@ -483,12 +508,12 @@ class IndiaResidualReversalStatArb(bt.Strategy):
 
 
 __all__ = [
-    "resolve_active_universe",
-    "ols_beta",
-    "market_factor",
-    "smb_factor",
-    "reversion_scores",
-    "momentum_quality_scores",
-    "breadth_scaled_gross",
-    "IndiaResidualReversalStatArb",
+    'resolve_active_universe',
+    'ols_beta',
+    'market_factor',
+    'smb_factor',
+    'reversion_scores',
+    'momentum_quality_scores',
+    'breadth_scaled_gross',
+    'IndiaResidualReversalStatArb',
 ]

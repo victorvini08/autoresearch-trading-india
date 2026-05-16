@@ -857,3 +857,32 @@ structural learnings are codified in `program.md`. Explore freely.
 **Learning:** Sortino changed from 2.055 to 2.055 (+0.000). Aggregate DD was 4.9% versus previous kept 4.9%; negative folds were 4/13; trades=59. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 2.055 did not improve on prev 2.05528277047027.
 
 ---
+
+## Iteration 2026-05-17-a05b891 — KEPT
+
+**Hypothesis:** Adding a no-new-parameter trend-consistency component to the kept 12-1 momentum-quality book will improve mean validation Sortino by favoring stocks whose momentum was accumulated across many monthly segments instead of one isolated jump.
+
+**Change:** I added a skip-window-length positive segment share rank inside momentum_quality_scores while leaving PIT universe handling, fixed-slot sizing, breadth gross, cadence, and the 25% sector cap unchanged.
+
+**Decision:** KEPT — sortino 2.480 > prev 2.05528277047027, agg_dd 5.2%, catastrophe gate clear, anti-overfit gates passed
+
+**Result:**
+- evaluator_version: 2026-05-16-univfloor
+- validation_sortino_mean: 2.4801971795200797
+- validation_folds: 13
+- per_fold_sortinos: [-0.3666, -0.5797, -2.0687, 5.914, 8.2733, 2.3149, 2.8019, 5.7256, 3.3594, 0.7107, 1.1242, 3.988, 1.0458]
+- calmar_mean: 1.3602998982204626
+- hit_rate_mean: 0.460989010989011
+- profit_factor_mean: 6.567076132651934
+- trade_count_total: 53
+- aggregate_max_dd: 0.05169696960827323
+- worst_fold_max_dd: 0.03454331252382194
+- max_position_frac_peak: 0.03943393428630013
+- lower_quartile_fold_calmar: 0.34589623445747897
+- n_negative_folds: 3/13
+- risk.passed: True
+- risk.violations: []
+
+**Learning:** Sortino changed from 2.055 to 2.480 (+0.425). Aggregate DD was 5.2% versus previous kept 4.9%; negative folds were 3/13; trades=53. Keep compounding on this change, but future iterations should still explain whether the gain came from better return, lower downside, or fewer fragile folds. Decision reason: sortino 2.480 > prev 2.05528277047027, agg_dd 5.2%, catastrophe gate clear, anti-overfit gates passed.
+
+---
