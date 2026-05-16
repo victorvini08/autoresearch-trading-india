@@ -4400,3 +4400,32 @@ structural learnings are codified in `program.md`. Explore freely.
 **Learning:** Sortino changed from 3.628 to 3.387 (-0.240). Aggregate DD was 14.2% versus previous kept 15.1%; negative folds were 1/13; trades=196. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 3.387 did not improve on prev 3.6277126896862444.
 
 ---
+
+## Iteration 2026-05-17-d344d13 — REVERTED
+
+**Hypothesis:** Replacing score-level retention with a final-selection incumbent hysteresis pass will improve validation Sortino by cutting avoidable Dhan sell-charge turnover while retaining only names that still pass the existing PIT-safe filters and near-cutoff rank window.
+
+**Change:** I added stateful last-selection tracking and changed sector-capped selection to retain previously selected tickers that remain in the qualified near-cutoff pool before filling remaining fixed slots by rank.
+
+**Decision:** REVERTED — sortino 3.072 did not improve on prev 3.6277126896862444
+
+**Result:**
+- evaluator_version: 2026-05-16-univfloor
+- validation_sortino_mean: 3.0717204851143203
+- validation_folds: 13
+- per_fold_sortinos: [2.3153, -1.0933, -2.122, 5.8402, 13.696, 4.7752, 4.3068, 5.5098, 2.4016, -0.3217, 1.7058, 1.5802, 1.3384]
+- calmar_mean: 6.21650718289598
+- hit_rate_mean: 0.591993903532365
+- profit_factor_mean: 7.241895820049664
+- trade_count_total: 104
+- aggregate_max_dd: 0.1707203449112662
+- worst_fold_max_dd: 0.1326177110761884
+- max_position_frac_peak: 0.06700391049130472
+- lower_quartile_fold_calmar: 1.4873447632430414
+- n_negative_folds: 3/13
+- risk.passed: True
+- risk.violations: []
+
+**Learning:** Sortino changed from 3.628 to 3.072 (-0.556). Aggregate DD was 17.1% versus previous kept 15.1%; negative folds were 3/13; trades=104. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 3.072 did not improve on prev 3.6277126896862444.
+
+---
