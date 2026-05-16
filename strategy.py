@@ -4,9 +4,9 @@ PIT-strict long-only swing strategy for NSE equities. The strategy ranks only
 tickers in the injected point-in-time universe, selects positive-trend names
 with lower realized volatility, mild recent strength, defensive relative
 strength on weak market days, persistent multi-leg trend quality, fresh
-intermediate trend confirmation, and modest short-term pullback quality,
-applies a 25% sector cap, and sizes by fixed risk slots so blocked slots remain
-cash.
+intermediate trend confirmation, modest short-term pullback quality, and avoids
+one-week exhaustion, applies a 25% sector cap, and sizes by fixed risk slots so
+blocked slots remain cash.
 
 Trade contract: every position change goes through order_target_percent only.
 '''
@@ -261,12 +261,21 @@ class IndiaMomentumQualityRegime(bt.Strategy):
         trend_start = self._price_at(d, self.p.trend_days)
         intermediate_start = self._price_at(d, self.p.vol_days)
         recent_start = self._price_at(d, self.p.recent_days)
-        if current is None or trend_start is None or intermediate_start is None or recent_start is None:
+        fast_days = max(3, self.p.recent_days // 4)
+        fast_start = self._price_at(d, fast_days)
+        if (
+            current is None
+            or trend_start is None
+            or intermediate_start is None
+            or recent_start is None
+            or fast_start is None
+        ):
             return None
 
         trend = (current / trend_start) - 1.0
         intermediate = (current / intermediate_start) - 1.0
         recent = (current / recent_start) - 1.0
+        fast = (current / fast_start) - 1.0
         if trend <= 0.03 or intermediate <= 0.0 or recent < -0.08:
             return None
 
@@ -280,6 +289,7 @@ class IndiaMomentumQualityRegime(bt.Strategy):
             return None
 
         pullback_quality = -abs(ma_distance - 0.015)
+        fast_exhaustion = max(fast - 0.055, 0.0)
         defensive = self._defensive_relative_strength(d, market_returns)
         return (
             (0.64 * trend)
@@ -289,6 +299,7 @@ class IndiaMomentumQualityRegime(bt.Strategy):
             + (2.25 * defensive)
             - (0.45 * vol)
             - (0.35 * drawdown)
+            - (0.70 * fast_exhaustion)
         )
 
     def _rank_universe(self, active: set[str] | None) -> list[tuple[str, float]]:
