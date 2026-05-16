@@ -514,3 +514,31 @@ This is the autoresearch loop's persistent memory. Every iteration appends an en
 **Learning:** Sortino scored 1.353 with no prior kept baseline. Aggregate DD was 30.8%; negative folds were 8/20; trades=32. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: anti-overfit FAILED: bonferroni(p=1.0000 >= alpha/N=0.0050) · random_walk_mc(only 87.62% percentile vs RW null).
 
 ---
+
+## Iteration 2026-05-16-551cf32 — REVERTED
+
+**Hypothesis:** Replacing pure 12-1 trend chasing with a pullback-within-uptrend rank should improve validation Sortino by buying established relative-strength names after short-term mean-reversion instead of after the most crowded recent extension.
+
+**Change:** I kept the PIT universe, biweekly cadence, retention, sector cap, and order_target_percent-only contract, but changed ranking to require positive long-horizon momentum and score candidates by weaker skipped-month return first, with long-horizon momentum as the tie-breaker.
+
+**Decision:** REVERTED — anti-overfit FAILED: bonferroni(p=0.7516 >= alpha/N=0.0050) · sub_period_stationarity(min/max ratio of |Sortino| across 3 sub-periods = 0.02)
+
+**Result:**
+- validation_sortino_mean: 2.294775094680033
+- validation_folds: 20
+- per_fold_sortinos: [12.7049, 5.8301, 5.4752, 1.3245, -0.644, -1.0531, -0.7916, 0.2922, 2.9337, 0.3275, 0.9133, 6.4331, 2.3772, 1.8272, 2.7201, -0.6184, -1.7859, 7.5209, 2.0948, -1.9862]
+- calmar_mean: 5.775935382241768
+- hit_rate_mean: 0.5533333333333333
+- profit_factor_mean: 3.423366454548941
+- trade_count_total: 67
+- aggregate_max_dd: 0.3774675150187024
+- worst_fold_max_dd: 0.2586767142705873
+- max_position_frac_peak: 1.0813006730976544
+- lower_quartile_fold_calmar: -1.0408059633957953
+- n_negative_folds: 6/20
+- risk.passed: True
+- risk.violations: []
+
+**Learning:** Sortino scored 2.295 with no prior kept baseline. Aggregate DD was 37.7%; negative folds were 6/20; trades=67. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: anti-overfit FAILED: bonferroni(p=0.7516 >= alpha/N=0.0050) · sub_period_stationarity(min/max ratio of |Sortino| across 3 sub-periods = 0.02).
+
+---
