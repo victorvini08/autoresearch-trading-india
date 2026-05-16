@@ -154,3 +154,32 @@ structural learnings are codified in `program.md`. Explore freely.
 **Learning:** Sortino scored 0.095 with no prior kept baseline. Aggregate DD was 6.2%; negative folds were 5/13; trades=376. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: anti-overfit FAILED: bonferroni(p=0.4483 >= alpha/N=0.0200) · random_walk_mc(only 55.20% percentile vs RW null) · sub_period_stationarity(signed min/max Sortino ratio across 2 sub-periods = -0.9395 (need ≥ 0.20); sub-periods = [+0.237, -0.222]).
 
 ---
+
+## Iteration 2026-05-16-128274a — REVERTED
+
+**Hypothesis:** Replacing falling-knife residual reversal with positive residual continuation over the beta window, while skipping the latest formation bars and preserving fixed risk slots, should improve validation Sortino by capturing idiosyncratic persistence instead of unstable short-horizon rebounds.
+
+**Change:** Changed the traded score to a positive market-and-size residual momentum t-stat with latest-bar skip, retained the seven-parameter footprint, enforced full-book sector caps, and sized selected names at 0.99 / n_positions so blocked slots remain cash.
+
+**Decision:** REVERTED — sortino -0.281 not positive — won't compound on losing baseline | anti-overfit FAILED: bonferroni(p=1.0000 >= alpha/N=0.0167) · random_walk_mc(only 0.00% percentile vs RW null) · sub_period_stationarity(signed min/max Sortino ratio across 2 sub-periods = -8.4414 (need ≥ 0.20); sub-periods = [+0.147, -1.243])
+
+**Result:**
+- evaluator_version: 2026-05-16-univfloor
+- validation_sortino_mean: -0.2805620197472993
+- validation_folds: 13
+- per_fold_sortinos: [-1.3926, 0.0173, 0.1747, 2.6737, 0.7616, 0.0163, 1.245, -2.2947, 0.1242, 2.1102, 0.1746, -2.2496, -5.0081]
+- calmar_mean: -0.08669912022570102
+- hit_rate_mean: 0.4590240009622531
+- profit_factor_mean: 1.0835671677633023
+- trade_count_total: 366
+- aggregate_max_dd: 0.06704930258730889
+- worst_fold_max_dd: 0.038201137096860176
+- max_position_frac_peak: 0.04372214183783921
+- lower_quartile_fold_calmar: -0.5512604980265068
+- n_negative_folds: 6/13
+- risk.passed: True
+- risk.violations: []
+
+**Learning:** Sortino scored -0.281 with no prior kept baseline. Aggregate DD was 6.7%; negative folds were 6/13; trades=366. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino -0.281 not positive — won't compound on losing baseline | anti-overfit FAILED: bonferroni(p=1.0000 >= alpha/N=0.0167) · random_walk_mc(only 0.00% percentile vs RW null) · sub_period_stationarity(signed min/max Sortino ratio across 2 sub-periods = -8.4414 (need ≥ 0.20); sub-periods = [+0.147, -1.243]).
+
+---
