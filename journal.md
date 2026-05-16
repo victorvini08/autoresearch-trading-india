@@ -1616,3 +1616,32 @@ structural learnings are codified in `program.md`. Explore freely.
 **Learning:** Sortino changed from 3.155 to 2.652 (-0.503). Aggregate DD was 15.8% versus previous kept 10.4%; negative folds were 4/13; trades=173. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 2.652 did not improve on prev 3.154924091916563.
 
 ---
+
+## Iteration 2026-05-17-0d69043 — REVERTED
+
+**Hypothesis:** Adding a PIT-safe lower-tail volatility penalty will improve validation Sortino by avoiding trend candidates whose ordinary close-to-close volatility understates clustered downside shocks.
+
+**Change:** I added a no-new-parameter downside semivolatility term to the existing ranking and a light hard filter for extreme lower-tail risk while preserving universe enforcement, fixed-slot sizing, sector cap, cadence, and order_target_percent-only execution.
+
+**Decision:** REVERTED — sortino 3.033 did not improve on prev 3.154924091916563
+
+**Result:**
+- evaluator_version: 2026-05-16-univfloor
+- validation_sortino_mean: 3.0333639394368523
+- validation_folds: 13
+- per_fold_sortinos: [4.1609, 0.2842, -0.9779, 4.4815, 8.6744, 6.225, 5.4467, 5.0786, 2.6803, 0.5564, 1.8145, 1.489, -0.4798]
+- calmar_mean: 5.830437092546636
+- hit_rate_mean: 0.5264792899408284
+- profit_factor_mean: 5.01146152477042
+- trade_count_total: 173
+- aggregate_max_dd: 0.10376841606748052
+- worst_fold_max_dd: 0.09096718242731779
+- max_position_frac_peak: 0.05184191255763668
+- lower_quartile_fold_calmar: 1.0752790384023958
+- n_negative_folds: 2/13
+- risk.passed: True
+- risk.violations: []
+
+**Learning:** Sortino changed from 3.155 to 3.033 (-0.122). Aggregate DD was 10.4% versus previous kept 10.4%; negative folds were 2/13; trades=173. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 3.033 did not improve on prev 3.154924091916563.
+
+---
