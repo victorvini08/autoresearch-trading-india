@@ -1964,3 +1964,32 @@ structural learnings are codified in `program.md`. Explore freely.
 **Learning:** Sortino changed from 3.167 to 3.149 (-0.018). Aggregate DD was 10.4% versus previous kept 10.4%; negative folds were 2/13; trades=179. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 3.149 did not improve on prev 3.166988802108574.
 
 ---
+
+## Iteration 2026-05-17-7956392 — REVERTED
+
+**Hypothesis:** Adding a PIT-safe LLM news-risk overlay will improve validation Sortino by avoiding otherwise attractive momentum names with fresh adverse sentiment or high-risk corporate event flags, while leaving no-news names unchanged.
+
+**Change:** I added a defensive sentiment/event/news-volume adjustment to the ranking score so negative classified news can veto or penalize candidates without changing fixed-slot sizing, universe enforcement, sector cap, cadence, or order_target_percent-only execution.
+
+**Decision:** REVERTED — sortino 3.167 did not improve on prev 3.166988802108574
+
+**Result:**
+- evaluator_version: 2026-05-16-univfloor
+- validation_sortino_mean: 3.166988802108574
+- validation_folds: 13
+- per_fold_sortinos: [4.3254, 0.5307, -1.1343, 4.5019, 8.6645, 6.8784, 6.0011, 5.0786, 2.6804, 0.4525, 1.8395, 1.8091, -0.457]
+- calmar_mean: 5.935216565906912
+- hit_rate_mean: 0.5217361070302245
+- profit_factor_mean: 5.357253858133188
+- trade_count_total: 177
+- aggregate_max_dd: 0.10360829429276239
+- worst_fold_max_dd: 0.0909842627904907
+- max_position_frac_peak: 0.05222323354869495
+- lower_quartile_fold_calmar: 0.8372815842160365
+- n_negative_folds: 2/13
+- risk.passed: True
+- risk.violations: []
+
+**Learning:** Sortino changed from 3.167 to 3.167 (+0.000). Aggregate DD was 10.4% versus previous kept 10.4%; negative folds were 2/13; trades=177. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 3.167 did not improve on prev 3.166988802108574.
+
+---
