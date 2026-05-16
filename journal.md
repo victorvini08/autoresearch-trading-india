@@ -688,3 +688,32 @@ structural learnings are codified in `program.md`. Explore freely.
 **Learning:** Sortino changed from 2.055 to 1.692 (-0.363). Aggregate DD was 5.3% versus previous kept 4.9%; negative folds were 4/13; trades=61. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 1.692 did not improve on prev 2.05528277047027 | anti-overfit FAILED: sub_period_stationarity(signed min/max Sortino ratio across 2 sub-periods = 0.1433 (need ≥ 0.20); sub-periods = [+2.298, +0.329]).
 
 ---
+
+## Iteration 2026-05-17-afb94b3 — REVERTED
+
+**Hypothesis:** Adding a latest-skip-window directional confirmation component to the kept 12-1 momentum-quality rank will improve validation Sortino by avoiding stale winners whose historical momentum has already started unwinding, unlike the reverted low-absolute-move penalty that removed both upside and downside continuation.
+
+**Change:** I added a recent_mom cross-sectional percentile to momentum_quality_scores, using the existing skip window and no new strategy parameter, while leaving fixed-slot sizing, breadth gross, PIT universe handling, cadence, and sector cap unchanged.
+
+**Decision:** REVERTED — sortino 1.562 did not improve on prev 2.05528277047027 | anti-overfit FAILED: universe_respect(variant traded tickers outside the point-in-time universe — survivorship/look-ahead reintroduced (hard reject)) · bonferroni(p=1.0000 >= alpha/N=0.0250) · random_walk_mc(only 0.00% percentile vs RW null) · sub_period_stationarity(signed min/max Sortino ratio across 2 sub-periods = -0.2456 (need ≥ 0.20); sub-periods = [+2.532, -0.622])
+
+**Result:**
+- evaluator_version: 2026-05-16-univfloor
+- validation_sortino_mean: 1.5616757192758
+- validation_folds: 13
+- per_fold_sortinos: [-0.2316, -1.214, -1.2387, 4.302, 9.6355, 2.6872, 4.0365, 2.8832, 1.9295, 0.1607, -0.5388, -1.1875, -0.9222]
+- calmar_mean: 0.7644334818094773
+- hit_rate_mean: 0.4746336996336996
+- profit_factor_mean: 3.870916890310192
+- trade_count_total: 81
+- aggregate_max_dd: 0.0730610558264766
+- worst_fold_max_dd: 0.03875090522209683
+- max_position_frac_peak: 0.03998896693583783
+- lower_quartile_fold_calmar: -0.5687028040563602
+- n_negative_folds: 6/13
+- risk.passed: True
+- risk.violations: []
+
+**Learning:** Sortino changed from 2.055 to 1.562 (-0.494). Aggregate DD was 7.3% versus previous kept 4.9%; negative folds were 6/13; trades=81. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 1.562 did not improve on prev 2.05528277047027 | anti-overfit FAILED: universe_respect(variant traded tickers outside the point-in-time universe — survivorship/look-ahead reintroduced (hard reject)) · bonferroni(p=1.0000 >= alpha/N=0.0250) · random_walk_mc(only 0.00% percentile vs RW null) · sub_period_stationarity(signed min/max Sortino ratio across 2 sub-periods = -0.2456 (need ≥ 0.20); sub-periods = [+2.532, -0.622]).
+
+---
