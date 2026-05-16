@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import importlib
 import inspect
+import os
 from datetime import date, datetime, timedelta
 from types import ModuleType
 
@@ -106,6 +107,18 @@ def _load_feeds(
             "Run data.ingest_prices first."
         )
     return feeds
+
+
+# Identity sentinel: the load-once-then-slice optimization is numerically
+# equivalent ONLY when the loader is span-bounded (the real DuckDB
+# implementation). Tests monkeypatch `prepare._load_feeds` with a stub that
+# ignores its [start, end] args and returns a fixed canned series for every
+# fold; under that stub the old contract is "every fold gets the full series,
+# _score_window's score_start does the windowing". Slicing would change that.
+# So we only take the global-load fast path when `_load_feeds` is still THIS
+# original function; a monkeypatched loader transparently opts out and we use
+# the exact legacy per-fold call instead.
+_ORIGINAL_LOAD_FEEDS = _load_feeds
 
 
 def _pit_universe(window_end: date) -> tuple[list[str], dict]:
@@ -248,6 +261,56 @@ def _find_strategy_class(module: ModuleType) -> type:
     return candidates[0]
 
 
+def _slice_feeds(
+    global_feeds: dict[str, pd.DataFrame],
+    start: date,
+    end: date,
+    members: list[str],
+) -> dict[str, pd.DataFrame]:
+    """Per-fold feed slice taken from feeds loaded ONCE for the whole span.
+
+    Behaviourally identical to `_load_feeds(start, end, members)`: a ticker is
+    included iff it has >= _MIN_BARS_PER_FEED rows within the inclusive
+    [start, end] window. `read_prices` returns a contiguous inclusive
+    date-range with no other row filtering, so slicing the wider global frame
+    reproduces the exact rows the old per-fold `_load_feeds` returned
+    (asserted by tests/test_prepare_parallel.py::test_slice_equals_load).
+    """
+    s = pd.Timestamp(start)
+    e = pd.Timestamp(end)
+    feeds: dict[str, pd.DataFrame] = {}
+    for tkr in members:
+        df = global_feeds.get(tkr)
+        if df is None:
+            continue
+        sl = df.loc[s:e]
+        if len(sl) < _MIN_BARS_PER_FEED:
+            continue
+        feeds[tkr] = sl
+    if not feeds:
+        raise RuntimeError(
+            f"No price data with >= {_MIN_BARS_PER_FEED} bars in "
+            f"[{start}, {end}]. Run data.ingest_prices first."
+        )
+    return feeds
+
+
+def _run_one_fold(payload: dict) -> tuple[int, dict]:
+    """ProcessPool worker: score one walk-forward fold.
+
+    Re-imports the strategy module BY NAME (robust under the 'spawn' start
+    method — avoids pickling a dynamically loaded class). Deterministic:
+    `_score_window` → `run_backtest` uses no RNG, so the parallel fold scores
+    are bit-for-bit identical to the serial loop (asserted by
+    tests/test_prepare_parallel.py::test_serial_equals_parallel)."""
+    mod = importlib.import_module(payload["mod"])
+    cls = _find_strategy_class(mod)
+    score = _score_window(
+        cls, payload["feeds"], payload["ubd"], score_start=payload["val_s"]
+    )
+    return payload["idx"], score
+
+
 def _as_date(x) -> date:
     """Normalize a date / datetime / Timestamp / ISO-string to date."""
     if isinstance(x, date) and not isinstance(x, datetime):
@@ -362,33 +425,103 @@ def evaluate(strategy_module: ModuleType, mode: str = "research") -> dict:
 
     strategy_cls = _find_strategy_class(strategy_module)
 
-    fold_scores: list[dict] = []
-    fold_val_starts: list[date] = []
+    # ── Plan folds: point-in-time universe per fold; skip windows that
+    #    predate any universe snapshot (data-starved early period) rather
+    #    than fabricate membership.
+    plan: list[dict] = []
     skipped_folds = 0
     for (_train_s, _train_e, val_s, val_e) in _walk_forward_folds(
         BACKTEST_START, TEST_BOUNDARY
     ):
         members, fold_ubd = _pit_universe(val_e)
         if not members:
-            # Window predates any universe snapshot (data-starved early
-            # period). Skip rather than fabricate membership.
             skipped_folds += 1
             continue
-        feeds = _load_feeds(
-            val_s - timedelta(days=WARMUP_CALENDAR_DAYS), val_e, members
+        plan.append(
+            {"val_s": val_s, "val_e": val_e,
+             "members": members, "ubd": fold_ubd}
         )
-        fold_scores.append(
-            _score_window(strategy_cls, feeds, fold_ubd, score_start=val_s)
-        )
-        fold_val_starts.append(val_s)
 
-    if not fold_scores:
+    if not plan:
         raise RuntimeError(
             f"No scorable folds: all {skipped_folds} validation windows "
             "predate the earliest universe snapshot. Backfill universe "
             "snapshots (scripts.backfill_universe) and/or extend price "
             "history — see audit 2026-05-15."
         )
+
+    # ── Resolve per-fold feeds. Fast path (real span-bounded loader): ONE
+    #    DuckDB read of the member union over the whole span, then slice per
+    #    fold — consecutive folds' windows overlap ~87% (2y window sliding
+    #    3mo), so this replaces ~N_folds × 200-ticker reads. Proven identical
+    #    to the old per-fold _load_feeds by tests/test_prepare_parallel.py.
+    #    Legacy path (monkeypatched loader, used by the immutable-evaluator
+    #    unit tests): exact old per-fold call, contract preserved.
+    use_global = _load_feeds is _ORIGINAL_LOAD_FEEDS
+    if use_global:
+        global_start = min(
+            p["val_s"] - timedelta(days=WARMUP_CALENDAR_DAYS) for p in plan
+        )
+        global_end = max(p["val_e"] for p in plan)
+        member_union = sorted({t for p in plan for t in p["members"]})
+        global_feeds = _load_feeds(global_start, global_end, member_union)
+        for p in plan:
+            p["feeds"] = _slice_feeds(
+                global_feeds,
+                p["val_s"] - timedelta(days=WARMUP_CALENDAR_DAYS),
+                p["val_e"],
+                p["members"],
+            )
+    else:
+        for p in plan:
+            p["feeds"] = _load_feeds(
+                p["val_s"] - timedelta(days=WARMUP_CALENDAR_DAYS),
+                p["val_e"],
+                p["members"],
+            )
+
+    # ── Score folds. Folds are fully independent (own feed slice, own
+    #    Cerebro, no shared state) and _score_window is deterministic, so
+    #    fanning them across processes is numerically identical to the serial
+    #    loop — just concurrent. PREPARE_MAX_WORKERS=1 forces the serial path
+    #    (the fallback, and what the equivalence test pins). The serial path
+    #    is also used when the strategy module can't be re-imported by name
+    #    (e.g. __main__ / synthetic test modules under 'spawn').
+    mod_name = getattr(strategy_module, "__name__", "")
+    importable = (
+        mod_name not in ("", "__main__")
+        and getattr(strategy_module, "__spec__", None) is not None
+    )
+    try:
+        env_workers = int(os.environ.get("PREPARE_MAX_WORKERS", "0"))
+    except ValueError:
+        env_workers = 0
+    max_workers = (
+        env_workers if env_workers > 0
+        else min(os.cpu_count() or 1, len(plan))
+    )
+
+    if use_global and max_workers > 1 and len(plan) > 1 and importable:
+        from concurrent.futures import ProcessPoolExecutor
+
+        payloads = [
+            {"idx": i, "mod": mod_name, "feeds": p["feeds"],
+             "ubd": p["ubd"], "val_s": p["val_s"]}
+            for i, p in enumerate(plan)
+        ]
+        scored: dict[int, dict] = {}
+        with ProcessPoolExecutor(max_workers=max_workers) as ex:
+            for idx, score in ex.map(_run_one_fold, payloads):
+                scored[idx] = score
+        fold_scores = [scored[i] for i in range(len(plan))]
+    else:
+        fold_scores = [
+            _score_window(
+                strategy_cls, p["feeds"], p["ubd"], score_start=p["val_s"]
+            )
+            for p in plan
+        ]
+    fold_val_starts = [p["val_s"] for p in plan]
 
     val_sortinos = [s["sortino"] for s in fold_scores if np.isfinite(s["sortino"])]
     val_sortino_mean = float(np.mean(val_sortinos)) if val_sortinos else 0.0

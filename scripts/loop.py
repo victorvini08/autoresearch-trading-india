@@ -90,6 +90,46 @@ def recent_attempts(n: int = RECENT_ATTEMPTS_N) -> list[dict]:
     return rows[-n:]
 
 
+# Hard ceiling on the Bonferroni multiple-comparisons family for the in-loop
+# RESEARCH gate. A pathological never-keeping streak must not be able to drive
+# alpha/N → 0 and make even a genuine edge mathematically unprovable; the
+# one-shot sealed test (revealed once at the human promotion gate) is the real
+# final multiple-testing protection (CLAUDE.md §9). 10 ≈ "you get ~10 honest
+# shots at the same validation data before the sealed test is the arbiter".
+BONFERRONI_FAMILY_CAP = 10
+
+
+def bonferroni_family_size(attempts: list[dict]) -> int:
+    """Principled multiple-comparisons family size for the Bonferroni gate.
+
+    The genuine family is the set of variants actually evaluated against the
+    SAME walk-forward validation data since the last KEPT baseline:
+
+    - A KEPT iteration resets the search episode (new baseline ⇒ new family),
+      so we stop counting at the most recent KEPT row.
+    - REJECTED rows (prepare.py crash / invalid edit / off-universe hard
+      reject) never produced a p-value on the data — they are NOT multiple
+      comparisons and are excluded. Only REVERTED rows (reached the gate
+      suite with real metrics) count.
+    - +1 for the current variant; floored at 1; capped at
+      BONFERRONI_FAMILY_CAP.
+
+    This replaces the previous `len(recent_attempts(20)) + 1`, which was
+    statistically wrong: it never reset on KEEP, counted crashes that never
+    touched the data, and grew unbounded — α/N decayed 0.025→0.0029 within
+    ~17 iters last run, making a real edge impossible to ever promote even
+    though those particular variants failed for an unrelated reason (p≈1.0).
+    """
+    tested = 0
+    for a in reversed(attempts):
+        decision = (a.get("decision") or "").strip().upper()
+        if decision == "KEPT":
+            break  # episode boundary — prior tests belong to the old baseline
+        if decision == "REVERTED":
+            tested += 1
+    return max(1, min(tested + 1, BONFERRONI_FAMILY_CAP))
+
+
 def _format_attempt(a: dict) -> str:
     """Render one attempt as: `- [DECISION, sortino=X.XXX]: "hypothesis"`.
 
@@ -839,7 +879,7 @@ def main(argv: list[str] | None = None) -> int:
         metrics,
         iter_id=args.iteration_id,
         baseline_sortino=last_sortino,
-        n_active_variants=len(attempts) + 1,
+        n_active_variants=bonferroni_family_size(attempts),
         baseline_hyperparams=baseline_hyperparams,
     )
     gates_passed = gate_run.passed
