@@ -1118,3 +1118,32 @@ structural learnings are codified in `program.md`. Explore freely.
 **Learning:** Sortino changed from 2.925 to 1.931 (-0.994). Aggregate DD was 5.7% versus previous kept 5.5%; negative folds were 4/13; trades=49. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 1.931 did not improve on prev 2.9249943159478287 | anti-overfit FAILED: bonferroni(p=0.0190 >= alpha/N=0.0167).
 
 ---
+
+## Iteration 2026-05-17-b7a985f — REVERTED
+
+**Hypothesis:** Making universe churn PIT-safe by reserving fixed slots for inactive legacy holdings instead of submitting off-universe liquidation orders will improve validation Sortino by reducing forced turnover while eliminating the recent universe-respect hard reject mechanism.
+
+**Change:** I replaced off-universe exit orders with a tradable-vs-inactive held split, reserve inactive holdings against the fixed slot budget, and explicitly suppress all order_target_percent calls for tickers outside the active PIT universe.
+
+**Decision:** REVERTED — sortino 2.549 did not improve on prev 2.9249943159478287
+
+**Result:**
+- evaluator_version: 2026-05-16-univfloor
+- validation_sortino_mean: 2.5491816241469385
+- validation_folds: 13
+- per_fold_sortinos: [-0.9067, -0.5001, -1.8835, 4.8544, 10.7041, 3.6923, 4.8706, 5.326, 1.4334, 0.1357, 1.8414, 3.988, -0.4162]
+- calmar_mean: 1.6951567565022616
+- hit_rate_mean: 0.4487179487179487
+- profit_factor_mean: 1.5001497209368204
+- trade_count_total: 43
+- aggregate_max_dd: 0.07783684998675357
+- worst_fold_max_dd: 0.04223662329404909
+- max_position_frac_peak: 0.03881206763352317
+- lower_quartile_fold_calmar: -0.13876754389721802
+- n_negative_folds: 4/13
+- risk.passed: True
+- risk.violations: []
+
+**Learning:** Sortino changed from 2.925 to 2.549 (-0.376). Aggregate DD was 7.8% versus previous kept 5.5%; negative folds were 4/13; trades=43. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 2.549 did not improve on prev 2.9249943159478287.
+
+---
