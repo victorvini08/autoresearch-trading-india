@@ -799,3 +799,32 @@ structural learnings are codified in `program.md`. Explore freely.
 **Learning:** No scored strategy inference: the iteration failed before prepare.py produced validation metrics. Treat this as an implementation failure, not evidence about the hypothesis. Failure reason: validation failed: no bt.Strategy subclass defined.
 
 ---
+
+## Iteration 2026-05-17-34d9668 — REVERTED
+
+**Hypothesis:** Replacing the prior weak down-market resilience scoring nudge with a PIT-safe bottom-quartile veto should improve validation Sortino by preserving the kept 12-1 momentum-quality thesis while excluding candidates that participate most in broad active-universe selloffs.
+
+**Change:** I added a no-new-parameter down-market laggard filter inside momentum_quality_scores that computes active-universe daily returns from the same PIT close matrix and removes the weakest candidate quartile before the existing momentum-quality rank and fixed-slot construction.
+
+**Decision:** REVERTED — sortino 2.009 did not improve on prev 2.05528277047027 | anti-overfit FAILED: bonferroni(p=0.0165 >= alpha/N=0.0143) · sub_period_stationarity(signed min/max Sortino ratio across 2 sub-periods = 0.1183 (need ≥ 0.20); sub-periods = [+2.757, +0.326])
+
+**Result:**
+- evaluator_version: 2026-05-16-univfloor
+- validation_sortino_mean: 2.0088531238332505
+- validation_folds: 13
+- per_fold_sortinos: [-0.3627, -0.4628, -0.6001, 4.3596, 7.1181, 2.4092, 3.8389, 6.2551, 2.2548, -0.1731, 0.6456, 0.5616, 0.2708]
+- calmar_mean: 1.1317848997757762
+- hit_rate_mean: 0.5201465201465202
+- profit_factor_mean: 4.472390333972182
+- trade_count_total: 49
+- aggregate_max_dd: 0.050897227797874874
+- worst_fold_max_dd: 0.04063591760162785
+- max_position_frac_peak: 0.03937089570598137
+- lower_quartile_fold_calmar: -0.2273782459369067
+- n_negative_folds: 4/13
+- risk.passed: True
+- risk.violations: []
+
+**Learning:** Sortino changed from 2.055 to 2.009 (-0.046). Aggregate DD was 5.1% versus previous kept 4.9%; negative folds were 4/13; trades=49. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 2.009 did not improve on prev 2.05528277047027 | anti-overfit FAILED: bonferroni(p=0.0165 >= alpha/N=0.0143) · sub_period_stationarity(signed min/max Sortino ratio across 2 sub-periods = 0.1183 (need ≥ 0.20); sub-periods = [+2.757, +0.326]).
+
+---
