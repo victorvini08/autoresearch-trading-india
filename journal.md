@@ -5096,3 +5096,32 @@ structural learnings are codified in `program.md`. Explore freely.
 **Learning:** Sortino changed from 3.628 to 3.530 (-0.097). Aggregate DD was 15.2% versus previous kept 15.1%; negative folds were 1/13; trades=188. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 3.530 did not improve on prev 3.6277126896862444.
 
 ---
+
+## Iteration 2026-05-17-58f2856 — REVERTED
+
+**Hypothesis:** Replacing the current absolute 126-day momentum score with a sector-neutral momentum residual will improve validation Sortino by selecting leaders that are strong versus their own industry group rather than simply chasing whichever sector has recently dominated.
+
+**Change:** I added PIT-safe sector median trend adjustment inside ranking, preserving the existing filters, fixed-slot sizing, sector cap, and rebalance cadence while changing only the ranking score used to choose among qualified names.
+
+**Decision:** REVERTED — sortino 3.401 did not improve on prev 3.6277126896862444 | anti-overfit FAILED: sub_period_stationarity(signed min/max Sortino ratio across 2 sub-periods = 0.0380 (need ≥ 0.20); sub-periods = [+4.832, +0.183])
+
+**Result:**
+- evaluator_version: 2026-05-16-univfloor
+- validation_sortino_mean: 3.4014946587489425
+- validation_folds: 13
+- per_fold_sortinos: [4.2544, -0.249, -1.4228, 5.7175, 9.8804, 8.5561, 6.0237, 10.2314, 0.4942, -1.0122, 0.266, 0.0142, 1.4655]
+- calmar_mean: 4.7307838021758295
+- hit_rate_mean: 0.5458823003357416
+- profit_factor_mean: 21.795696374201917
+- trade_count_total: 175
+- aggregate_max_dd: 0.13290415952109333
+- worst_fold_max_dd: 0.08915051137737556
+- max_position_frac_peak: 0.06298553083332248
+- lower_quartile_fold_calmar: -0.019509057819613318
+- n_negative_folds: 4/13
+- risk.passed: True
+- risk.violations: []
+
+**Learning:** Sortino changed from 3.628 to 3.401 (-0.226). Aggregate DD was 13.3% versus previous kept 15.1%; negative folds were 4/13; trades=175. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 3.401 did not improve on prev 3.6277126896862444 | anti-overfit FAILED: sub_period_stationarity(signed min/max Sortino ratio across 2 sub-periods = 0.0380 (need ≥ 0.20); sub-periods = [+4.832, +0.183]).
+
+---
