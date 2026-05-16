@@ -886,3 +886,32 @@ structural learnings are codified in `program.md`. Explore freely.
 **Learning:** Sortino changed from 2.055 to 2.480 (+0.425). Aggregate DD was 5.2% versus previous kept 4.9%; negative folds were 3/13; trades=53. Keep compounding on this change, but future iterations should still explain whether the gain came from better return, lower downside, or fewer fragile folds. Decision reason: sortino 2.480 > prev 2.05528277047027, agg_dd 5.2%, catastrophe gate clear, anti-overfit gates passed.
 
 ---
+
+## Iteration 2026-05-17-a036601 — REVERTED
+
+**Hypothesis:** Adding a no-new-parameter smooth-accumulation rank to the kept momentum-quality book will improve validation Sortino by favoring winners whose pre-skip momentum is distributed across the path rather than coming from one jump or a choppy tape.
+
+**Change:** I added _smooth_accumulation over the pre-skip close path and included its cross-sectional percentile in momentum_quality_scores while leaving cadence, fixed-slot sizing, breadth gross, PIT universe handling, and the 25% sector cap unchanged.
+
+**Decision:** REVERTED — sortino 2.158 did not improve on prev 2.4801971795200797
+
+**Result:**
+- evaluator_version: 2026-05-16-univfloor
+- validation_sortino_mean: 2.15848225468678
+- validation_folds: 13
+- per_fold_sortinos: [-0.6559, -0.1765, -1.0502, 3.5536, 5.5908, 2.4437, 4.3729, 5.3414, 2.618, 0.3617, 1.7741, 4.0008, -0.1141]
+- calmar_mean: 1.1311274200544028
+- hit_rate_mean: 0.4003663003663004
+- profit_factor_mean: 2.02976252764446
+- trade_count_total: 51
+- aggregate_max_dd: 0.055002194839479074
+- worst_fold_max_dd: 0.040006948059745244
+- max_position_frac_peak: 0.03905686473807133
+- lower_quartile_fold_calmar: -0.0447803451626716
+- n_negative_folds: 4/13
+- risk.passed: True
+- risk.violations: []
+
+**Learning:** Sortino changed from 2.480 to 2.158 (-0.322). Aggregate DD was 5.5% versus previous kept 5.2%; negative folds were 4/13; trades=51. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 2.158 did not improve on prev 2.4801971795200797.
+
+---
