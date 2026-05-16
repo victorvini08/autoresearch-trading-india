@@ -195,9 +195,29 @@ def _universe_respected(all_trades: pd.DataFrame) -> bool:
     sd_sorted = sorted(sd)
     import bisect
 
-    def _members_at(d: date) -> set[str] | None:
+    def _members_window(d: date) -> tuple[set[str] | None, set[str] | None]:
+        """(snapshot active at d, snapshot immediately preceding it).
+
+        Tolerance is tied to the snapshot CADENCE, not a fixed day-count.
+        The strategy selects from the most-recent snapshot ≤ its DECISION
+        bar; the fill (entry_date) is ≥ decision, lagged by the rebalance
+        cadence (biweekly ≈ up to 2 weeks) plus real fill delay (NSE
+        year-end / festival holiday clusters can push a market fill out
+        ~2-3 weeks). That lag can legitimately cross ONE monthly snapshot
+        boundary (observed 2026-05-16: SUZLON decided Dec-2023 when in the
+        universe, filled 2024-01-15 after it rotated out for the single
+        2024-01 snapshot — the old fixed 7-day lookback false-rejected it).
+        So a trade is respected if the ticker was a member at the fill
+        snapshot OR the one immediately before it. A name absent from BOTH
+        was out for ≥1 full snapshot period before any possible decision —
+        genuine survivorship / look-ahead, still hard-rejected.
+        """
         i = bisect.bisect_right(sd_sorted, d) - 1
-        return members_by[sd_sorted[i]] if i >= 0 else None
+        if i < 0:
+            return None, None
+        cur = members_by[sd_sorted[i]]
+        prev = members_by[sd_sorted[i - 1]] if i - 1 >= 0 else None
+        return cur, prev
 
     for row in all_trades.itertuples(index=False):
         tkr = getattr(row, "ticker", None)
@@ -206,15 +226,14 @@ def _universe_respected(all_trades: pd.DataFrame) -> bool:
             continue
         ed = _as_date(ed)
         t = str(tkr).upper()
-        m_fill = _members_at(ed)
-        m_decision = _members_at(ed - timedelta(days=_UNIVERSE_FILL_LAG_DAYS))
-        if m_fill is None and m_decision is None:
+        m_fill, m_prev = _members_window(ed)
+        if m_fill is None and m_prev is None:
             return False  # traded before any snapshot existed
         if (m_fill is not None and t in m_fill) or (
-            m_decision is not None and t in m_decision
+            m_prev is not None and t in m_prev
         ):
             continue
-        return False  # off-universe at BOTH decision and fill → real violation
+        return False  # off-universe at fill AND prior snapshot → real violation
     return True
 
 
