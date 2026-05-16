@@ -2,8 +2,9 @@
 
 PIT-strict long-only swing strategy for NSE equities. The strategy ranks only
 tickers in the injected point-in-time universe, selects positive-trend names
-with lower realized volatility and mild recent strength, applies a 25% sector
-cap, and sizes by fixed risk slots so blocked slots remain cash.
+with lower realized volatility, mild recent strength, and defensive relative
+strength on weak market days, applies a 25% sector cap, and sizes by fixed
+risk slots so blocked slots remain cash.
 
 Trade contract: every position change goes through order_target_percent only.
 """
@@ -43,7 +44,8 @@ class IndiaMomentumQualityRegime(bt.Strategy):
         ("recent_days", 21),
         ("vol_days", 63),
         ("max_drawdown_days", 63),
-        ("n_positions", 25),
+        ("defensive_days", 42),
+        ("n_positions", 18),
         ("gross_exposure", 0.90),
         ("sector_cap", 0.25),
         ("rebalance_weekday", 4),
@@ -142,8 +144,66 @@ class IndiaMomentumQualityRegime(bt.Strategy):
                 worst = dd
         return abs(worst)
 
-    def _score_for(self, d) -> float | None:
-        need = max(self.p.trend_days, self.p.vol_days, self.p.max_drawdown_days) + 2
+    def _recent_market_returns(self, active: set[str] | None, days: int) -> list[float] | None:
+        daily_returns: list[list[float]] = []
+        for d in self.datas:
+            ticker = self._ticker_of(d)
+            if active is not None and ticker not in active:
+                continue
+            rets = self._returns(d, days)
+            if rets is not None:
+                daily_returns.append(rets)
+        if len(daily_returns) < 50:
+            return None
+
+        market: list[float] = []
+        for i in range(days):
+            vals = [row[i] for row in daily_returns if math.isfinite(row[i])]
+            if len(vals) < 50:
+                return None
+            vals.sort()
+            mid = len(vals) // 2
+            if len(vals) % 2:
+                market.append(vals[mid])
+            else:
+                market.append((vals[mid - 1] + vals[mid]) / 2.0)
+        return market
+
+    def _defensive_relative_strength(self, d, market_returns: list[float] | None) -> float:
+        if not market_returns:
+            return 0.0
+        rets = self._returns(d, len(market_returns))
+        if not rets:
+            return 0.0
+
+        rel_sum = 0.0
+        used = 0
+        weak_sum = 0.0
+        weak_used = 0
+        for stock_ret, market_ret in zip(rets, market_returns):
+            if not math.isfinite(stock_ret) or not math.isfinite(market_ret):
+                continue
+            if market_ret < 0.0:
+                rel_sum += stock_ret - market_ret
+                used += 1
+            if market_ret < -0.004:
+                weak_sum += stock_ret - market_ret
+                weak_used += 1
+
+        if used < 8:
+            return 0.0
+        score = rel_sum / used
+        if weak_used >= 4:
+            score = (0.65 * score) + (0.35 * (weak_sum / weak_used))
+        return max(min(score, 0.04), -0.04)
+
+    def _score_for(self, d, market_returns: list[float] | None = None) -> float | None:
+        need = max(
+            self.p.trend_days,
+            self.p.vol_days,
+            self.p.max_drawdown_days,
+            self.p.defensive_days,
+        ) + 2
         if len(d) < need:
             return None
 
@@ -165,15 +225,23 @@ class IndiaMomentumQualityRegime(bt.Strategy):
         if vol > 0.75 or drawdown > 0.35:
             return None
 
-        return (0.70 * trend) + (0.20 * recent) - (0.45 * vol) - (0.35 * drawdown)
+        defensive = self._defensive_relative_strength(d, market_returns)
+        return (
+            (0.68 * trend)
+            + (0.18 * recent)
+            + (2.25 * defensive)
+            - (0.45 * vol)
+            - (0.35 * drawdown)
+        )
 
     def _rank_universe(self, active: set[str] | None) -> list[tuple[str, float]]:
         scores: list[tuple[str, float]] = []
+        market_returns = self._recent_market_returns(active, self.p.defensive_days)
         for d in self.datas:
             t = self._ticker_of(d)
             if active is not None and t not in active:
                 continue
-            score = self._score_for(d)
+            score = self._score_for(d, market_returns)
             if score is None:
                 continue
             scores.append((t, score))
