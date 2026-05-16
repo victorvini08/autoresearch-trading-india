@@ -34,6 +34,12 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--iterations", type=int, default=50)
     p.add_argument("--max-hours", type=float, default=8.0)
     p.add_argument("--provider", choices=["claude", "codex"], default="claude")
+    p.add_argument(
+        "--model",
+        default=None,
+        help="Override the LLM model for every iteration (e.g. "
+        "claude-sonnet-4-6). Default: Opus 4.7 (claude) / codex default.",
+    )
     args = p.parse_args(argv)
 
     deadline = time.time() + args.max_hours * 3600
@@ -42,7 +48,7 @@ def main(argv: list[str] | None = None) -> int:
     print(
         f"=== overnight start: {datetime.now().isoformat()} ===\n"
         f"  iterations={args.iterations}, max_hours={args.max_hours}, "
-        f"provider={args.provider}"
+        f"provider={args.provider}{('/' + args.model) if args.model else ''}"
     )
 
     try:
@@ -52,7 +58,10 @@ def main(argv: list[str] | None = None) -> int:
                 break
             t0 = time.time()
             try:
-                rc = loop.main(["--provider", args.provider])
+                loop_argv = ["--provider", args.provider]
+                if args.model:
+                    loop_argv += ["--model", args.model]
+                rc = loop.main(loop_argv)
             except KeyboardInterrupt:
                 raise
             except Exception:  # noqa: BLE001 — harness must not die
