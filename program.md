@@ -76,6 +76,19 @@ A variant is KEPT iff all gates pass:
 
 Otherwise: REVERT.
 
+**Read the reject reason as a diagnosis, not history:**
+- `bonferroni` p≈1.0 / `random_walk_mc` low percentile ⇒ the signal has **no
+  edge** (its return ordering is no better than a random shuffle). Tuning a
+  knob on it is wasted — change the *thesis*, not the parameter.
+- Recurring 60–90% `catastrophe` drawdown ⇒ **structural** to a concentrated
+  long-only book; fix it with construction (more names, defensive
+  de-risking, vol-scaled sizing), not signal tweaks.
+- Low `sub_period_stationarity` ⇒ edge isn't persistent across regimes — a
+  curve fit, not a strategy.
+
+If the last few reverts all failed for "no edge", the signal family is
+exhausted: propose something **structurally different**, don't refine it.
+
 **Out of scope for this loop iteration:**
 - Changes to `prepare.py` (immutable evaluator)
 - Changes to data ingest, broker, executor (separate concerns)
