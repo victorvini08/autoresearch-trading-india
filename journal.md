@@ -1089,3 +1089,32 @@ structural learnings are codified in `program.md`. Explore freely.
 **Learning:** Sortino changed from 2.925 to 2.201 (-0.724). Aggregate DD was 7.1% versus previous kept 5.5%; negative folds were 3/13; trades=50. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 2.201 did not improve on prev 2.9249943159478287.
 
 ---
+
+## Iteration 2026-05-17-cdf4ab0 — REVERTED
+
+**Hypothesis:** Adding a no-new-parameter high-volatility exclusion inside the active-universe momentum-quality candidate pool will improve validation Sortino by avoiding momentum names whose path quality ranks well only after surviving unusually noisy price histories.
+
+**Change:** I added a cross-sectional realized-volatility metric and veto the noisiest quartile before ranking, while preserving PIT universe filtering, fixed-slot sizing, biweekly cadence, breadth gross scaling, and the 25% sector cap.
+
+**Decision:** REVERTED — sortino 1.931 did not improve on prev 2.9249943159478287 | anti-overfit FAILED: bonferroni(p=0.0190 >= alpha/N=0.0167)
+
+**Result:**
+- evaluator_version: 2026-05-16-univfloor
+- validation_sortino_mean: 1.9311197952142967
+- validation_folds: 13
+- per_fold_sortinos: [-0.5993, -0.9946, -0.5721, 5.2497, 5.1679, 0.8738, 3.2348, 5.9961, 1.3846, -0.004, 2.0396, 3.284, 0.044]
+- calmar_mean: 0.9283029318027217
+- hit_rate_mean: 0.4677655677655678
+- profit_factor_mean: 7.861927546150065
+- trade_count_total: 49
+- aggregate_max_dd: 0.05742026440742074
+- worst_fold_max_dd: 0.038131708744981604
+- max_position_frac_peak: 0.03957135114336959
+- lower_quartile_fold_calmar: -0.03453722911048285
+- n_negative_folds: 4/13
+- risk.passed: True
+- risk.violations: []
+
+**Learning:** Sortino changed from 2.925 to 1.931 (-0.994). Aggregate DD was 5.7% versus previous kept 5.5%; negative folds were 4/13; trades=49. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 1.931 did not improve on prev 2.9249943159478287 | anti-overfit FAILED: bonferroni(p=0.0190 >= alpha/N=0.0167).
+
+---
