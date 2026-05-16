@@ -1114,3 +1114,31 @@ This is the autoresearch loop's persistent memory. Every iteration appends an en
 **Learning:** Sortino scored 1.768 with no prior kept baseline. Aggregate DD was 77.7%; negative folds were 9/20; trades=29. Do not reuse this exact setup: it failed the catastrophe gate, so the result is not a usable edge even if the hypothesis was economically plausible. Decision reason: catastrophe: max drawdown: 77.7% > 50% (account-wipe territory) | anti-overfit FAILED: bonferroni(p=0.9998 >= alpha/N=0.0050) · random_walk_mc(only 0.86% percentile vs RW null) · sub_period_stationarity(min/max ratio of |Sortino| across 3 sub-periods = 0.15).
 
 ---
+
+## Iteration 2026-05-16-170a670 — REVERTED
+
+**Hypothesis:** Adding a portfolio-level 12% trailing equity loss budget with an eight-week cash cooldown should improve validation Sortino by cutting the repeated account-level drawdown failure directly instead of further tuning the exhausted momentum ranking signal.
+
+**Change:** I removed the disallowed pathlib import and added a daily order_target_percent-only circuit breaker that exits all holdings after a 12% equity drawdown and blocks re-entry for 56 calendar days before resetting the high-water mark.
+
+**Decision:** REVERTED — anti-overfit FAILED: bonferroni(p=0.9272 >= alpha/N=0.0050)
+
+**Result:**
+- validation_sortino_mean: 1.6800763087554649
+- validation_folds: 20
+- per_fold_sortinos: [10.2078, 4.2456, 1.044, -0.5441, -1.2032, -1.5955, -0.8251, 2.2697, 0.9891, -1.1571, -1.2996, 15.5359, 5.7514, 0.8514, 2.475, -0.6352, -0.6438, 0.3965, -0.5807, -1.6806]
+- calmar_mean: 5.91678145659319
+- hit_rate_mean: 0.2958333333333333
+- profit_factor_mean: 1.1854509106399223
+- trade_count_total: 32
+- aggregate_max_dd: 0.3864153061850925
+- worst_fold_max_dd: 0.20187205401011452
+- max_position_frac_peak: 1.025567561539665
+- lower_quartile_fold_calmar: -1.7409219251563601
+- n_negative_folds: 10/20
+- risk.passed: True
+- risk.violations: []
+
+**Learning:** Sortino scored 1.680 with no prior kept baseline. Aggregate DD was 38.6%; negative folds were 10/20; trades=32. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: anti-overfit FAILED: bonferroni(p=0.9272 >= alpha/N=0.0050).
+
+---
