@@ -978,3 +978,32 @@ structural learnings are codified in `program.md`. Explore freely.
 **Learning:** Sortino changed from 2.622 to 2.512 (-0.110). Aggregate DD was 12.3% versus previous kept 11.7%; negative folds were 2/13; trades=154. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 2.512 did not improve on prev 2.622326027486962.
 
 ---
+
+## Iteration 2026-05-16-0956b17 — REVERTED
+
+**Hypothesis:** Adding a no-new-parameter market breadth exposure throttle will improve validation Sortino by retaining the kept stock ranking while cutting gross exposure only when the PIT opportunity set is barely above the existing breadth floor.
+
+**Change:** I made target exposure depend on ranked-candidate breadth, so thin-but-tradable rebalance days use partial gross while broad opportunity sets keep the current 90% gross and all sizing remains fixed-slot based.
+
+**Decision:** REVERTED — sortino 2.622 did not improve on prev 2.622326027486962
+
+**Result:**
+- evaluator_version: 2026-05-16-univfloor
+- validation_sortino_mean: 2.622326027486962
+- validation_folds: 13
+- per_fold_sortinos: [1.2091, 0.6032, -1.4789, 4.1896, 8.0178, 6.6497, 4.4499, 4.1487, 2.5153, 1.1231, 1.9903, 1.9082, -1.2356]
+- calmar_mean: 6.540782394279262
+- hit_rate_mean: 0.5481967253460466
+- profit_factor_mean: 12.293469892056804
+- trade_count_total: 153
+- aggregate_max_dd: 0.117327930332949
+- worst_fold_max_dd: 0.09750157367736607
+- max_position_frac_peak: 0.0517795203579806
+- lower_quartile_fold_calmar: 2.2274429325453626
+- n_negative_folds: 2/13
+- risk.passed: True
+- risk.violations: []
+
+**Learning:** Sortino changed from 2.622 to 2.622 (+0.000). Aggregate DD was 11.7% versus previous kept 11.7%; negative folds were 2/13; trades=153. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 2.622 did not improve on prev 2.622326027486962.
+
+---
