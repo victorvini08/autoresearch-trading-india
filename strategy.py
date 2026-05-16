@@ -3,8 +3,9 @@
 PIT-strict long-only swing strategy for NSE equities. The strategy ranks only
 tickers in the injected point-in-time universe, selects positive-trend names
 with lower realized volatility, mild recent strength, defensive relative
-strength on weak market days, and persistent multi-leg trend quality, applies
-a 25% sector cap, and sizes by fixed risk slots so blocked slots remain cash.
+strength on weak market days, persistent multi-leg trend quality, and modest
+short-term pullback quality, applies a 25% sector cap, and sizes by fixed risk
+slots so blocked slots remain cash.
 
 Trade contract: every position change goes through order_target_percent only.
 '''
@@ -116,6 +117,25 @@ class IndiaMomentumQualityRegime(bt.Strategy):
                 return None
             out.append((p1 / p0) - 1.0)
         return out
+
+    def _simple_ma_distance(self, d, days: int) -> float | None:
+        if len(d) < days + 1:
+            return None
+        current = self._price_at(d, 0)
+        if current is None:
+            return None
+        total = 0.0
+        used = 0
+        for i in range(days, -1, -1):
+            px = self._price_at(d, i)
+            if px is None:
+                return None
+            total += px
+            used += 1
+        ma = total / max(used, 1)
+        if ma <= 0 or not math.isfinite(ma):
+            return None
+        return (current / ma) - 1.0
 
     def _realized_vol(self, d, days: int) -> float | None:
         rets = self._returns(d, days)
@@ -250,16 +270,19 @@ class IndiaMomentumQualityRegime(bt.Strategy):
         vol = self._realized_vol(d, self.p.vol_days)
         drawdown = self._max_drawdown(d, self.p.max_drawdown_days)
         persistence = self._trend_persistence(d)
-        if vol is None or drawdown is None or persistence is None:
+        ma_distance = self._simple_ma_distance(d, self.p.recent_days)
+        if vol is None or drawdown is None or persistence is None or ma_distance is None:
             return None
-        if vol > 0.75 or drawdown > 0.35 or persistence < -0.05:
+        if vol > 0.75 or drawdown > 0.35 or persistence < -0.05 or ma_distance > 0.16:
             return None
 
+        pullback_quality = -abs(ma_distance - 0.015)
         defensive = self._defensive_relative_strength(d, market_returns)
         return (
             (0.64 * trend)
-            + (0.16 * recent)
+            + (0.13 * recent)
             + (0.22 * persistence)
+            + (0.18 * pullback_quality)
             + (2.25 * defensive)
             - (0.45 * vol)
             - (0.35 * drawdown)
