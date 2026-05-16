@@ -4110,3 +4110,32 @@ structural learnings are codified in `program.md`. Explore freely.
 **Learning:** Sortino changed from 3.628 to 3.628 (+0.000). Aggregate DD was 15.1% versus previous kept 15.1%; negative folds were 1/13; trades=188. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 3.628 did not improve on prev 3.6277126896862444.
 
 ---
+
+## Iteration 2026-05-17-21ca3b1 — REVERTED
+
+**Hypothesis:** Replacing part of the raw trend ranking with volatility-adjusted trend will improve validation Sortino by favoring steadier momentum leaders without changing universe membership, cadence, sector cap, or fixed-slot sizing.
+
+**Change:** I added a capped risk_adjusted_trend score inside _score_for and shifted some weight from raw 126-day trend to this steadier momentum measure.
+
+**Decision:** REVERTED — sortino 3.494 did not improve on prev 3.6277126896862444
+
+**Result:**
+- evaluator_version: 2026-05-16-univfloor
+- validation_sortino_mean: 3.4941463338215963
+- validation_folds: 13
+- per_fold_sortinos: [4.369, -0.1224, -1.2142, 5.7203, 9.7201, 6.5994, 5.9527, 5.4473, 2.4332, 0.5616, 1.9919, 1.851, 2.114]
+- calmar_mean: 7.4547770146971555
+- hit_rate_mean: 0.5187889159608616
+- profit_factor_mean: 5.266702953249273
+- trade_count_total: 191
+- aggregate_max_dd: 0.14537173852373736
+- worst_fold_max_dd: 0.11979466387698916
+- max_position_frac_peak: 0.0652791769917805
+- lower_quartile_fold_calmar: 1.670654588306082
+- n_negative_folds: 2/13
+- risk.passed: True
+- risk.violations: []
+
+**Learning:** Sortino changed from 3.628 to 3.494 (-0.134). Aggregate DD was 14.5% versus previous kept 15.1%; negative folds were 2/13; trades=191. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 3.494 did not improve on prev 3.6277126896862444.
+
+---
