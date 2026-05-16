@@ -1205,3 +1205,32 @@ structural learnings are codified in `program.md`. Explore freely.
 **Learning:** Sortino changed from 2.925 to 2.846 (-0.079). Aggregate DD was 7.7% versus previous kept 5.5%; negative folds were 3/13; trades=53. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 2.846 did not improve on prev 2.9249943159478287.
 
 ---
+
+## Iteration 2026-05-17-74550ca — REVERTED
+
+**Hypothesis:** Scaling whole-book gross down when positive residual-momentum breadth is narrow will improve validation Sortino by preserving the kept residual ranking while avoiding fully funded long exposure when the stock-specific trend tape is weak.
+
+**Change:** I added a no-new-parameter residual breadth throttle that caps gross at 55% or 75% when fewer than 40% or 50% of active names have positive market-residual momentum, then size fixed slots from that adjusted gross.
+
+**Decision:** REVERTED — sortino 2.861 did not improve on prev 2.9249943159478287
+
+**Result:**
+- evaluator_version: 2026-05-16-univfloor
+- validation_sortino_mean: 2.8613616966004334
+- validation_folds: 13
+- per_fold_sortinos: [-0.807, -1.513, -1.6872, 7.7307, 9.0182, 4.2835, 6.6812, 6.1215, 2.6577, 0.6057, 1.0902, 2.0866, 0.9296]
+- calmar_mean: 1.2841711324938803
+- hit_rate_mean: 0.4247252747252747
+- profit_factor_mean: 2.461747887202637
+- trade_count_total: 62
+- aggregate_max_dd: 0.06516915612916216
+- worst_fold_max_dd: 0.035497880780259485
+- max_position_frac_peak: 0.03953185122694066
+- lower_quartile_fold_calmar: 0.2923814886328824
+- n_negative_folds: 3/13
+- risk.passed: True
+- risk.violations: []
+
+**Learning:** Sortino changed from 2.925 to 2.861 (-0.064). Aggregate DD was 6.5% versus previous kept 5.5%; negative folds were 3/13; trades=62. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 2.861 did not improve on prev 2.9249943159478287.
+
+---
