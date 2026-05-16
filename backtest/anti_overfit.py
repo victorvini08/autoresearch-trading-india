@@ -221,24 +221,40 @@ def compute_rw_mc_null(
     n_permutations: int = 5000,
     rng: np.random.Generator | None = None,
 ) -> tuple[float, np.ndarray]:
-    """Return (strategy_pct_rank, rw_sortinos).
+    """Return (strategy_pct_rank, null_sortinos).
 
     `daily_returns` is an array of strategy daily returns (after costs).
     `sortino_fn` maps an array of daily returns → scalar Sortino.
 
-    We permute the daily order of `daily_returns` `n_permutations` times,
-    re-compute Sortino each time, and return the rank of the original
-    Sortino in that null distribution.
+    Builds a NO-EDGE Monte-Carlo null: demean the returns (strip the
+    strategy's drift) then IID-bootstrap resample. The null preserves the
+    strategy's OWN volatility / downside shape but has ~zero edge, so its
+    Sortinos scatter around 0. A genuine positive risk-adjusted edge lands
+    far in the upper tail (pct → 1, permutation p → tiny); pure noise lands
+    mid-distribution and correctly fails the gate. `pct` = fraction of null
+    Sortinos ≤ the observed Sortino.
+
+    BUGFIX 2026-05-16: the previous implementation permuted the daily ORDER
+    of the returns and recomputed Sortino — but Sortino depends only on the
+    multiset of returns (mean / downside-std), so it is exactly
+    order-invariant. Every "null" draw equalled the original Sortino to
+    within ~1e-12 float-summation round-off, making `pct` and the Bonferroni
+    `sortino_val_pvalue` pure tie-noise unrelated to strategy quality. That
+    silently failed ~every variant across every experiment (the gate could
+    not be passed because it tested nothing). Verified: 2000 order-perms of
+    a fixed series → std 0.0, 1 unique Sortino.
     """
     if rng is None:
         rng = np.random.default_rng()
     if daily_returns.size < 2:
         return 0.0, np.zeros(n_permutations)
     orig = float(sortino_fn(daily_returns))
+    centered = daily_returns - float(np.mean(daily_returns))
+    n = centered.size
     rw = np.empty(n_permutations, dtype=np.float64)
     for i in range(n_permutations):
-        perm = rng.permutation(daily_returns)
-        rw[i] = float(sortino_fn(perm))
+        sample = rng.choice(centered, size=n, replace=True)
+        rw[i] = float(sortino_fn(sample))
     pct = float(np.mean(rw <= orig))
     return pct, rw
 
