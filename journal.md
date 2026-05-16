@@ -722,3 +722,31 @@ This is the autoresearch loop's persistent memory. Every iteration appends an en
 **Learning:** Sortino scored 1.616 with no prior kept baseline. Aggregate DD was 28.8%; negative folds were 6/20; trades=160. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: anti-overfit FAILED: universe_respect(variant traded tickers outside the point-in-time universe — survivorship/look-ahead reintroduced (hard reject)) · bonferroni(p=0.9998 >= alpha/N=0.0050) · random_walk_mc(only 43.94% percentile vs RW null).
 
 ---
+
+## Iteration 2026-05-16-edc5576 — REVERTED
+
+**Hypothesis:** Adding a high-cash defensive construction that selects only positive 12-1 momentum names and sizes them across fixed risk slots should reduce the recurring drawdown failures while preserving enough cross-sectional momentum edge to improve validation Sortino.
+
+**Change:** I replaced fully invested selected-name equal weighting with fixed-slot 60% gross exposure and a positive-momentum entry requirement, so sparse eligible sets do not unintentionally concentrate the book.
+
+**Decision:** REVERTED — catastrophe: gross exposure: max 100.7% > 100% (cash account — leverage error) | anti-overfit FAILED: bonferroni(p=0.8374 >= alpha/N=0.0050)
+
+**Result:**
+- validation_sortino_mean: 1.7524273978430371
+- validation_folds: 20
+- per_fold_sortinos: [10.0883, 3.9734, 0.3847, 0.5808, -0.5134, -1.3122, -1.8099, 0.1783, -1.894, -2.655, 5.7022, 14.9082, 4.9821, 3.1774, 0.2201, 2.8916, 0.8412, 1.0933, -3.0057, -2.7829]
+- calmar_mean: 3.688576751341027
+- hit_rate_mean: 0.4552651515151515
+- profit_factor_mean: 2.3708707320203586
+- trade_count_total: 105
+- aggregate_max_dd: 0.38087732046780376
+- worst_fold_max_dd: 0.23467156723814592
+- max_position_frac_peak: 0.11619828002377378
+- lower_quartile_fold_calmar: -1.554334299103245
+- n_negative_folds: 7/20
+- risk.passed: False
+- risk.violations: ['gross exposure: max 100.7% > 100% (cash account — leverage error)']
+
+**Learning:** Sortino scored 1.752 with no prior kept baseline. Aggregate DD was 38.1%; negative folds were 7/20; trades=105. Do not reuse this exact setup: it failed the catastrophe gate, so the result is not a usable edge even if the hypothesis was economically plausible. Decision reason: catastrophe: gross exposure: max 100.7% > 100% (cash account — leverage error) | anti-overfit FAILED: bonferroni(p=0.8374 >= alpha/N=0.0050).
+
+---
