@@ -5,8 +5,9 @@ tickers in the injected point-in-time universe, selects positive-trend names
 with lower realized volatility, mild recent strength, defensive relative
 strength on weak market days, persistent multi-leg trend quality, fresh
 intermediate trend confirmation, modest short-term pullback quality, avoids
-one-week exhaustion, rewards efficient intermediate trends, applies a 25%
-sector cap, and sizes by fixed risk slots so blocked slots remain cash.
+one-week exhaustion, rewards efficient intermediate trends, favors constructive
+recent range location, applies a 25% sector cap, and sizes by fixed risk slots
+so blocked slots remain cash.
 
 Trade contract: every position change goes through order_target_percent only.
 '''
@@ -162,6 +163,29 @@ class IndiaMomentumQualityRegime(bt.Strategy):
             return None
         return max(min(efficiency, 1.0), -1.0)
 
+    def _range_location(self, d, days: int) -> float | None:
+        if len(d) < days + 1:
+            return None
+        current = self._price_at(d, 0)
+        if current is None:
+            return None
+        low = None
+        high = None
+        for i in range(days, -1, -1):
+            px = self._price_at(d, i)
+            if px is None:
+                return None
+            if low is None or px < low:
+                low = px
+            if high is None or px > high:
+                high = px
+        if low is None or high is None or high <= low:
+            return None
+        location = (current - low) / (high - low)
+        if not math.isfinite(location):
+            return None
+        return max(min(location, 1.0), 0.0)
+
     def _max_drawdown(self, d, days: int) -> float | None:
         if len(d) < days + 1:
             return None
@@ -297,18 +321,28 @@ class IndiaMomentumQualityRegime(bt.Strategy):
         persistence = self._trend_persistence(d)
         ma_distance = self._simple_ma_distance(d, self.p.recent_days)
         efficiency = self._trend_efficiency(d, self.p.vol_days)
+        range_location = self._range_location(d, self.p.vol_days)
         if (
             vol is None
             or drawdown is None
             or persistence is None
             or ma_distance is None
             or efficiency is None
+            or range_location is None
         ):
             return None
-        if vol > 0.75 or drawdown > 0.35 or persistence < -0.05 or ma_distance > 0.16 or efficiency < -0.05:
+        if (
+            vol > 0.75
+            or drawdown > 0.35
+            or persistence < -0.05
+            or ma_distance > 0.16
+            or efficiency < -0.05
+            or range_location < 0.32
+        ):
             return None
 
         pullback_quality = -abs(ma_distance - 0.015)
+        range_quality = -abs(range_location - 0.72)
         fast_exhaustion = max(fast - 0.055, 0.0)
         defensive = self._defensive_relative_strength(d, market_returns)
         return (
@@ -316,6 +350,7 @@ class IndiaMomentumQualityRegime(bt.Strategy):
             + (0.13 * recent)
             + (0.22 * persistence)
             + (0.10 * efficiency)
+            + (0.08 * range_quality)
             + (0.18 * pullback_quality)
             + (2.25 * defensive)
             - (0.45 * vol)
