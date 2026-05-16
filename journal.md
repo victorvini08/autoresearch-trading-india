@@ -862,3 +862,32 @@ structural learnings are codified in `program.md`. Explore freely.
 **Learning:** Sortino changed from 2.300 to 2.443 (+0.143). Aggregate DD was 11.3% versus previous kept 13.5%; negative folds were 2/13; trades=157. Keep compounding on this change, but future iterations should still explain whether the gain came from better return, lower downside, or fewer fragile folds. Decision reason: sortino 2.443 > prev 2.300137799824258, agg_dd 11.3%, catastrophe gate clear, anti-overfit gates passed.
 
 ---
+
+## Iteration 2026-05-16-5d4d474 — REVERTED
+
+**Hypothesis:** Adding a stock-specific downside capture penalty to the kept defensive low-volatility trend book will improve validation Sortino by avoiding names that still fall sharply on weak market days even when their average relative strength looks acceptable.
+
+**Change:** I extended the existing down-market relative-strength calculation to include downside capture and penalized high-capture candidates in the scorer while preserving PIT universe filtering, fixed-slot sizing, biweekly rebalancing, and the 25% sector cap.
+
+**Decision:** REVERTED — sortino 2.315 did not improve on prev 2.442697150351653
+
+**Result:**
+- evaluator_version: 2026-05-16-univfloor
+- validation_sortino_mean: 2.31450499568359
+- validation_folds: 13
+- per_fold_sortinos: [1.0876, 0.2791, -1.688, 3.7283, 7.3383, 6.308, 4.0012, 3.9355, 2.2482, 0.722, 1.834, 1.585, -1.2906]
+- calmar_mean: 5.756364802943365
+- hit_rate_mean: 0.4870301763014313
+- profit_factor_mean: 6.455665918833829
+- trade_count_total: 168
+- aggregate_max_dd: 0.12158168923775926
+- worst_fold_max_dd: 0.10071528407608109
+- max_position_frac_peak: 0.05167173271540293
+- lower_quartile_fold_calmar: 1.7979871182060123
+- n_negative_folds: 2/13
+- risk.passed: True
+- risk.violations: []
+
+**Learning:** Sortino changed from 2.443 to 2.315 (-0.128). Aggregate DD was 12.2% versus previous kept 11.3%; negative folds were 2/13; trades=168. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 2.315 did not improve on prev 2.442697150351653.
+
+---
