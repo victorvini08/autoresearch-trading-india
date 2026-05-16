@@ -4574,3 +4574,32 @@ structural learnings are codified in `program.md`. Explore freely.
 **Learning:** Sortino changed from 3.628 to 2.481 (-1.147). Aggregate DD was 14.1% versus previous kept 15.1%; negative folds were 1/13; trades=200. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 2.481 did not improve on prev 3.6277126896862444.
 
 ---
+
+## Iteration 2026-05-17-ca89660 — REVERTED
+
+**Hypothesis:** Adding a PIT-safe active-universe relative-momentum confirmation will improve validation Sortino by selecting stocks whose 63-day advance beats the contemporaneous median NSE universe move, separating true leaders from names merely lifted by broad beta.
+
+**Change:** I added cross-sectional median market return over the volatility window and require/reward excess intermediate momentum, while preserving the existing fixed-slot sizing, sector cap, PIT universe filter, and order_target_percent-only execution.
+
+**Decision:** REVERTED — sortino 3.555 did not improve on prev 3.6277126896862444
+
+**Result:**
+- evaluator_version: 2026-05-16-univfloor
+- validation_sortino_mean: 3.5551330947298427
+- validation_folds: 13
+- per_fold_sortinos: [5.1923, 0.3537, -0.9762, 5.6907, 9.8402, 6.8286, 5.9485, 6.3851, 2.7064, -0.1527, 0.9547, 1.6296, 1.8159]
+- calmar_mean: 7.306364464094143
+- hit_rate_mean: 0.5542518881319787
+- profit_factor_mean: 6.282076887690187
+- trade_count_total: 188
+- aggregate_max_dd: 0.1527179362166496
+- worst_fold_max_dd: 0.13140516072296712
+- max_position_frac_peak: 0.06544632741637497
+- lower_quartile_fold_calmar: 1.433601542442653
+- n_negative_folds: 2/13
+- risk.passed: True
+- risk.violations: []
+
+**Learning:** Sortino changed from 3.628 to 3.555 (-0.073). Aggregate DD was 15.3% versus previous kept 15.1%; negative folds were 2/13; trades=188. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 3.555 did not improve on prev 3.6277126896862444.
+
+---
