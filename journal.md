@@ -3936,3 +3936,32 @@ structural learnings are codified in `program.md`. Explore freely.
 **Learning:** Sortino changed from 3.628 to 3.388 (-0.240). Aggregate DD was 14.9% versus previous kept 15.1%; negative folds were 2/13; trades=172. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 3.388 did not improve on prev 3.6277126896862444.
 
 ---
+
+## Iteration 2026-05-17-90c9093 — REVERTED
+
+**Hypothesis:** Replacing raw 126-day momentum scoring with a clipped momentum score will improve validation Sortino by reducing overextended winner concentration while preserving the existing PIT-safe trend-selection thesis.
+
+**Change:** I capped the trend contribution used in ranking at 55% so extreme long-horizon moves no longer dominate otherwise similar candidates, leaving filters, cadence, fixed-slot sizing, universe enforcement, and sector caps unchanged.
+
+**Decision:** REVERTED — sortino 1.671 did not improve on prev 3.6277126896862444 | anti-overfit FAILED: bonferroni(p=0.0825 >= alpha/N=0.0100)
+
+**Result:**
+- evaluator_version: 2026-05-16-univfloor
+- validation_sortino_mean: 1.6713303090546465
+- validation_folds: 13
+- per_fold_sortinos: [1.9452, -2.5904, -3.4947, -0.3881, 5.8072, 3.6193, 3.7989, 7.5868, 3.1158, 3.7127, 2.6007, -1.2065, -2.7796]
+- calmar_mean: 0.8585187201244922
+- hit_rate_mean: 0.5023523736193419
+- profit_factor_mean: 5.126823896745308
+- trade_count_total: 188
+- aggregate_max_dd: 0.13925440847463974
+- worst_fold_max_dd: 0.07631101755882859
+- max_position_frac_peak: 0.06278953113133047
+- lower_quartile_fold_calmar: -0.6862474605268165
+- n_negative_folds: 5/13
+- risk.passed: True
+- risk.violations: []
+
+**Learning:** Sortino changed from 3.628 to 1.671 (-1.956). Aggregate DD was 13.9% versus previous kept 15.1%; negative folds were 5/13; trades=188. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 1.671 did not improve on prev 3.6277126896862444 | anti-overfit FAILED: bonferroni(p=0.0825 >= alpha/N=0.0100).
+
+---
