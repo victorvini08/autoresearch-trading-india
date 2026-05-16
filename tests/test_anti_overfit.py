@@ -58,10 +58,12 @@ def test_bonferroni_rejects_when_correction_binds() -> None:
     assert not res.passed  # 0.04 >= 0.005
 
 
-def test_random_walk_mc_passes_at_95th() -> None:
-    assert random_walk_mc_gate(_summary(rw_pct=0.95)).passed
+def test_random_walk_mc_threshold_is_90th_pct() -> None:
+    # Loosened 0.95→0.90 (2026-05-16) so real-but-noisy edges can clear.
+    assert random_walk_mc_gate(_summary(rw_pct=0.90)).passed
     assert random_walk_mc_gate(_summary(rw_pct=0.99)).passed
-    assert not random_walk_mc_gate(_summary(rw_pct=0.90)).passed
+    assert not random_walk_mc_gate(_summary(rw_pct=0.89)).passed
+    assert not random_walk_mc_gate(_summary(rw_pct=0.50)).passed
 
 
 def test_parsimony_passes_at_baseline_params() -> None:
@@ -153,3 +155,75 @@ def test_compute_rw_mc_null_returns_pct_in_unit_interval() -> None:
     pct, rw = compute_rw_mc_null(returns, sortino_fn, n_permutations=200, rng=rng)
     assert 0.0 <= pct <= 1.0
     assert rw.shape == (200,)
+
+
+# ── Regression tests for the 2026-05-16 root-cause fixes ──────────────────
+
+
+def test_compute_rw_mc_null_is_non_degenerate() -> None:
+    """Guards the 2026-05-16 RW-MC bugfix. The OLD null permuted return ORDER
+    and Sortino is order-invariant, so every draw equalled the original →
+    zero-variance null → Bonferroni p was pure tie-noise and ~every variant
+    failed. The fixed null demeans + bootstraps, so it MUST have real spread
+    and not collapse onto the observed Sortino."""
+    rng = np.random.default_rng(7)
+
+    def sortino_fn(rs):
+        downside = rs[rs < 0]
+        if downside.size == 0:
+            return float("inf")
+        return float(rs.mean() / (downside.std() + 1e-9))
+
+    # Non-degeneracy: a no-edge (zero-mean) series — the null must have real
+    # spread and must NOT collapse onto the observed Sortino (the old
+    # order-permutation bug produced zero variance here).
+    flat = rng.standard_normal(252)
+    flat_orig = sortino_fn(flat)
+    _, rw = compute_rw_mc_null(flat, sortino_fn, n_permutations=2000, rng=rng)
+    assert np.std(rw) > 1e-3                       # non-degenerate spread
+    assert len(np.unique(np.round(rw, 6))) > 100   # not all the same value
+    assert np.mean(np.isclose(rw, flat_orig)) < 0.05  # null ≠ observed
+
+    # Discriminating power: a genuinely strong edge must land in the tail.
+    strong = 0.3 + 0.2 * rng.standard_normal(252)
+    strong_pct, _ = compute_rw_mc_null(
+        strong, sortino_fn, n_permutations=2000, rng=rng
+    )
+    assert strong_pct > 0.90
+
+
+def test_parsimony_no_added_params_passes_even_when_not_improving() -> None:
+    """Double-jeopardy fix: with NO added hyperparameters parsimony is N/A and
+    must pass unconditionally — even if Sortino fell below baseline. The
+    strict-improvement check lives solely in scripts/loop.py now; parsimony
+    must not also reject the same variant for the same reason."""
+    res = parsimony_gate(
+        _summary(val=1.40, n_params=BASELINE_HYPERPARAMS),
+        baseline_sortino=2.17,   # variant is WORSE than baseline
+    )
+    assert res.passed
+    assert "no added hyperparameters" in res.reason
+
+
+def test_sub_period_stationarity_sign_flip_fails() -> None:
+    """A profitable sub-period and a LOSING one is the strongest evidence of
+    regime-fit. The old abs() logic scored (1.5, -1.5, 1.4) as ratio
+    1.4/1.5≈0.93 and PASSED — backwards. Signed logic must FAIL it."""
+    res = sub_period_stationarity_gate(_summary(sub_periods=(1.5, -1.5, 1.4)))
+    assert not res.passed
+    assert res.metric is not None and res.metric <= 0.0
+
+
+def test_sub_period_stationarity_lenient_floor_is_0_20() -> None:
+    """Loosened 0.30→0.20. A 1.0/0.22/1.0 spread (ratio 0.22) now PASSES
+    where it failed under the old 0.30 floor — real edges have off-years."""
+    res = sub_period_stationarity_gate(_summary(sub_periods=(1.0, 0.22, 1.0)))
+    assert res.passed
+    assert abs(res.metric - 0.22) < 1e-6
+
+
+def test_bonferroni_default_alpha_is_0_10() -> None:
+    """Default alpha relaxed 0.05→0.10. p=0.009 at N=10 → threshold 0.010
+    PASSES now; it would have failed at the old 0.05/10=0.005."""
+    res = bonferroni_gate(_summary(pvalue=0.009), n_active_variants=10)
+    assert res.passed

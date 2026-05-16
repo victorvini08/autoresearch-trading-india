@@ -1,101 +1,119 @@
 # Autoresearch program — Indian equities
 
-**Goal:** generate a swing-trading strategy on the top-200-by-ADV liquid Nifty 500 slice, with positive risk-adjusted return after Dhan delivery costs, that survives a sealed walk-forward test on 2024-01 to 2026-05 Indian market data.
+**Goal:** evolve `strategy.py` into a swing-trading strategy on the
+top-200-by-ADV liquid NSE slice that earns positive risk-adjusted return
+**after Dhan delivery costs** and survives a sealed walk-forward test on
+2025-01 → 2026-05 data.
 
-**You may edit `strategy.py`. You must NOT edit `prepare.py`** — `prepare.py` is the read-only walk-forward evaluator + anti-overfit gate runner. Do not edit it under any circumstance; changing the evaluator invalidates every prior iteration's comparison baseline.
+**You may edit `strategy.py` only.** `prepare.py` and
+`backtest/anti_overfit.py` are the read-only evaluator + gate runner — never
+edit them; changing the evaluator invalidates every prior comparison.
 
-**Constraints (do not violate):**
+---
 
-1. **Long-only, CNC (delivery), single segment (NSE_EQ).** No F&O, no intraday, no short selling, no margin.
-2. **Position sizing via `self.order_target_percent` only.** Never call `self.buy()` or `self.close()` directly.
-3. **Universe is fixed by `data/universe.py`** at each rebalance date. Strategy may rank or filter within the universe; it may not add tickers outside it.
-4. **Biweekly rebalance** (alternate Fridays) is the default cadence. Loop may propose changing this; must clear anti-overfit gates.
-5. **Hyperparameter parsimony budget:** starting strategy has 5 params; each new param added must improve sealed-test Sortino by ≥ 0.10 AND clear Bonferroni significance.
-6. **Sector cap 25%** enforced at rebalance. Hard constraint.
-7. **Anti-overfit gates** (`backtest/anti_overfit.py`) are atomic. A variant failing any gate is REJECTED.
-8. **All Sortinos used for promotion are computed net of full Dhan delivery costs** (brokerage 0, STT, DP charges, exchange, GST, stamp duty).
-9. **Sealed test set 2024-01 to 2026-05 is revealed ONCE per promotion.** No retries on the same variant.
+## Hard constraints (a violation wastes the whole iteration)
 
-**Hyperparameters the loop may tune:**
-- `lookback_days`, `skip_days` (momentum signal)
-- `retention_mult` (selection retention buffer)
-- `quality_pct` (quality screen percentile threshold)
-- `regime_pct`, `fii_threshold_cr` (regime gate thresholds)
-- `n_positions` (target position count; 15-35 acceptable range — the old
-  4-10 cap encoded a concentration assumption that caused the structural
-  ~80% catastrophe drawdown; diversification is signal-agnostic, default
-  is 25, see 2026-05-16. Going back below ~15 will fail the catastrophe
-  gate.)
-- `rebalance_freq` (biweekly default; may propose weekly/monthly with full justification)
+1. **Long-only, CNC delivery, NSE_EQ only.** No F&O, intraday, shorting, margin.
+2. **Sizing via `self.order_target_percent` only.** Never `self.buy()`/`self.close()`.
+3. **Trade only inside the injected point-in-time universe** (`universe_by_date`).
+   Trading any off-universe ticker is a **hard reject** (survivorship/look-ahead).
+4. **Fixed risk slots, not selected-count sizing.** Size on `n_positions`
+   (`gross / n_positions`), so filtered/blocked/empty slots stay **cash**.
+   `gross / len(selected)` concentrates capital and repeatedly caused >100%
+   gross or account-wipe drawdown — it is banned.
+5. **Sector cap 25%** at every rebalance.
+6. **Output `new_strategy_py`** = complete literal `strategy.py` source: real
+   newlines (no escaped `\n`/`\t`, no markdown fences, no diff), valid Python
+   (`ast.parse`d), same class name, `order_target_percent`-only contract.
+7. **Imports whitelisted only:** `backtrader`, `numpy`, `pandas`, `datetime`,
+   `data.*`, `llm.features`, `__future__`, and safe stdlib (`math`, `logging`,
+   `collections`, `itertools`, `functools`, `statistics`, `bisect`, `random`,
+   `typing`, `dataclasses`, `re`, `json`). Any other import = instant reject.
 
-**Data the strategy may use** — all accessors are point-in-time
-(most-recent value on/before the rebalance date; signals are as-of-close,
-orders fill next open — no look-ahead). Import from `llm.features`:
+---
 
-- Price OHLCV history (`storage/prices.duckdb`)
+## KEEP criteria — a variant is KEPT iff ALL hold
+
+1. **Sortino (net of costs) > baseline AND > 0**, where *baseline* is the most
+   recent KEPT iteration **under the current evaluator version**. A changed
+   evaluator re-anchors: the first iteration then has no baseline and only
+   needs to clear the gates below. `|Sortino| < 10` (else numerical artifact).
+2. **Aggregate drawdown** doesn't regress > 10pp (10 percentage points) vs
+   the prior KEPT.
+3. **Catastrophe-clear:** gross < 100%, aggregate DD < 50%, ≥ 20 trades.
+4. **Anti-overfit gates (atomic — fail one, rejected):**
+   - **Bonferroni:** validation-Sortino p < 0.10 / N (N = variants tested
+     since the last KEPT, capped at 10).
+   - **Random-walk Monte-Carlo:** Sortino ≥ 90th pct of the no-edge null.
+   - **Parsimony:** each hyperparameter *added beyond the current committed
+     strategy* must add ≥ 0.10 validation Sortino. **Adding no parameters ⇒
+     parsimony does not apply** — strict improvement is criterion 1's job, not
+     parsimony's (they are no longer double-counted).
+   - **Sub-period stationarity:** signed min/max Sortino ratio across disjoint
+     18-month sub-periods ≥ 0.20. A non-positive sub-period while others are
+     positive (a regime sign-flip) fails — the edge must persist, not merely
+     average out.
+5. **Sealed test** (2025-01 → 2026-05) Sortino > baseline AND > 0 — revealed
+   **once per variant** at the human promotion gate; failure is final.
+
+Else: REVERT.
+
+---
+
+## Read the reject reason as a diagnosis
+
+- **Bonferroni p≈1.0 / low RW-MC percentile** ⇒ the signal has **no edge**
+  (return ordering no better than noise). Change the *thesis*, not a knob.
+- **Recurring 60–90% catastrophe drawdown** ⇒ **structural** to a concentrated
+  long-only book. Fix with construction (more names, vol-scaled sizing,
+  defensive de-risking), not signal tweaks.
+- **Low sub-period stationarity / a sign-flipped sub-period** ⇒ regime-fit,
+  not an edge. Seek a thesis robust across bull and bear sub-periods.
+- If the last few reverts all say "no edge", the signal family is exhausted —
+  propose something **structurally different**, don't refine it.
+
+Note: walk-forward folds whose point-in-time universe is below 50 names are
+**skipped** by the evaluator (the pre-2022-07 data-starved era). Every score
+you see is on the real ≥200-name universe — don't reason about that early gap.
+
+---
+
+## Hyperparameters the loop may tune
+
+- `lookback_days`, `skip_days` — momentum signal
+- `retention_mult` — selection retention buffer
+- `regime_pct`, `fii_threshold_cr` — regime gate thresholds
+- `n_positions` — target position count; valid range **15–35**, default 25.
+  Below ~15 fails the catastrophe gate (concentration); diversification is
+  signal-agnostic.
+- `rebalance_freq` — biweekly default; weekly/monthly allowed with justification.
+
+(`quality_pct` was removed — no fundamentals ingest; the quality screen
+soft-passes.)
+
+## Data available
+
+All accessors are point-in-time (most-recent value ≤ rebalance date; signals
+as-of-close, orders fill next open — no look-ahead). Import from `llm.features`:
+
+- Price OHLCV (`storage/prices.duckdb`)
 - `macro_regime(date)` → `'risk_on'|'neutral'|'risk_off'|'shock'|None`
-  (holistic 4-class label; `None` until the macro cache is precomputed)
-- `macro_signals(date)` → dict of **numeric** macro signals with real
-  data coverage (absent keys simply omitted, never zero-filled). Keys:
+  (4-class; `None` until macro cache precomputed)
+- `macro_signals(date)` → numeric dict (absent keys omitted, never zero-filled):
   `india_vix`, `india_vix_pct_252d`, `nifty50_close`, `nifty50_200dma`,
   `nifty50_pct_vs_200dma`, `usd_inr`, `usd_inr_1w_change_pct`,
   `gdelt_tone_mean`, `gdelt_tone_negfrac`, `gdelt_epu_policy`,
   `gdelt_centralbank`, `gdelt_tariff_trade`, `gdelt_inflation`.
-  Convenience scalars: `india_vix_percentile(date)` (0..1, high = vol
-  stress), `nifty_vs_200dma_pct(date)` (trend regime). Prefer these
-  numeric signals for richer/continuous regime logic than the 4-class
-  label; the parsimony + anti-overfit gates police added complexity.
-- `sentiment(ticker, date)`, `events(ticker, date)`, `news_volume(ticker,
-  date)` (per-ticker; sentiment/events are `None`/default until their
-  caches are precomputed)
+  Scalars: `india_vix_percentile(date)` (0..1), `nifty_vs_200dma_pct(date)`.
+  Prefer these continuous signals over the 4-class label.
+- `sentiment(ticker, date)`, `events(ticker, date)`, `news_volume(ticker, date)`
+  (`None`/default until caches precomputed)
 - Sector classification (`data/sectors.py`)
 
-**NOT available — do NOT write logic depending on these:**
-- FII / DII flows — only ~1 recent row; 5y history deferred.
-- Policy / repo rate — 16 stale rows (frozen 2022-07); excluded.
-- Quality / fundamentals (ROE, D/E, op-margin) — no fundamentals ingest
-  yet; the quality screen soft-degrades to pass-all (the `quality_pct`
-  knob was removed for this reason).
+**Do NOT depend on:** FII/DII flows (~1 row), repo/policy rate (stale, frozen
+2022-07), fundamentals/ROE/D-E (no ingest yet).
 
-**Output contract (STRICT — a violation wastes the whole iteration):**
-- `new_strategy_py` MUST be the complete, literal Python source of
-  `strategy.py` with REAL newlines — never escaped `\n`/`\t`/`\"`
-  sequences, never markdown fences, never a diff.
-- It MUST be syntactically valid Python (it will be `ast.parse`d) and keep
-  the class name and the `order_target_percent`-only trade contract.
-  Mentally compile it before returning — a syntax error = immediate reject,
-  no backtest, a wasted iteration.
-- Import ONLY whitelisted modules: `backtrader`, `numpy`, `pandas`, `datetime`, `data.*`, `llm.features`, `__future__`, plus safe stdlib (`math`, `logging`, `collections`, `itertools`, `functools`, `statistics`, `bisect`, `random`, `typing`, `dataclasses`, `re`, `json`) — ANY other import (`os`, `sys`, `subprocess`, `pathlib`, `requests`, …) is an instant reject, no backtest, wasted iteration.
+## Out of scope for the loop
 
-**Decision criteria for KEEP:**
-A variant is KEPT iff all gates pass:
-1. Walk-forward Sortino (net of costs) > baseline AND > 0
-2. `|Sortino| < 10` (sanity sortino bound — anything beyond is signal of a bug or numerical artefact)
-3. Aggregate drawdown does not regress more than 10pp (10 percentage points) vs prior KEPT
-4. Catastrophe-validator clear — all of:
-   - gross exposure < 100% (no leverage; equal-weight long-only)
-   - aggregate drawdown < 50% (account-wipe gate)
-   - at least 20 trades total (below 20 trades the Sortino is too noisy to trust)
-5. Anti-overfit gates clear: Bonferroni p-correction, Random-Walk Monte Carlo (5000 permutations, must beat 95th-pct null), parameter parsimony budget, sub-period stationarity (min/max sub-period Sortino ratio >= 0.30)
-6. Sealed-test reveal Sortino > baseline AND > 0 (one-shot per variant; failure is final)
-
-Otherwise: REVERT.
-
-**Read the reject reason as a diagnosis, not history:**
-- `bonferroni` p≈1.0 / `random_walk_mc` low percentile ⇒ the signal has **no
-  edge** (its return ordering is no better than a random shuffle). Tuning a
-  knob on it is wasted — change the *thesis*, not the parameter.
-- Recurring 60–90% `catastrophe` drawdown ⇒ **structural** to a concentrated
-  long-only book; fix it with construction (more names, defensive
-  de-risking, vol-scaled sizing), not signal tweaks.
-- Low `sub_period_stationarity` ⇒ edge isn't persistent across regimes — a
-  curve fit, not a strategy.
-
-If the last few reverts all failed for "no edge", the signal family is
-exhausted: propose something **structurally different**, don't refine it.
-
-**Out of scope for this loop iteration:**
-- Changes to `prepare.py` (immutable evaluator)
-- Changes to data ingest, broker, executor (separate concerns)
-- Changes to anti-overfit gates (separate, deliberate design changes)
-- Adding new data sources (must go through human review)
+- Editing `prepare.py` / `backtest/anti_overfit.py` (immutable evaluator)
+- Data ingest, broker, executor, new data sources (separate, human-reviewed)
