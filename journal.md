@@ -2921,3 +2921,32 @@ structural learnings are codified in `program.md`. Explore freely.
 **Learning:** Sortino changed from 3.404 to 3.359 (-0.045). Aggregate DD was 13.5% versus previous kept 13.6%; negative folds were 2/13; trades=181. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 3.359 did not improve on prev 3.4038275153908293.
 
 ---
+
+## Iteration 2026-05-17-cc7b992 — REVERTED
+
+**Hypothesis:** Adding a PIT-safe sector-relative breadth tailwind to the existing ranker will improve validation Sortino by favoring momentum names whose whole sector is leading the current universe, without changing gross exposure, cadence, or fixed-slot sizing.
+
+**Change:** I added a sector median trend context at rebalance time and used its centered sector tailwind as a small ranking term so selection tilts toward broad sector leadership while preserving PIT universe filtering, sector caps, and order_target_percent-only execution.
+
+**Decision:** REVERTED — sortino 3.404 did not improve on prev 3.4038275153908293
+
+**Result:**
+- evaluator_version: 2026-05-16-univfloor
+- validation_sortino_mean: 3.4038275153908293
+- validation_folds: 13
+- per_fold_sortinos: [5.1923, 0.432, -1.0257, 5.524, 9.7897, 6.8047, 5.9487, 5.2593, 2.3797, 0.6727, 2.0021, 1.7051, -0.4348]
+- calmar_mean: 7.3440874574941555
+- hit_rate_mean: 0.5433581124757595
+- profit_factor_mean: 5.780037413995571
+- trade_count_total: 190
+- aggregate_max_dd: 0.13582530924838732
+- worst_fold_max_dd: 0.11728339561855498
+- max_position_frac_peak: 0.0646215671969394
+- lower_quartile_fold_calmar: 1.250582384667222
+- n_negative_folds: 2/13
+- risk.passed: True
+- risk.violations: []
+
+**Learning:** Sortino changed from 3.404 to 3.404 (+0.000). Aggregate DD was 13.6% versus previous kept 13.6%; negative folds were 2/13; trades=190. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 3.404 did not improve on prev 3.4038275153908293.
+
+---
