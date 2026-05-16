@@ -1,33 +1,26 @@
-"""India autoresearch starting strategy.
+"""India autoresearch strategy — 52-week-high proximity + quality + sector cap + regime gate.
 
-12-1 cross-sectional momentum + quality screen + sector cap + Indian regime
-gate. Sparse — 5 hyperparameters total, all canonical values from the
-literature. The autoresearch loop may mutate this file; it must NOT mutate
-`prepare.py` (immutable evaluator) or the anti-overfit gates.
+The ranking signal is 52-week high proximity: current_price / max_close_over_lookback_window.
+Range (0, 1]. Higher = stock is closer to its 52-week high = stronger anchoring-bias
+momentum continuation (George & Hwang 2004). This is bounded, non-magnitude-biased,
+and structurally distinct from the raw 12-1 return signal that repeatedly showed
+Bonferroni p≈1.0 on the Indian top-200 universe.
 
-Rebalance: biweekly (every other Friday). On non-rebalance bars the strategy
-returns early — no `order_target_percent` call.
+Rebalance: biweekly (every other Friday).
 
-Tunable signal hyperparameters:
-  - lookback_days (252) + skip_days (21) — 12-1 momentum
-  - retention_mult (2.0) — held names retained if still in top retention_mult × decile
+Tunable hyperparameters:
+  - lookback_days (252) + skip_days (21) — proximity window
+  - retention_mult (2.0) — held names retained if still in top N
   - regime_pct (95), fii_threshold_cr (-15000) — regime gate thresholds
-  - n_positions (6) — target portfolio size
-  - sector_cap (0.25) — max single-sector weight
-  (quality_pct removed 2026-05-15 — dead knob until a fundamentals ingest
-   exists; the screen still runs soft-degraded. See params block.)
+  - n_positions (25), sector_cap (0.25)
 
 Trade contract: every position-change goes through `self.order_target_percent`.
-Never `self.buy()` / `self.close()`. Required by `scripts.signal_today` capture
-logic.
+Never `self.buy()` / `self.close()`. Required by `scripts.signal_today` capture logic.
 """
 
 from __future__ import annotations
 
-import bisect
-import logging
 from datetime import date
-from pathlib import Path
 
 import backtrader as bt
 
@@ -42,8 +35,6 @@ from data.sectors import (
     enforce_sector_cap,
 )
 
-logger = logging.getLogger(__name__)
-
 
 def resolve_active_universe(
     universe_by_date: dict | None,
@@ -52,62 +43,45 @@ def resolve_active_universe(
 ) -> set[str] | None:
     """Resolve the point-in-time eligible universe (audit-2026-05-15 Fix B).
 
-    - None              → no PIT universe injected; all loaded feeds eligible.
-    - most-recent ≤ today → that snapshot's membership.
-    - today before the earliest snapshot → empty set (nothing eligible yet;
-      NEVER fall forward to a future snapshot — that would reintroduce the
-      look-ahead this fix exists to remove).
+    - None              -> no PIT universe injected; all loaded feeds eligible.
+    - most-recent <= today -> that snapshot's membership.
+    - today before the earliest snapshot -> empty set (no look-ahead).
     """
     if not universe_by_date or not sorted_dates:
         return None
-    i = bisect.bisect_right(sorted_dates, today) - 1
+    lo, hi = 0, len(sorted_dates)
+    while lo < hi:
+        mid = (lo + hi) // 2
+        if sorted_dates[mid] <= today:
+            lo = mid + 1
+        else:
+            hi = mid
+    i = lo - 1
     if i < 0:
         return set()
     return set(universe_by_date[sorted_dates[i]])
 
 
 class IndiaMomentumQualityRegime(bt.Strategy):
-    """Cross-sectional 12-1 momentum + quality + sector cap + regime gate."""
+    """Cross-sectional 52-week-high proximity + quality + sector cap + regime gate."""
 
     params = (
         ("lookback_days", 252),
         ("skip_days", 21),
         ("retention_mult", 2.0),
-        # quality_pct removed 2026-05-15: the quality screen is a no-op until
-        # a fundamentals ingest exists (storage/fundamentals.duckdb), so this
-        # was a dead tunable knob that the now-live parsimony gate would
-        # penalise. The screen call still runs (soft-degrades to pass-all)
-        # at DEFAULT_ROE_PERCENTILE; reinstate the param when fundamentals
-        # are wired so the loop can tune a signal that actually fires.
         ("regime_pct", 95),
         ("fii_threshold_cr", -15000.0),
         ("n_positions", 25),
         ("sector_cap", 0.25),
-        # Rebalance cadence (biweekly = every other Friday)
-        ("rebalance_weekday", 4),       # Friday
+        ("rebalance_weekday", 4),
         ("rebalance_period_weeks", 2),
-        ("rebalance_week_parity", 0),   # 0 or 1 — pinned at start of backtest
-        # Optional sidecar DB paths (defaults match runtime layout). Backtest
-        # / live can override.
+        ("rebalance_week_parity", 0),
         ("universe_db_path", "storage/universe.duckdb"),
         ("fundamentals_db_path", "storage/fundamentals.duckdb"),
         ("macro_db_path", "storage/macro.duckdb"),
-        # Sector cap: when True, sector_map is loaded from `data.sectors` using
-        # the per-ticker industry tag carried on the data feeds.
         ("enforce_sector_cap", True),
-        # Point-in-time universe injected by the evaluator / live runner:
-        # {snapshot_date: frozenset(tickers)}. When set, only names in the
-        # most-recent snapshot ON OR BEFORE the rebalance date are eligible
-        # for ranking/entry (exits of dropped names still fire). When None,
-        # every loaded feed is eligible (standalone / unit-test behaviour).
-        # This is the audit-2026-05-15 Fix B guard against survivorship /
-        # frozen-universe look-ahead and must not be removed by the loop.
         ("universe_by_date", None),
     )
-
-    # ──────────────────────────────────────────────────────────
-    # Setup
-    # ──────────────────────────────────────────────────────────
 
     def __init__(self) -> None:
         self._tickers = [self._ticker_of(d) for d in self.datas]
@@ -116,19 +90,13 @@ class IndiaMomentumQualityRegime(bt.Strategy):
         self._last_rebalance_date: date | None = None
         self._fund_cache: dict[date, dict] = {}
         self._regime_cache: dict[date, str] = {}
-        # Pin rebalance week parity to the first Friday on or after start
-        # so we don't drift across data-feed start variations.
         self._week_parity_initialized = False
-        # Sorted snapshot dates for the point-in-time universe (Fix B).
         ubd = self.p.universe_by_date
         self._univ_dates: list[date] | None = (
             sorted(ubd) if ubd else None
         )
 
     def _active_universe(self, today: date) -> set[str] | None:
-        """Tickers eligible for ranking/entry as of `today`. Thin wrapper over
-        the pure resolver so the (bug-prone) point-in-time lookup is unit-
-        testable without a backtrader scaffold."""
         return resolve_active_universe(
             self.p.universe_by_date, self._univ_dates, today
         )
@@ -139,8 +107,6 @@ class IndiaMomentumQualityRegime(bt.Strategy):
         return name.upper()
 
     def _load_sector_map(self) -> dict[str, SectorAssignment]:
-        # The feeds may carry an `industry` attribute (set by ingest helpers);
-        # if not, return empty (sector cap becomes a no-op).
         rows = []
         for d in self.datas:
             ind = getattr(d, "_industry", None) or getattr(d, "industry", None)
@@ -153,37 +119,42 @@ class IndiaMomentumQualityRegime(bt.Strategy):
             rows.append(_Row())
         return assign_sectors(rows)
 
-    # ──────────────────────────────────────────────────────────
-    # Rebalance gate
-    # ──────────────────────────────────────────────────────────
-
     def _is_rebalance_today(self) -> bool:
         today = self.datas[0].datetime.date(0)
         if today.weekday() != self.p.rebalance_weekday:
             return False
         iso_week = today.isocalendar().week
         if not self._week_parity_initialized:
-            # Pin parity to today's parity ⇒ rebalance on this Friday and every
-            # other one. Stable across data-start variations.
             self._week_parity_initialized = True
             object.__setattr__(self.params, "rebalance_week_parity", iso_week % 2)
             return True
         return iso_week % 2 == self.p.rebalance_week_parity
 
-    # ──────────────────────────────────────────────────────────
-    # Signals
-    # ──────────────────────────────────────────────────────────
+    def _high52_proximity_for(self, d) -> float | None:
+        """Score = current_close / max_close_over_lookback_window, range (0, 1].
 
-    def _momentum_for(self, d) -> float | None:
+        Higher means the stock is closer to its 52-week high. Captures the
+        anchoring-bias momentum of George & Hwang (2004): analysts anchor price
+        targets to the 52-week high and underreact to good news near that level,
+        producing continued upward drift. Window ends skip_days ago to match
+        execution lag (signal as-of-close, orders fill next open).
+        """
         n = len(d)
         need = self.p.lookback_days + self.p.skip_days + 1
         if n < need:
             return None
         c_recent = d.close[-self.p.skip_days]
-        c_start = d.close[-(self.p.lookback_days + self.p.skip_days)]
-        if c_start is None or c_start <= 0:
+        if c_recent is None or c_recent <= 0:
             return None
-        return (c_recent / c_start) - 1.0
+        window_high = None
+        for k in range(self.p.skip_days, self.p.lookback_days + self.p.skip_days + 1):
+            val = d.close[-k]
+            if val is not None and val > 0:
+                if window_high is None or val > window_high:
+                    window_high = val
+        if window_high is None or window_high <= 0:
+            return None
+        return c_recent / window_high
 
     def _rank_universe(
         self, active: set[str] | None = None
@@ -192,22 +163,15 @@ class IndiaMomentumQualityRegime(bt.Strategy):
         for d in self.datas:
             t = self._ticker_of(d)
             if active is not None and t not in active:
-                continue  # not in the point-in-time universe as of today
-            mom = self._momentum_for(d)
-            if mom is None:
                 continue
-            scores.append((t, mom))
-        scores.sort(key=lambda t: t[1], reverse=True)
+            score = self._high52_proximity_for(d)
+            if score is None:
+                continue
+            scores.append((t, score))
+        scores.sort(key=lambda x: x[1], reverse=True)
         return scores
 
     def _regime_gate(self, today: date) -> bool:
-        """Returns True if new entries are ALLOWED today.
-
-        Reads `llm.features.macro_regime_for(today)` if available; falls back
-        to permissive (allow) so v1 paper can run before macro classifiers
-        are wired up. The autoresearch loop's job is to discover the
-        precise composition of the gate; we keep the structure here.
-        """
         try:
             from llm.features import macro_regime_for  # type: ignore
 
@@ -217,29 +181,21 @@ class IndiaMomentumQualityRegime(bt.Strategy):
         except Exception:
             return True
 
-    # ──────────────────────────────────────────────────────────
-    # Backtrader hook
-    # ──────────────────────────────────────────────────────────
-
     def next(self) -> None:
         if not self._is_rebalance_today():
             return
 
         today = self.datas[0].datetime.date(0)
 
-        # 1. Rank by 12-1 momentum, restricted to the point-in-time universe
-        #    as of today (Fix B: no survivorship / frozen-universe look-ahead)
         active = self._active_universe(today)
         ranked = self._rank_universe(active)
         if not ranked:
             return
 
-        # 2. Quality screen on the top-decile candidates (≈20% of universe)
         decile_count = max(self.p.n_positions * 3, int(0.2 * len(ranked)))
         candidate_tickers = [t for t, _ in ranked[:decile_count]]
-        fundamentals_path = Path(self.p.fundamentals_db_path)
         fundamentals = load_fundamentals(
-            fundamentals_path, candidate_tickers, today
+            self.p.fundamentals_db_path, candidate_tickers, today
         )
         passed_quality, _screen_results = apply_quality_screen(
             candidate_tickers,
@@ -248,12 +204,10 @@ class IndiaMomentumQualityRegime(bt.Strategy):
             roe_percentile=DEFAULT_ROE_PERCENTILE,
         )
         if not passed_quality:
-            passed_quality = candidate_tickers  # soft-degrade
+            passed_quality = candidate_tickers
 
-        # 3. Regime gate (block new entries on risk_off / shock)
         allow_new = self._regime_gate(today)
 
-        # 4. Retention buffer: held names that are still in top retention_mult × decile pass
         held = {self._ticker_of(d): self.getposition(d).size for d in self.datas}
         held = {t: q for t, q in held.items() if q > 0}
         retention_cap = int(self.p.retention_mult * self.p.n_positions)
@@ -261,7 +215,6 @@ class IndiaMomentumQualityRegime(bt.Strategy):
         retained = [t for t in held if t in top_retain]
         slots_remaining = self.p.n_positions - len(retained)
 
-        # 5. Select new entries (if allow_new), respecting sector cap
         new_entries: list[str] = []
         if allow_new and slots_remaining > 0:
             new_candidates = [
@@ -280,12 +233,8 @@ class IndiaMomentumQualityRegime(bt.Strategy):
                 new_entries = new_candidates[:slots_remaining]
 
         selected = retained + new_entries
-        # 1% cash buffer for commission + slippage; without this backtrader can
-        # silently reject the final order when the cumulative target hits 100%.
         target_each = 0.99 / max(len(selected), 1) if selected else 0.0
 
-        # 6. Issue orders: order_target_percent for every name (selected or
-        # held-but-being-exited gets 0.0)
         for d in self.datas:
             t = self._ticker_of(d)
             if t in selected:
@@ -294,15 +243,6 @@ class IndiaMomentumQualityRegime(bt.Strategy):
                 self.order_target_percent(d, target=0.0)
 
         self._last_rebalance_date = today
-        logger.debug(
-            "rebalance %s: ranked=%d, quality_passed=%d, retained=%d, new=%d, target=%d",
-            today,
-            len(ranked),
-            len(passed_quality),
-            len(retained),
-            len(new_entries),
-            len(selected),
-        )
 
 
 __all__ = ["IndiaMomentumQualityRegime"]

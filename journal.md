@@ -206,3 +206,31 @@ This is the autoresearch loop's persistent memory. Every iteration appends an en
 **Learning:** Sortino scored 1.538 with no prior kept baseline. Aggregate DD was 35.9%; negative folds were 9/20; trades=74. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: anti-overfit FAILED: bonferroni(p=1.0000 >= alpha/N=0.0125) · random_walk_mc(only 90.42% percentile vs RW null) · sub_period_stationarity(min/max ratio of |Sortino| across 3 sub-periods = 0.21).
 
 ---
+
+## Iteration 2026-05-16-21916f3 — KEPT
+
+**Hypothesis:** Replacing the raw 12-1 return cross-sectional ranking with 52-week high proximity (current_price / max_close_over_252_days) will produce a statistically significant cross-sectional edge — where raw momentum repeatedly yielded Bonferroni p≈1.0 — by exploiting the anchoring bias documented by George & Hwang (2004): stocks near their 52-week high experience analyst underreaction and continued positive drift, a behavioral effect that is distinct from, and more robust than, raw return magnitude sorting.
+
+**Change:** Replaced `_momentum_for` (raw 12-1 return) with `_high52_proximity_for` (current_close / 252-day max close, range (0,1]) as the sole ranking signal; also removed three disallowed imports (bisect → inline binary search, logging → removed entirely, pathlib.Path → string passed directly to load_fundamentals) that caused the prior three iterations to be rejected before any backtest ran.
+
+**Decision:** KEPT — sortino 1.933 > prev None, agg_dd 21.3%, catastrophe gate clear, anti-overfit gates passed
+
+**Result:**
+- validation_sortino_mean: 1.933431293775231
+- validation_folds: 20
+- per_fold_sortinos: [10.9726, 4.2037, 0.3582, 0.7687, -0.8172, -0.4734, 0.9904, 1.2429, 1.185, -2.1273, 3.6006, 9.0061, 2.7433, 3.8208, 5.4293, 1.6074, -0.5268, 1.8146, -1.5021, -3.628]
+- calmar_mean: 3.292489013604263
+- hit_rate_mean: 0.37513322934375565
+- profit_factor_mean: 1.8568861944920798
+- trade_count_total: 333
+- aggregate_max_dd: 0.2130510720750258
+- worst_fold_max_dd: 0.14184105194783447
+- max_position_frac_peak: 0.20481992543689143
+- lower_quartile_fold_calmar: -0.7432964652523935
+- n_negative_folds: 6/20
+- risk.passed: True
+- risk.violations: []
+
+**Learning:** Sortino scored 1.933 with no prior kept baseline. Aggregate DD was 21.3%; negative folds were 6/20; trades=333. Keep compounding on this change, but future iterations should still explain whether the gain came from better return, lower downside, or fewer fragile folds. Decision reason: sortino 1.933 > prev None, agg_dd 21.3%, catastrophe gate clear, anti-overfit gates passed.
+
+---
