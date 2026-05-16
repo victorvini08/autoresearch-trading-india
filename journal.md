@@ -369,3 +369,32 @@ structural learnings are codified in `program.md`. Explore freely.
 **Learning:** Sortino scored 2.206 with no prior kept baseline. Aggregate DD was 15.2%; negative folds were 5/13; trades=56. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: anti-overfit FAILED: universe_respect(variant traded tickers outside the point-in-time universe — survivorship/look-ahead reintroduced (hard reject)) · bonferroni(p=1.0000 >= alpha/N=0.0100) · random_walk_mc(only 0.00% percentile vs RW null) · sub_period_stationarity(signed min/max Sortino ratio across 2 sub-periods = -0.1846 (need ≥ 0.20); sub-periods = [+3.472, -0.641]).
 
 ---
+
+## Iteration 2026-05-16-6794fb6 — REVERTED
+
+**Hypothesis:** A PIT-safe defensive relative-strength book that ranks persistent low-downside-volatility uptrends while sizing on fixed slots will improve validation Sortino by avoiding the unstable high-beta momentum reversals that drove prior negative sub-periods.
+
+**Change:** Replaced raw 12-1 momentum and inactive fundamentals loading with a pure price-based composite of six-month strength, three-month confirmation, MA trend, downside volatility, and drawdown control, while enforcing PIT universe membership, sector caps, and fixed n_positions sizing.
+
+**Decision:** REVERTED — catastrophe: gross exposure: max 110.3% > 100% (cash account — leverage error) | anti-overfit FAILED: universe_respect(variant traded tickers outside the point-in-time universe — survivorship/look-ahead reintroduced (hard reject)) · bonferroni(p=1.0000 >= alpha/N=0.0100) · random_walk_mc(only 0.00% percentile vs RW null) · sub_period_stationarity(signed min/max Sortino ratio across 2 sub-periods = -0.3466 (need ≥ 0.20); sub-periods = [+2.847, -0.987])
+
+**Result:**
+- evaluator_version: 2026-05-16-univfloor
+- validation_sortino_mean: 1.6673176660853302
+- validation_folds: 13
+- per_fold_sortinos: [1.3018, -0.5941, -2.0873, 2.6244, 12.5121, 4.3401, 4.1162, 3.0732, 0.3362, -2.0795, 2.221, -1.9554, -2.1336]
+- calmar_mean: 4.905596874620181
+- hit_rate_mean: 0.4646634786422477
+- profit_factor_mean: 3.9564893452828325
+- trade_count_total: 264
+- aggregate_max_dd: 0.27174545075010786
+- worst_fold_max_dd: 0.16343061328815633
+- max_position_frac_peak: 0.05123334856460133
+- lower_quartile_fold_calmar: -1.7503263005464769
+- n_negative_folds: 5/13
+- risk.passed: False
+- risk.violations: ['gross exposure: max 110.3% > 100% (cash account — leverage error)']
+
+**Learning:** Sortino scored 1.667 with no prior kept baseline. Aggregate DD was 27.2%; negative folds were 5/13; trades=264. Do not reuse this exact setup: it failed the catastrophe gate, so the result is not a usable edge even if the hypothesis was economically plausible. Decision reason: catastrophe: gross exposure: max 110.3% > 100% (cash account — leverage error) | anti-overfit FAILED: universe_respect(variant traded tickers outside the point-in-time universe — survivorship/look-ahead reintroduced (hard reject)) · bonferroni(p=1.0000 >= alpha/N=0.0100) · random_walk_mc(only 0.00% percentile vs RW null) · sub_period_stationarity(signed min/max Sortino ratio across 2 sub-periods = -0.3466 (need ≥ 0.20); sub-periods = [+2.847, -0.987]).
+
+---
