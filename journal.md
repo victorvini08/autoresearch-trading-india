@@ -398,3 +398,32 @@ structural learnings are codified in `program.md`. Explore freely.
 **Learning:** No scored strategy inference: the iteration failed before prepare.py produced validation metrics. Treat this as an implementation failure, not evidence about the hypothesis. Failure reason: prepare.py crashed: name 'ticker' is not defined.
 
 ---
+
+## Iteration 2026-05-17-5e24a16 — REVERTED
+
+**Hypothesis:** Replacing residual reversion with a market-breadth-gated low-downside-volatility momentum carry book should improve mean validation Sortino by staying diversified in smoother winners while cutting gross during weak internal breadth regimes.
+
+**Change:** I changed the signal to rank PIT-universe names by intermediate momentum adjusted for downside volatility, drawdown, short-term reversal, and ADV, then scaled fixed-slot gross exposure by cross-sectional breadth instead of using selected-count sizing.
+
+**Decision:** REVERTED — anti-overfit FAILED: bonferroni(p=0.2704 >= alpha/N=0.0100) · random_walk_mc(only 73.00% percentile vs RW null) · sub_period_stationarity(signed min/max Sortino ratio across 2 sub-periods = -1.1068 (need ≥ 0.20); sub-periods = [+1.567, -1.735])
+
+**Result:**
+- evaluator_version: 2026-05-16-univfloor
+- validation_sortino_mean: 0.5512795733663991
+- validation_folds: 13
+- per_fold_sortinos: [2.2073, 0.2701, -3.0459, -0.4035, 1.4457, 2.5477, 5.2065, 4.7466, 1.1313, 0.0722, -0.1109, -2.5271, -4.3732]
+- calmar_mean: 0.20492583159019578
+- hit_rate_mean: 0.4273520207928004
+- profit_factor_mean: 1.6098714564073653
+- trade_count_total: 368
+- aggregate_max_dd: 0.09315537924723666
+- worst_fold_max_dd: 0.04690954074605074
+- max_position_frac_peak: 0.037125752873002925
+- lower_quartile_fold_calmar: -0.14748638361521182
+- n_negative_folds: 5/13
+- risk.passed: True
+- risk.violations: []
+
+**Learning:** Sortino scored 0.551 with no prior kept baseline. Aggregate DD was 9.3%; negative folds were 5/13; trades=368. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: anti-overfit FAILED: bonferroni(p=0.2704 >= alpha/N=0.0100) · random_walk_mc(only 73.00% percentile vs RW null) · sub_period_stationarity(signed min/max Sortino ratio across 2 sub-periods = -1.1068 (need ≥ 0.20); sub-periods = [+1.567, -1.735]).
+
+---
