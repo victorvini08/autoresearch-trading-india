@@ -3530,3 +3530,32 @@ structural learnings are codified in `program.md`. Explore freely.
 **Learning:** Sortino changed from 3.598 to 3.628 (+0.029). Aggregate DD was 15.1% versus previous kept 13.6%; negative folds were 1/13; trades=188. Keep compounding on this change, but future iterations should still explain whether the gain came from better return, lower downside, or fewer fragile folds. Decision reason: sortino 3.628 > prev 3.5982902404874557, agg_dd 15.1%, catastrophe gate clear, anti-overfit gates passed.
 
 ---
+
+## Iteration 2026-05-17-231807c — REVERTED
+
+**Hypothesis:** Tightening the one-day upside-exhaustion entry veto from 7.5% to 6.0% will improve validation Sortino by avoiding short-lived news-gap breakouts whose next-open fills are more reversal-prone while preserving the existing intermediate momentum thesis.
+
+**Change:** I changed only the one-day return veto in _score_for so candidates up more than 6.0% on the signal close are skipped, leaving the ranker, fixed-slot sizing, sector cap, cadence, and order_target_percent-only execution unchanged.
+
+**Decision:** REVERTED — sortino 3.284 did not improve on prev 3.6277126896862444 | anti-overfit FAILED: sub_period_stationarity(signed min/max Sortino ratio across 2 sub-periods = 0.1964 (need ≥ 0.20); sub-periods = [+4.363, +0.857])
+
+**Result:**
+- evaluator_version: 2026-05-16-univfloor
+- validation_sortino_mean: 3.2839774463038367
+- validation_folds: 13
+- per_fold_sortinos: [4.3595, 0.081, -1.2571, 5.4331, 9.7636, 6.6593, 5.9527, 5.9292, 2.3424, -0.1924, 0.958, 1.5477, 1.1148]
+- calmar_mean: 6.989558997919898
+- hit_rate_mean: 0.5457387849772941
+- profit_factor_mean: 5.936199384266313
+- trade_count_total: 191
+- aggregate_max_dd: 0.16181858355494938
+- worst_fold_max_dd: 0.13676595220299706
+- max_position_frac_peak: 0.06546721193820755
+- lower_quartile_fold_calmar: 0.8094643741462493
+- n_negative_folds: 2/13
+- risk.passed: True
+- risk.violations: []
+
+**Learning:** Sortino changed from 3.628 to 3.284 (-0.344). Aggregate DD was 16.2% versus previous kept 15.1%; negative folds were 2/13; trades=191. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 3.284 did not improve on prev 3.6277126896862444 | anti-overfit FAILED: sub_period_stationarity(signed min/max Sortino ratio across 2 sub-periods = 0.1964 (need ≥ 0.20); sub-periods = [+4.363, +0.857]).
+
+---
