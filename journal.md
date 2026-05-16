@@ -2573,3 +2573,32 @@ structural learnings are codified in `program.md`. Explore freely.
 **Learning:** Sortino changed from 3.254 to 2.750 (-0.504). Aggregate DD was 15.1% versus previous kept 13.6%; negative folds were 4/13; trades=188. Do not reuse this exact setup: it failed the catastrophe gate, so the result is not a usable edge even if the hypothesis was economically plausible. Decision reason: sortino 2.750 did not improve on prev 3.2541190820225 | catastrophe: gross exposure: max 150.2% > 100% (cash account — leverage error) | anti-overfit FAILED: sub_period_stationarity(signed min/max Sortino ratio across 2 sub-periods = 0.0003 (need ≥ 0.20); sub-periods = [+3.972, +0.001]).
 
 ---
+
+## Iteration 2026-05-17-41f6d53 — REVERTED
+
+**Hypothesis:** Adding PIT-safe volume accumulation confirmation will improve validation Sortino by preferring momentum leaders whose recent up days carry stronger participation than down days, while avoiding distribution-heavy names that price-only trend filters miss.
+
+**Change:** I added a recent up-volume versus down-volume accumulation score and a modest distribution filter inside the existing fixed-slot ranking, leaving universe handling, cadence, sector cap, gross exposure, and order_target_percent sizing unchanged.
+
+**Decision:** REVERTED — sortino 2.608 did not improve on prev 3.2541190820225
+
+**Result:**
+- evaluator_version: 2026-05-16-univfloor
+- validation_sortino_mean: 2.608437368899362
+- validation_folds: 13
+- per_fold_sortinos: [2.6805, -0.5104, -1.786, 4.3876, 8.5563, 5.4966, 4.9806, 4.7991, 2.0083, 0.9128, 1.8829, 1.3728, -0.8714]
+- calmar_mean: 6.646250222072049
+- hit_rate_mean: 0.5517947051228783
+- profit_factor_mean: 9.368016428174418
+- trade_count_total: 193
+- aggregate_max_dd: 0.1473823033655838
+- worst_fold_max_dd: 0.12803376641435213
+- max_position_frac_peak: 0.06476910750007901
+- lower_quartile_fold_calmar: 1.917386998167208
+- n_negative_folds: 3/13
+- risk.passed: True
+- risk.violations: []
+
+**Learning:** Sortino changed from 3.254 to 2.608 (-0.646). Aggregate DD was 14.7% versus previous kept 13.6%; negative folds were 3/13; trades=193. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 2.608 did not improve on prev 3.2541190820225.
+
+---
