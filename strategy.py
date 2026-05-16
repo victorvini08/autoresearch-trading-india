@@ -81,7 +81,7 @@ class IndiaMomentumQualityRegime(bt.Strategy):
         # are wired so the loop can tune a signal that actually fires.
         ("regime_pct", 95),
         ("fii_threshold_cr", -15000.0),
-        ("n_positions", 6),
+        ("n_positions", 25),
         ("sector_cap", 0.25),
         # Rebalance cadence (biweekly = every other Friday)
         ("rebalance_weekday", 4),       # Friday
