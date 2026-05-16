@@ -563,28 +563,55 @@ def persist_iteration(
 # ---------------------------------------------------------------------------
 
 
-def last_accepted_sortino(journal_text: str) -> float | None:
+def last_accepted_sortino(
+    journal_text: str, *, require_evaluator_version: str | None = None
+) -> float | None:
     """Return the most recent ACCEPTED iteration's validation_sortino_mean.
 
     An accepted entry is one whose body contains the literal token 'KEPT'
-    (we mark accepted entries explicitly when we journal them).
+    (we mark accepted entries explicitly when we journal them). When
+    `require_evaluator_version` is given, only KEPT rows from that evaluator
+    version are considered (see `_last_accepted_value`).
     """
-    return _last_accepted_value(journal_text, "validation_sortino_mean")
+    return _last_accepted_value(
+        journal_text, "validation_sortino_mean",
+        require_evaluator_version=require_evaluator_version,
+    )
 
 
-def last_accepted_aggregate_dd(journal_text: str) -> float | None:
+def last_accepted_aggregate_dd(
+    journal_text: str, *, require_evaluator_version: str | None = None
+) -> float | None:
     """Return the most recent ACCEPTED iteration's aggregate_max_dd.
 
     Used by the KEPT criterion's DD-regression guard: a new iteration that
     improves Sortino but balloons aggregate drawdown by >10pp gets reverted.
-    Returns None for the first KEPT iteration (no comparison possible).
+    Returns None for the first KEPT iteration (no comparison possible) or
+    when the only prior KEPTs ran under a different evaluator version.
     """
-    return _last_accepted_value(journal_text, "aggregate_max_dd")
+    return _last_accepted_value(
+        journal_text, "aggregate_max_dd",
+        require_evaluator_version=require_evaluator_version,
+    )
 
 
-def _last_accepted_value(journal_text: str, key: str) -> float | None:
+def _last_accepted_value(
+    journal_text: str,
+    key: str,
+    *,
+    require_evaluator_version: str | None = None,
+) -> float | None:
     """Walk journal blocks newest-first and return the named metric from the
     most recent KEPT iteration.
+
+    `require_evaluator_version` enforces program.md's rule that changing the
+    evaluator invalidates every prior comparison baseline. When set, a KEPT
+    block only counts if it recorded that exact evaluator version. KEPT rows
+    from an older evaluator (e.g. the 2.172 spike inflated by the pre-fix
+    5-name-universe folds) are skipped, so the first iteration under a new
+    evaluator sees `None` (no comparable baseline) and re-anchors cleanly.
+    This auto-applies to every branch the moment it picks up the new
+    evaluator — no per-branch journal surgery.
 
     The KEPT check looks for the literal `**Decision:** KEPT` line that the
     loop writes — NOT a substring match for "KEPT". A REVERTED iteration's
@@ -603,6 +630,11 @@ def _last_accepted_value(journal_text: str, key: str) -> float | None:
     for block in reversed(blocks):
         if "**Decision:** KEPT" not in block:
             continue
+        if (
+            require_evaluator_version is not None
+            and f"evaluator_version: {require_evaluator_version}" not in block
+        ):
+            continue  # baseline computed under a different evaluator — invalid
         m = pattern.search(block)
         if m:
             try:
@@ -723,6 +755,7 @@ def journal_entry(
         signals = metrics.get("risk_signals", {})
         parts += [
             "**Result:**",
+            f"- evaluator_version: {metrics.get('evaluator_version')}",
             f"- validation_sortino_mean: {metrics.get('validation_sortino_mean')}",
             f"- validation_folds: {metrics.get('validation_folds')}",
             f"- per_fold_sortinos: {metrics.get('per_fold_sortinos')}",
@@ -913,8 +946,17 @@ def main(argv: list[str] | None = None) -> int:
     signals = metrics.get("risk_signals", {}) or {}
     new_agg_dd = float(signals.get("aggregate_max_dd", 0.0))
 
-    last_sortino = last_accepted_sortino(journal)
-    last_agg_dd = last_accepted_aggregate_dd(journal)
+    # Only compare against KEPT baselines computed under the SAME evaluator.
+    # A stale baseline from an older evaluator (different walk-forward rules /
+    # universe floor / gate semantics) is not a valid anchor; treating it as
+    # absent lets the first iteration under this evaluator re-anchor cleanly.
+    cur_eval_ver = metrics.get("evaluator_version")
+    last_sortino = last_accepted_sortino(
+        journal, require_evaluator_version=cur_eval_ver
+    )
+    last_agg_dd = last_accepted_aggregate_dd(
+        journal, require_evaluator_version=cur_eval_ver
+    )
     improved = (last_sortino is None) or (new_sortino > last_sortino)
     sortino_in_range = abs(new_sortino) < 10.0
     sortino_positive = new_sortino > 0
