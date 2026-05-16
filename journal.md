@@ -746,3 +746,32 @@ structural learnings are codified in `program.md`. Explore freely.
 **Learning:** Sortino changed from 2.055 to 2.694 (+0.639). Aggregate DD was 4.6% versus previous kept 4.9%; negative folds were 4/13; trades=48. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: anti-overfit FAILED: universe_respect(variant traded tickers outside the point-in-time universe — survivorship/look-ahead reintroduced (hard reject)) · bonferroni(p=1.0000 >= alpha/N=0.0200) · random_walk_mc(only 0.00% percentile vs RW null).
 
 ---
+
+## Iteration 2026-05-17-a2c332f — REVERTED
+
+**Hypothesis:** Adding a PIT-safe down-market resilience tie-breaker to the kept momentum-quality book will improve validation Sortino by preserving the 12-1 carry edge while avoiding winners that historically sell off harder on broad NSE down days.
+
+**Change:** I added a no-new-parameter down-market loss percentile inside momentum_quality_scores, computed only from active point-in-time close data, and included it as a modest quality component while leaving sizing, cadence, universe handling, and sector caps unchanged.
+
+**Decision:** REVERTED — anti-overfit FAILED: bonferroni(p=0.0175 >= alpha/N=0.0167)
+
+**Result:**
+- evaluator_version: 2026-05-16-univfloor
+- validation_sortino_mean: 2.10504719186774
+- validation_folds: 13
+- per_fold_sortinos: [-0.4802, -0.1604, -0.4869, 2.9426, 6.7008, 2.6287, 4.2129, 6.4934, 1.9448, -0.2362, 0.7194, 2.3457, 0.7411]
+- calmar_mean: 1.1033246821262543
+- hit_rate_mean: 0.4505494505494506
+- profit_factor_mean: 8.47133088726486
+- trade_count_total: 49
+- aggregate_max_dd: 0.04561137768878694
+- worst_fold_max_dd: 0.036291261712123685
+- max_position_frac_peak: 0.03912019988892195
+- lower_quartile_fold_calmar: -0.0954425794843261
+- n_negative_folds: 4/13
+- risk.passed: True
+- risk.violations: []
+
+**Learning:** Sortino changed from 2.055 to 2.105 (+0.050). Aggregate DD was 4.6% versus previous kept 4.9%; negative folds were 4/13; trades=49. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: anti-overfit FAILED: bonferroni(p=0.0175 >= alpha/N=0.0167).
+
+---
