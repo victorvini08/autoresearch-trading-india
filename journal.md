@@ -775,3 +775,15 @@ structural learnings are codified in `program.md`. Explore freely.
 **Learning:** Sortino changed from 2.055 to 2.105 (+0.050). Aggregate DD was 4.6% versus previous kept 4.9%; negative folds were 4/13; trades=49. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: anti-overfit FAILED: bonferroni(p=0.0175 >= alpha/N=0.0167).
 
 ---
+
+## Iteration 2026-05-17-0e6f4c3 — REJECTED
+
+**Hypothesis:** Promoting down-market resilience from a weak ranking nudge to a PIT-safe bottom-quartile veto should improve validation Sortino by removing momentum names that sell off hardest on broad NSE down days while preserving the kept carry signal.
+
+**Change:** Changed momentum_quality_scores to compute a broad active-universe down-day proxy from point-in-time closes and discard the worst-quartile down-market-return candidates before applying the existing momentum-quality rank.
+
+**Decision:** REJECTED — prepare.py crashed: name 'ticker' is not defined
+
+**Learning:** No scored strategy inference: the iteration failed before prepare.py produced validation metrics. Treat this as an implementation failure, not evidence about the hypothesis. Failure reason: prepare.py crashed: name 'ticker' is not defined.
+
+---
