@@ -3,9 +3,10 @@
 PIT-strict long-only swing strategy for NSE equities. The strategy ranks only
 tickers in the injected point-in-time universe, selects positive-trend names
 with lower realized volatility, mild recent strength, defensive relative
-strength on weak market days, persistent multi-leg trend quality, and modest
-short-term pullback quality, applies a 25% sector cap, and sizes by fixed risk
-slots so blocked slots remain cash.
+strength on weak market days, persistent multi-leg trend quality, fresh
+intermediate trend confirmation, and modest short-term pullback quality,
+applies a 25% sector cap, and sizes by fixed risk slots so blocked slots remain
+cash.
 
 Trade contract: every position change goes through order_target_percent only.
 '''
@@ -258,13 +259,15 @@ class IndiaMomentumQualityRegime(bt.Strategy):
 
         current = self._price_at(d, 0)
         trend_start = self._price_at(d, self.p.trend_days)
+        intermediate_start = self._price_at(d, self.p.vol_days)
         recent_start = self._price_at(d, self.p.recent_days)
-        if current is None or trend_start is None or recent_start is None:
+        if current is None or trend_start is None or intermediate_start is None or recent_start is None:
             return None
 
         trend = (current / trend_start) - 1.0
+        intermediate = (current / intermediate_start) - 1.0
         recent = (current / recent_start) - 1.0
-        if trend <= 0.03 or recent < -0.08:
+        if trend <= 0.03 or intermediate <= 0.0 or recent < -0.08:
             return None
 
         vol = self._realized_vol(d, self.p.vol_days)

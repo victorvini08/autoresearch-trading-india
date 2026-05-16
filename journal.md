@@ -1413,3 +1413,32 @@ structural learnings are codified in `program.md`. Explore freely.
 **Learning:** Sortino changed from 2.754 to 2.549 (-0.205). Aggregate DD was 13.9% versus previous kept 10.3%; negative folds were 2/13; trades=95. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 2.549 did not improve on prev 2.754021639889776 | anti-overfit FAILED: sub_period_stationarity(signed min/max Sortino ratio across 2 sub-periods = 0.1198 (need ≥ 0.20); sub-periods = [+3.495, +0.419]).
 
 ---
+
+## Iteration 2026-05-17-8010db2 — KEPT
+
+**Hypothesis:** Adding a PIT-safe intermediate-trend confirmation will improve validation Sortino by removing stale 126-day winners whose most recent 63-day path has already rolled over, while preserving the kept low-volatility pullback ranking.
+
+**Change:** I required the existing 63-day lookback return to be positive before a ticker can be ranked, using the already-present vol_days horizon so the book avoids fading trends without changing sizing, cadence, sector caps, or the order_target_percent-only contract.
+
+**Decision:** KEPT — sortino 2.917 > prev 2.754021639889776, agg_dd 10.3%, catastrophe gate clear, anti-overfit gates passed
+
+**Result:**
+- evaluator_version: 2026-05-16-univfloor
+- validation_sortino_mean: 2.917301771816021
+- validation_folds: 13
+- per_fold_sortinos: [0.9663, 0.254, -0.9872, 4.6016, 8.7425, 7.1583, 5.8965, 5.016, 2.7056, 0.4846, 1.8647, 1.6846, -0.4626]
+- calmar_mean: 5.794404386472798
+- hit_rate_mean: 0.5261123868589931
+- profit_factor_mean: 6.289285683999885
+- trade_count_total: 176
+- aggregate_max_dd: 0.10284383692506154
+- worst_fold_max_dd: 0.0903523374819925
+- max_position_frac_peak: 0.0522533700788161
+- lower_quartile_fold_calmar: 0.9199305420789948
+- n_negative_folds: 2/13
+- risk.passed: True
+- risk.violations: []
+
+**Learning:** Sortino changed from 2.754 to 2.917 (+0.163). Aggregate DD was 10.3% versus previous kept 10.3%; negative folds were 2/13; trades=176. Keep compounding on this change, but future iterations should still explain whether the gain came from better return, lower downside, or fewer fragile folds. Decision reason: sortino 2.917 > prev 2.754021639889776, agg_dd 10.3%, catastrophe gate clear, anti-overfit gates passed.
+
+---
