@@ -318,3 +318,31 @@ This is the autoresearch loop's persistent memory. Every iteration appends an en
 **Learning:** Sortino changed from 2.172 to 1.190 (-0.982). Aggregate DD was 44.1% versus previous kept 22.2%; negative folds were 9/20; trades=435. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 1.190 did not improve on prev 2.172090958313302 | aggregate DD regressed: 44.1% > prev 22.2% + 10pp tolerance | anti-overfit FAILED: bonferroni(p=0.0544 >= alpha/N=0.0250) · random_walk_mc(only 94.58% percentile vs RW null) · parsimony(baseline params=7, strategy=7; needs Sortino +0.00, has +-0.98).
 
 ---
+
+## Iteration 2026-05-16-23f9205 — REVERTED
+
+**Hypothesis:** Tightening the retention buffer from `retention_mult × n_positions` to `n_positions` when the Nifty 200-DMA gate signals bear regime (allow_new=False) will shed the weakest held positions at each bear-regime rebalance, reducing drawdown in the negative folds without introducing any new hyperparameter.
+
+**Change:** In `next()`, split the retention_cap into bull (retention_mult × n_positions = 50) versus bear (n_positions = 25) based on the existing allow_new flag, so positions ranked below n_positions are exited at each bear-regime rebalance instead of held until they fall out of the wider buffer.
+
+**Decision:** REVERTED — sortino 2.090 did not improve on prev 2.172090958313302 | anti-overfit FAILED: parsimony(baseline params=7, strategy=7; needs Sortino +0.00, has +-0.08)
+
+**Result:**
+- validation_sortino_mean: 2.0902495230419262
+- validation_folds: 20
+- per_fold_sortinos: [10.9726, 4.2385, 0.3582, 0.7687, -0.8172, -0.5352, 0.7694, -0.4923, 1.5587, -2.7978, 5.7274, 8.9373, 3.1341, 3.8208, 5.4293, 1.6074, 0.4337, 1.6485, -0.3075, -2.6494]
+- calmar_mean: 3.752320594937557
+- hit_rate_mean: 0.3936704887893343
+- profit_factor_mean: 1.8743486638591444
+- trade_count_total: 353
+- aggregate_max_dd: 0.22259295238242968
+- worst_fold_max_dd: 0.14184105194783447
+- max_position_frac_peak: 0.2129509286403574
+- lower_quartile_fold_calmar: -0.4791699654296854
+- n_negative_folds: 6/20
+- risk.passed: True
+- risk.violations: []
+
+**Learning:** Sortino changed from 2.172 to 2.090 (-0.082). Aggregate DD was 22.3% versus previous kept 22.2%; negative folds were 6/20; trades=353. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 2.090 did not improve on prev 2.172090958313302 | anti-overfit FAILED: parsimony(baseline params=7, strategy=7; needs Sortino +0.00, has +-0.08).
+
+---
