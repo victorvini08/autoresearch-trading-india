@@ -5154,3 +5154,32 @@ structural learnings are codified in `program.md`. Explore freely.
 **Learning:** Sortino changed from 3.628 to 3.628 (+0.000). Aggregate DD was 15.1% versus previous kept 15.1%; negative folds were 1/13; trades=188. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 3.628 did not improve on prev 3.6277126896862444.
 
 ---
+
+## Iteration 2026-05-17-d98449a — REVERTED
+
+**Hypothesis:** Switching the biweekly rebalance to the opposite Friday cohort will improve mean validation Sortino by changing execution timing without adding signal parameters or increasing concentration.
+
+**Change:** I changed only the default rebalance_week_parity from 1 to 0, preserving the existing ranking, universe, fixed-slot sizing, sector cap, and order_target_percent-only execution contract.
+
+**Decision:** REVERTED — sortino 2.244 did not improve on prev 3.6277126896862444 | anti-overfit FAILED: sub_period_stationarity(signed min/max Sortino ratio across 2 sub-periods = -0.0366 (need ≥ 0.20); sub-periods = [+3.295, -0.120])
+
+**Result:**
+- evaluator_version: 2026-05-16-univfloor
+- validation_sortino_mean: 2.2440424353655413
+- validation_folds: 13
+- per_fold_sortinos: [2.9924, 0.4341, -1.3196, 4.4775, 8.9584, 5.9583, 3.301, 3.2972, 1.5552, -0.3932, 0.7183, -0.3562, -0.4509]
+- calmar_mean: 5.3341989922552715
+- hit_rate_mean: 0.45521924656540036
+- profit_factor_mean: 2.8308507741343223
+- trade_count_total: 200
+- aggregate_max_dd: 0.20225691346389785
+- worst_fold_max_dd: 0.14316940109491239
+- max_position_frac_peak: 0.07325720077384909
+- lower_quartile_fold_calmar: -0.4973263939642089
+- n_negative_folds: 4/13
+- risk.passed: True
+- risk.violations: []
+
+**Learning:** Sortino changed from 3.628 to 2.244 (-1.384). Aggregate DD was 20.2% versus previous kept 15.1%; negative folds were 4/13; trades=200. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 2.244 did not improve on prev 3.6277126896862444 | anti-overfit FAILED: sub_period_stationarity(signed min/max Sortino ratio across 2 sub-periods = -0.0366 (need ≥ 0.20); sub-periods = [+3.295, -0.120]).
+
+---
