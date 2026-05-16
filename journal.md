@@ -1147,3 +1147,32 @@ structural learnings are codified in `program.md`. Explore freely.
 **Learning:** Sortino changed from 2.925 to 2.549 (-0.376). Aggregate DD was 7.8% versus previous kept 5.5%; negative folds were 4/13; trades=43. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 2.549 did not improve on prev 2.9249943159478287.
 
 ---
+
+## Iteration 2026-05-17-5074a65 — REVERTED
+
+**Hypothesis:** Score-ordered retention will improve mean validation Sortino by preserving the kept residual momentum-quality signal while letting the strongest new leaders displace weak incumbents instead of giving every retained holding unconditional priority.
+
+**Change:** I changed the rebalance candidate construction to union retained active holdings and eligible new entries, sort that union by current score, reserve slots for inactive off-universe holdings without trading them, and then apply the existing fixed-slot sizing and sector cap.
+
+**Decision:** REVERTED — sortino 1.327 did not improve on prev 2.9249943159478287 | anti-overfit FAILED: bonferroni(p=0.0315 >= alpha/N=0.0125)
+
+**Result:**
+- evaluator_version: 2026-05-16-univfloor
+- validation_sortino_mean: 1.3266904851748413
+- validation_folds: 13
+- per_fold_sortinos: [-0.6589, -1.6851, -4.037, -0.7734, 6.3345, 1.5463, 5.1281, 5.235, 2.9562, 0.5146, 1.0097, 2.6288, -0.9519]
+- calmar_mean: 0.9220077496957242
+- hit_rate_mean: 0.4649596579758523
+- profit_factor_mean: 4.415879758295518
+- trade_count_total: 183
+- aggregate_max_dd: 0.10267177069962552
+- worst_fold_max_dd: 0.046305679652453295
+- max_position_frac_peak: 0.0401983247939903
+- lower_quartile_fold_calmar: -0.3735320070072268
+- n_negative_folds: 5/13
+- risk.passed: True
+- risk.violations: []
+
+**Learning:** Sortino changed from 2.925 to 1.327 (-1.598). Aggregate DD was 10.3% versus previous kept 5.5%; negative folds were 5/13; trades=183. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 1.327 did not improve on prev 2.9249943159478287 | anti-overfit FAILED: bonferroni(p=0.0315 >= alpha/N=0.0125).
+
+---
