@@ -346,3 +346,31 @@ This is the autoresearch loop's persistent memory. Every iteration appends an en
 **Learning:** Sortino changed from 2.172 to 2.090 (-0.082). Aggregate DD was 22.3% versus previous kept 22.2%; negative folds were 6/20; trades=353. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 2.090 did not improve on prev 2.172090958313302 | anti-overfit FAILED: parsimony(baseline params=7, strategy=7; needs Sortino +0.00, has +-0.08).
 
 ---
+
+## Iteration 2026-05-16-5f210ed — REVERTED
+
+**Hypothesis:** Repurposing the currently-unused regime_pct parameter as a VIX stress threshold — halving gross exposure to 50% when India VIX's 252-day percentile exceeds regime_pct/100 (default 95th percentile) while keeping the 200-DMA new-entry gate unchanged — will reduce downside deviation in the 6 negative folds by cutting leverage during genuine market stress episodes, improving mean validation Sortino without consuming any new parsimony budget.
+
+**Change:** Merged _regime_gate into a new _macro_state method that returns both (allow_new, gross_mult): allow_new is the existing 200-DMA check; gross_mult is 0.50 when macro_signals['india_vix_pct_252d'] > regime_pct/100 else 1.0; next() multiplies the 0.99 gross-exposure target by gross_mult so all selected positions are sized at half weight during VIX stress, with graceful fallback to full exposure when the macro DB is unavailable.
+
+**Decision:** REVERTED — sortino 2.162 did not improve on prev 2.172090958313302 | anti-overfit FAILED: parsimony(baseline params=7, strategy=7; needs Sortino +0.00, has +-0.01)
+
+**Result:**
+- validation_sortino_mean: 2.16191284563873
+- validation_folds: 20
+- per_fold_sortinos: [10.9726, 4.2385, 0.3582, 0.5735, -1.6107, -0.3482, 0.6975, -0.4923, 1.5587, -2.3272, 4.9112, 11.2162, 3.1341, 3.8208, 5.4293, 1.6074, 0.0559, 2.285, -0.1016, -2.7408]
+- calmar_mean: 3.4228816863907072
+- hit_rate_mean: 0.3975346917160373
+- profit_factor_mean: 1.8538356350044882
+- trade_count_total: 353
+- aggregate_max_dd: 0.23010774753495603
+- worst_fold_max_dd: 0.14640939339255754
+- max_position_frac_peak: 0.20510836721620584
+- lower_quartile_fold_calmar: -0.27939930435403665
+- n_negative_folds: 7/20
+- risk.passed: True
+- risk.violations: []
+
+**Learning:** Sortino changed from 2.172 to 2.162 (-0.010). Aggregate DD was 23.0% versus previous kept 22.2%; negative folds were 7/20; trades=353. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 2.162 did not improve on prev 2.172090958313302 | anti-overfit FAILED: parsimony(baseline params=7, strategy=7; needs Sortino +0.00, has +-0.01).
+
+---
