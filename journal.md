@@ -1993,3 +1993,32 @@ structural learnings are codified in `program.md`. Explore freely.
 **Learning:** Sortino changed from 3.167 to 3.167 (+0.000). Aggregate DD was 10.4% versus previous kept 10.4%; negative folds were 2/13; trades=177. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 3.167 did not improve on prev 3.166988802108574.
 
 ---
+
+## Iteration 2026-05-17-5d15d95 — REVERTED
+
+**Hypothesis:** Adding a no-new-parameter off-universe exposure reserve will improve validation Sortino by preventing stale holdings that leave the PIT universe from combining with new buys into excess gross exposure, while preserving fixed-slot sizing for eligible names.
+
+**Change:** I changed rebalance sizing so active selections only receive unused gross budget after accounting for currently held off-universe positions, reducing leverage-like drift without trading off-universe tickers or changing the ranking signal.
+
+**Decision:** REVERTED — sortino 3.032 did not improve on prev 3.166988802108574
+
+**Result:**
+- evaluator_version: 2026-05-16-univfloor
+- validation_sortino_mean: 3.031735786405346
+- validation_folds: 13
+- per_fold_sortinos: [4.3995, 0.7945, -0.7988, 4.1624, 7.9305, 6.9571, 4.7835, 4.7652, 2.4136, 0.3415, 2.2054, 2.0626, -0.6045]
+- calmar_mean: 4.885258427453613
+- hit_rate_mean: 0.5104743672616976
+- profit_factor_mean: 6.0082371228797395
+- trade_count_total: 173
+- aggregate_max_dd: 0.08563369663578183
+- worst_fold_max_dd: 0.07596572130001682
+- max_position_frac_peak: 0.04742946605435194
+- lower_quartile_fold_calmar: 0.8395467139772771
+- n_negative_folds: 2/13
+- risk.passed: True
+- risk.violations: []
+
+**Learning:** Sortino changed from 3.167 to 3.032 (-0.135). Aggregate DD was 8.6% versus previous kept 10.4%; negative folds were 2/13; trades=173. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 3.032 did not improve on prev 3.166988802108574.
+
+---
