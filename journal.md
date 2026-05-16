@@ -2312,3 +2312,32 @@ structural learnings are codified in `program.md`. Explore freely.
 **Learning:** Sortino changed from 3.254 to 3.254 (-0.000). Aggregate DD was 13.6% versus previous kept 13.6%; negative folds were 2/13; trades=188. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 3.254 did not improve on prev 3.2541190820225.
 
 ---
+
+## Iteration 2026-05-17-56d97ec — REVERTED
+
+**Hypothesis:** Adding a PIT-safe cross-sectional trend-relative score should improve validation Sortino by favoring stocks with true leadership over broad-market beta while keeping the existing absolute uptrend, volatility, pullback, sector-cap, and fixed-slot controls intact.
+
+**Change:** I added an active-universe median 126-day trend benchmark and passed it into scoring so each candidate receives a capped leadership bonus/penalty based on excess intermediate trend, without changing sizing or rebalance mechanics.
+
+**Decision:** REVERTED — sortino 3.174 did not improve on prev 3.2541190820225
+
+**Result:**
+- evaluator_version: 2026-05-16-univfloor
+- validation_sortino_mean: 3.174291594803495
+- validation_folds: 13
+- per_fold_sortinos: [4.1041, -0.0537, -1.5402, 5.1861, 9.763, 6.3696, 5.8547, 5.2939, 2.3662, 0.6732, 1.9802, 1.7034, -0.4348]
+- calmar_mean: 7.1681948671306035
+- hit_rate_mean: 0.560852335328401
+- profit_factor_mean: 5.571197657886653
+- trade_count_total: 190
+- aggregate_max_dd: 0.13610743175496431
+- worst_fold_max_dd: 0.11696078762693822
+- max_position_frac_peak: 0.0645603776989541
+- lower_quartile_fold_calmar: 1.2507269695551222
+- n_negative_folds: 3/13
+- risk.passed: True
+- risk.violations: []
+
+**Learning:** Sortino changed from 3.254 to 3.174 (-0.080). Aggregate DD was 13.6% versus previous kept 13.6%; negative folds were 3/13; trades=190. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 3.174 did not improve on prev 3.2541190820225.
+
+---
