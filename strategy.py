@@ -312,7 +312,7 @@ class IndiaMomentumQualityRegime(bt.Strategy):
         recent = (current / recent_start) - 1.0
         fast = (current / fast_start) - 1.0
         one_day = (current / prior) - 1.0
-        if trend <= 0.03 or intermediate <= 0.0 or recent < -0.08 or one_day > 0.075:
+        if trend <= 0.03 or intermediate <= 0.0 or recent < -0.04 or one_day > 0.075:
             return None
 
         vol = self._realized_vol(d, self.p.vol_days)
