@@ -3762,3 +3762,32 @@ structural learnings are codified in `program.md`. Explore freely.
 **Learning:** Sortino changed from 3.628 to 3.289 (-0.339). Aggregate DD was 15.1% versus previous kept 15.1%; negative folds were 1/13; trades=198. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 3.289 did not improve on prev 3.6277126896862444.
 
 ---
+
+## Iteration 2026-05-17-9643b82 — REVERTED
+
+**Hypothesis:** Adding a PIT-safe liquidity/participation proxy through recent volume stability will improve validation Sortino by avoiding thin or irregularly traded momentum names whose price signals are more prone to gap and fill noise under Dhan delivery costs.
+
+**Change:** I added a recent-volume consistency check and small score reward using only historical feed volume, preserving the existing fixed-slot sizing, sector cap, PIT universe enforcement, and biweekly cadence.
+
+**Decision:** REVERTED — sortino 3.560 did not improve on prev 3.6277126896862444
+
+**Result:**
+- evaluator_version: 2026-05-16-univfloor
+- validation_sortino_mean: 3.5598000020285565
+- validation_folds: 13
+- per_fold_sortinos: [4.1867, 0.3336, -0.6419, 5.3946, 9.5453, 6.7233, 5.9474, 5.5469, 2.4743, 0.2098, 2.0183, 2.0364, 2.5029]
+- calmar_mean: 7.3583735407734485
+- hit_rate_mean: 0.5166057547279267
+- profit_factor_mean: 4.3862068966635706
+- trade_count_total: 195
+- aggregate_max_dd: 0.14015843440115217
+- worst_fold_max_dd: 0.10961957249255248
+- max_position_frac_peak: 0.06326102937093966
+- lower_quartile_fold_calmar: 1.780295602109625
+- n_negative_folds: 1/13
+- risk.passed: True
+- risk.violations: []
+
+**Learning:** Sortino changed from 3.628 to 3.560 (-0.068). Aggregate DD was 14.0% versus previous kept 15.1%; negative folds were 1/13; trades=195. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 3.560 did not improve on prev 3.6277126896862444.
+
+---
