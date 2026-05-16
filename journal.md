@@ -486,3 +486,31 @@ This is the autoresearch loop's persistent memory. Every iteration appends an en
 **Learning:** Sortino changed from 2.172 to 1.731 (-0.441). Aggregate DD was 26.5% versus previous kept 22.2%; negative folds were 6/20; trades=350. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 1.731 did not improve on prev 2.172090958313302 | anti-overfit FAILED: bonferroni(p=0.0158 >= alpha/N=0.0063) · parsimony(baseline params=7, strategy=7; needs Sortino +0.00, has +-0.44).
 
 ---
+
+## Iteration 2026-05-16-3df953d — REVERTED
+
+**Hypothesis:** Blending 52-week-high proximity with a cross-sectionally normalized skip_days return rank (score = proximity × (0.5 + 0.5 × normalized_short_term_rank)) will improve mean validation Sortino by selecting stocks with both sustained anchoring-bias momentum and recent relative strength, where cross-sectional normalization makes the secondary signal regime-independent — directly addressing the stationarity failure of the absolute consistency-factor variant (which used an absolute monthly-count that was regime-dependent).
+
+**Change:** Replace the single-signal proximity sort in _rank_universe with a two-pass rank blend: compute skip_days returns for all candidates, normalize them cross-sectionally to [0,1], then multiply each stock's proximity by (0.5 + 0.5 × normalized_rank) so proximity remains the primary signal while recent relative strength provides a continuous, regime-invariant tiebreaker — no new hyperparameters added.
+
+**Decision:** REVERTED — anti-overfit FAILED: universe_respect(variant traded tickers outside the point-in-time universe — survivorship/look-ahead reintroduced (hard reject)) · bonferroni(p=0.0090 >= alpha/N=0.0056) · sub_period_stationarity(min/max ratio of |Sortino| across 3 sub-periods = 0.16)
+
+**Result:**
+- validation_sortino_mean: 2.2462927404418083
+- validation_folds: 20
+- per_fold_sortinos: [10.9726, 4.2385, 0.3582, 0.7687, -0.8172, -1.1951, 0.2348, 1.8849, -0.2903, -1.3, 3.5893, 13.3181, 6.2305, 4.8196, 2.3504, -0.2846, 0.267, 0.8389, -0.279, -0.7793]
+- calmar_mean: 5.339451570330285
+- hit_rate_mean: 0.3944182575932069
+- profit_factor_mean: 2.267341351345501
+- trade_count_total: 406
+- aggregate_max_dd: 0.27120429335615726
+- worst_fold_max_dd: 0.19559955313427288
+- max_position_frac_peak: 0.20926766798047633
+- lower_quartile_fold_calmar: -0.604024072725275
+- n_negative_folds: 7/20
+- risk.passed: True
+- risk.violations: []
+
+**Learning:** Sortino changed from 2.172 to 2.246 (+0.074). Aggregate DD was 27.1% versus previous kept 22.2%; negative folds were 7/20; trades=406. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: anti-overfit FAILED: universe_respect(variant traded tickers outside the point-in-time universe — survivorship/look-ahead reintroduced (hard reject)) · bonferroni(p=0.0090 >= alpha/N=0.0056) · sub_period_stationarity(min/max ratio of |Sortino| across 3 sub-periods = 0.16).
+
+---
