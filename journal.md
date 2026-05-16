@@ -1030,3 +1030,31 @@ This is the autoresearch loop's persistent memory. Every iteration appends an en
 **Learning:** Sortino scored 1.791 with no prior kept baseline. Aggregate DD was 70.2%; negative folds were 11/20; trades=72. Do not reuse this exact setup: it failed the catastrophe gate, so the result is not a usable edge even if the hypothesis was economically plausible. Decision reason: catastrophe: max drawdown: 70.2% > 50% (account-wipe territory) | anti-overfit FAILED: bonferroni(p=0.4075 >= alpha/N=0.0050) · sub_period_stationarity(min/max ratio of |Sortino| across 3 sub-periods = 0.11).
 
 ---
+
+## Iteration 2026-05-16-2991fdf — REVERTED
+
+**Hypothesis:** Using a point-in-time Nifty 50 200-DMA trend gate to go fully defensive when the broad market is below trend should improve validation Sortino by reducing the recurring long-only crash drawdown without adding a tuned hyperparameter.
+
+**Change:** I removed the disallowed pathlib dependency and added a numeric Nifty-vs-200DMA defensive gate that exits all holdings and blocks new entries when the index is below its 200-day average, while preserving biweekly ranking, sector caps, PIT universe handling, and order_target_percent-only execution.
+
+**Decision:** REVERTED — catastrophe: max drawdown: 86.4% > 50% (account-wipe territory) | anti-overfit FAILED: sub_period_stationarity(min/max ratio of |Sortino| across 3 sub-periods = 0.02)
+
+**Result:**
+- validation_sortino_mean: 1.2226461221135445
+- validation_folds: 20
+- per_fold_sortinos: [10.2078, 4.2456, 1.044, -0.4525, -3.5735, -2.0113, -3.4524, -4.2897, -2.4906, -2.185, 1.7866, 14.9913, 7.6339, 3.128, 2.8153, 3.1902, 0.7265, -0.4423, -3.2094, -3.2096]
+- calmar_mean: 5.63899541603786
+- hit_rate_mean: 0.24500000000000002
+- profit_factor_mean: 0.46706373444576477
+- trade_count_total: 32
+- aggregate_max_dd: 0.8635885353748112
+- worst_fold_max_dd: 0.4021710423452941
+- max_position_frac_peak: 1.2186307069176447
+- lower_quartile_fold_calmar: -2.0368618152186424
+- n_negative_folds: 10/20
+- risk.passed: False
+- risk.violations: ['max drawdown: 86.4% > 50% (account-wipe territory)']
+
+**Learning:** Sortino scored 1.223 with no prior kept baseline. Aggregate DD was 86.4%; negative folds were 10/20; trades=32. Do not reuse this exact setup: it failed the catastrophe gate, so the result is not a usable edge even if the hypothesis was economically plausible. Decision reason: catastrophe: max drawdown: 86.4% > 50% (account-wipe territory) | anti-overfit FAILED: sub_period_stationarity(min/max ratio of |Sortino| across 3 sub-periods = 0.02).
+
+---
