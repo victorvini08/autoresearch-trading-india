@@ -3820,3 +3820,32 @@ structural learnings are codified in `program.md`. Explore freely.
 **Learning:** Sortino changed from 3.628 to 3.472 (-0.156). Aggregate DD was 13.3% versus previous kept 15.1%; negative folds were 1/13; trades=147. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 3.472 did not improve on prev 3.6277126896862444.
 
 ---
+
+## Iteration 2026-05-17-3dba668 — REVERTED
+
+**Hypothesis:** Adding a PIT-safe continuous macro de-risking overlay will improve validation Sortino by cutting fixed-slot gross exposure during broad-market trend stress or high India VIX regimes while leaving the proven stock ranker unchanged.
+
+**Change:** I imported continuous macro signals from llm.features and added a gross-exposure scaler in next() that keeps fixed n_positions sizing but leaves more cash when Nifty is below its 200DMA or India VIX percentile is elevated.
+
+**Decision:** REVERTED — sortino 3.525 did not improve on prev 3.6277126896862444
+
+**Result:**
+- evaluator_version: 2026-05-16-univfloor
+- validation_sortino_mean: 3.525274663287535
+- validation_folds: 13
+- per_fold_sortinos: [5.1239, 0.3219, -1.0144, 5.1648, 9.2383, 6.6554, 5.946, 6.0395, 3.1008, 0.3713, 1.7173, 1.4879, 1.6758]
+- calmar_mean: 7.192951165900895
+- hit_rate_mean: 0.5468037806838713
+- profit_factor_mean: 6.000826735278253
+- trade_count_total: 182
+- aggregate_max_dd: 0.11811032778721371
+- worst_fold_max_dd: 0.10080245794519255
+- max_position_frac_peak: 0.061569788217822996
+- lower_quartile_fold_calmar: 1.39197619235361
+- n_negative_folds: 1/13
+- risk.passed: True
+- risk.violations: []
+
+**Learning:** Sortino changed from 3.628 to 3.525 (-0.102). Aggregate DD was 11.8% versus previous kept 15.1%; negative folds were 1/13; trades=182. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 3.525 did not improve on prev 3.6277126896862444.
+
+---
