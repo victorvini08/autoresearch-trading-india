@@ -746,3 +746,32 @@ structural learnings are codified in `program.md`. Explore freely.
 **Learning:** Sortino scored 2.300 with no prior kept baseline. Aggregate DD was 13.5%; negative folds were 3/13; trades=216. Keep compounding on this change, but future iterations should still explain whether the gain came from better return, lower downside, or fewer fragile folds. Decision reason: sortino 2.300 > prev None, agg_dd 13.5%, catastrophe gate clear, anti-overfit gates passed.
 
 ---
+
+## Iteration 2026-05-16-d04afff — REVERTED
+
+**Hypothesis:** Replacing total-volatility carry with downside-risk-adjusted low-vol trend selection will improve validation Sortino by favoring stocks whose realized volatility comes mainly from upside moves while retaining the PIT-safe fixed-slot construction that passed the gates.
+
+**Change:** I changed the scorer to penalize downside semivolatility and recent losing-day frequency instead of treating all volatility equally, while keeping the same universe, rebalance, sector-cap, and fixed-slot sizing contracts.
+
+**Decision:** REVERTED — sortino 2.271 did not improve on prev 2.300137799824258
+
+**Result:**
+- evaluator_version: 2026-05-16-univfloor
+- validation_sortino_mean: 2.2712257064828467
+- validation_folds: 13
+- per_fold_sortinos: [1.3072, -0.2372, -2.2867, 2.6748, 7.2456, 6.168, 4.1299, 3.9276, 2.2547, 0.6059, 2.1134, 2.4926, -0.8699]
+- calmar_mean: 5.1603722278884145
+- hit_rate_mean: 0.5260658272821883
+- profit_factor_mean: 12.602526460785286
+- trade_count_total: 213
+- aggregate_max_dd: 0.13820955252153636
+- worst_fold_max_dd: 0.07713044557214493
+- max_position_frac_peak: 0.03761862663919408
+- lower_quartile_fold_calmar: 1.2336853811531694
+- n_negative_folds: 3/13
+- risk.passed: True
+- risk.violations: []
+
+**Learning:** Sortino changed from 2.300 to 2.271 (-0.029). Aggregate DD was 13.8% versus previous kept 13.5%; negative folds were 3/13; trades=213. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 2.271 did not improve on prev 2.300137799824258.
+
+---
