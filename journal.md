@@ -1007,3 +1007,32 @@ structural learnings are codified in `program.md`. Explore freely.
 **Learning:** Sortino changed from 2.622 to 2.622 (+0.000). Aggregate DD was 11.7% versus previous kept 11.7%; negative folds were 2/13; trades=153. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 2.622 did not improve on prev 2.622326027486962.
 
 ---
+
+## Iteration 2026-05-16-ed59182 — REVERTED
+
+**Hypothesis:** Adding a late-stage overextension guard will improve validation Sortino by keeping the persistent low-volatility trend book from buying names whose 21-day move has already become a short-term blow-off.
+
+**Change:** I capped the contribution of recent momentum and rejected extreme recent extensions relative to the longer trend, preserving PIT filtering, fixed-slot sizing, biweekly cadence, and sector caps.
+
+**Decision:** REVERTED — sortino 2.558 did not improve on prev 2.622326027486962
+
+**Result:**
+- evaluator_version: 2026-05-16-univfloor
+- validation_sortino_mean: 2.5581285105098512
+- validation_folds: 13
+- per_fold_sortinos: [1.2362, 0.5634, -1.4783, 4.1889, 7.6815, 6.301, 4.4447, 4.1145, 2.5391, 1.1307, 1.8249, 1.9082, -1.199]
+- calmar_mean: 6.21624261754215
+- hit_rate_mean: 0.5262046148923976
+- profit_factor_mean: 7.295844541266126
+- trade_count_total: 153
+- aggregate_max_dd: 0.11835886239226545
+- worst_fold_max_dd: 0.09750157367736607
+- max_position_frac_peak: 0.05162328793954709
+- lower_quartile_fold_calmar: 2.2712234819791366
+- n_negative_folds: 2/13
+- risk.passed: True
+- risk.violations: []
+
+**Learning:** Sortino changed from 2.622 to 2.558 (-0.064). Aggregate DD was 11.8% versus previous kept 11.7%; negative folds were 2/13; trades=153. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 2.558 did not improve on prev 2.622326027486962.
+
+---
