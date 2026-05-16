@@ -601,3 +601,32 @@ structural learnings are codified in `program.md`. Explore freely.
 **Learning:** Sortino scored 2.055 with no prior kept baseline. Aggregate DD was 4.9%; negative folds were 4/13; trades=59. Keep compounding on this change, but future iterations should still explain whether the gain came from better return, lower downside, or fewer fragile folds. Decision reason: sortino 2.055 > prev None, agg_dd 4.9%, catastrophe gate clear, anti-overfit gates passed.
 
 ---
+
+## Iteration 2026-05-17-89e95d1 — REVERTED
+
+**Hypothesis:** Scaling gross exposure down when the existing momentum-quality screen finds too few positive-momentum names will improve mean validation Sortino by cutting weak-regime downside without changing the kept signal thesis.
+
+**Change:** I added an opportunity-breadth gross adjustment that uses the existing entry_pct as the desired candidate breadth, then funds fixed slots less when the scoreable PIT universe is thinner than that.
+
+**Decision:** REVERTED — sortino 1.879 did not improve on prev 2.05528277047027
+
+**Result:**
+- evaluator_version: 2026-05-16-univfloor
+- validation_sortino_mean: 1.8792236332074201
+- validation_folds: 13
+- per_fold_sortinos: [-0.467, -1.2135, -2.2676, 4.1588, 6.8874, 1.2029, 4.5848, 6.6055, 2.352, 0.6559, 0.9666, 1.5153, -0.5513]
+- calmar_mean: 1.1457677108959643
+- hit_rate_mean: 0.43150183150183147
+- profit_factor_mean: 4.751562803418205
+- trade_count_total: 62
+- aggregate_max_dd: 0.06640389170137881
+- worst_fold_max_dd: 0.034362107964349096
+- max_position_frac_peak: 0.03965068504588806
+- lower_quartile_fold_calmar: -0.18260900646095202
+- n_negative_folds: 4/13
+- risk.passed: True
+- risk.violations: []
+
+**Learning:** Sortino changed from 2.055 to 1.879 (-0.176). Aggregate DD was 6.6% versus previous kept 4.9%; negative folds were 4/13; trades=62. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 1.879 did not improve on prev 2.05528277047027.
+
+---
