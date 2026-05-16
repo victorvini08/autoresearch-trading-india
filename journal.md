@@ -4835,3 +4835,32 @@ structural learnings are codified in `program.md`. Explore freely.
 **Learning:** Sortino changed from 3.628 to 2.820 (-0.808). Aggregate DD was 48.7% versus previous kept 15.1%; negative folds were 5/13; trades=194. Do not reuse this exact setup: it failed the catastrophe gate, so the result is not a usable edge even if the hypothesis was economically plausible. Decision reason: sortino 2.820 did not improve on prev 3.6277126896862444 | aggregate DD regressed: 48.7% > prev 15.1% + 10pp tolerance | catastrophe: gross exposure: max 183.6% > 100% (cash account — leverage error) | anti-overfit FAILED: bonferroni(p=0.0340 >= alpha/N=0.0100) · sub_period_stationarity(signed min/max Sortino ratio across 2 sub-periods = -0.1857 (need ≥ 0.20); sub-periods = [+4.439, -0.824]).
 
 ---
+
+## Iteration 2026-05-17-6894b6d — REVERTED
+
+**Hypothesis:** Adding a PIT-safe cross-sectional breadth gate will improve validation Sortino by keeping the book invested only when enough active NSE names have positive intermediate trends, avoiding weak-market momentum traps without relying on coarse macro labels.
+
+**Change:** I added an active-universe 63-day positive-trend breadth calculation and use it to require constructive market participation before ranking candidates, while preserving fixed-slot sizing, sector caps, PIT filtering, and order_target_percent-only execution.
+
+**Decision:** REVERTED — sortino 3.159 did not improve on prev 3.6277126896862444 | anti-overfit FAILED: parsimony(baseline params=8, strategy=10; +2 param(s) need Sortino +0.20, has -0.47)
+
+**Result:**
+- evaluator_version: 2026-05-16-univfloor
+- validation_sortino_mean: 3.1592703992044564
+- validation_folds: 13
+- per_fold_sortinos: [4.7508, -0.7174, -1.6764, 4.3243, 8.1086, 6.824, 6.1365, 5.6354, 2.3169, 0.5854, 1.9883, 1.7316, 1.0626]
+- calmar_mean: 6.91112004482518
+- hit_rate_mean: 0.5025359632825697
+- profit_factor_mean: 5.310556469255042
+- trade_count_total: 177
+- aggregate_max_dd: 0.16971774086650526
+- worst_fold_max_dd: 0.1267144863370063
+- max_position_frac_peak: 0.06441513019779876
+- lower_quartile_fold_calmar: 0.9731764478147087
+- n_negative_folds: 2/13
+- risk.passed: True
+- risk.violations: []
+
+**Learning:** Sortino changed from 3.628 to 3.159 (-0.468). Aggregate DD was 17.0% versus previous kept 15.1%; negative folds were 2/13; trades=177. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 3.159 did not improve on prev 3.6277126896862444 | anti-overfit FAILED: parsimony(baseline params=8, strategy=10; +2 param(s) need Sortino +0.20, has -0.47).
+
+---
