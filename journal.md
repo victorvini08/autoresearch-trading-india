@@ -717,3 +717,32 @@ structural learnings are codified in `program.md`. Explore freely.
 **Learning:** Sortino scored 0.280 with no prior kept baseline. Aggregate DD was 33.4%; negative folds were 6/13; trades=481. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: anti-overfit FAILED: universe_respect(variant traded tickers outside the point-in-time universe — survivorship/look-ahead reintroduced (hard reject)) · bonferroni(p=1.0000 >= alpha/N=0.0143) · random_walk_mc(only 0.00% percentile vs RW null) · sub_period_stationarity(signed min/max Sortino ratio across 2 sub-periods = -1.6522 (need ≥ 0.20); sub-periods = [+1.521, -2.513]).
 
 ---
+
+## Iteration 2026-05-16-46cd091 — KEPT
+
+**Hypothesis:** A PIT-strict fixed-slot low-volatility carry book will improve validation Sortino by selecting liquid stocks with positive absolute trend, low realized volatility, and mild recent momentum while eliminating off-universe order calls that caused recent hard rejects.
+
+**Change:** I replaced the quality/pathlib-dependent 12-1 momentum scaffold with a self-contained low-vol trend scorer, fixed-slot sizing, PIT-only order emission, and sector caps so unused slots remain cash and no off-universe ticker is traded.
+
+**Decision:** KEPT — sortino 2.300 > prev None, agg_dd 13.5%, catastrophe gate clear, anti-overfit gates passed
+
+**Result:**
+- evaluator_version: 2026-05-16-univfloor
+- validation_sortino_mean: 2.300137799824258
+- validation_folds: 13
+- per_fold_sortinos: [0.9605, -0.2451, -2.2078, 3.3114, 8.4794, 6.8408, 3.9823, 4.0077, 2.1785, 0.2396, 2.3435, 2.1551, -2.1442]
+- calmar_mean: 5.893461632919962
+- hit_rate_mean: 0.5034653727477847
+- profit_factor_mean: 9.655897946766926
+- trade_count_total: 216
+- aggregate_max_dd: 0.1351700873941156
+- worst_fold_max_dd: 0.07499475131662524
+- max_position_frac_peak: 0.03743669504283939
+- lower_quartile_fold_calmar: 0.3745614192048328
+- n_negative_folds: 3/13
+- risk.passed: True
+- risk.violations: []
+
+**Learning:** Sortino scored 2.300 with no prior kept baseline. Aggregate DD was 13.5%; negative folds were 3/13; trades=216. Keep compounding on this change, but future iterations should still explain whether the gain came from better return, lower downside, or fewer fragile folds. Decision reason: sortino 2.300 > prev None, agg_dd 13.5%, catastrophe gate clear, anti-overfit gates passed.
+
+---
