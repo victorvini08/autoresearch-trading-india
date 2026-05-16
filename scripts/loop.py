@@ -745,18 +745,31 @@ def commit_reverted(iteration_id: str, reason: str) -> None:
 # ---------------------------------------------------------------------------
 
 
-def make_provider(name: str) -> Provider:
+def make_provider(name: str, model: str | None = None) -> Provider:
+    """Build the loop's LLM provider.
+
+    `model=None` keeps the CLAUDE.md-locked default: Opus 4.7 for the
+    claude meta-coder driver, codex's own config default for codex. Pass an
+    explicit model (e.g. "claude-sonnet-4-6") to override — Sonnet is
+    materially faster/cheaper than Opus for the proposal step at the cost of
+    weaker code generation; opt-in only, the default stays Opus.
+    """
     if name == "claude":
-        # Opus for the meta-coder loop driver per CLAUDE.md tiering.
-        return ClaudeCodeProvider(model="claude-opus-4-7")
+        return ClaudeCodeProvider(model=model or "claude-opus-4-7")
     if name == "codex":
-        return CodexProvider()
+        return CodexProvider(model=model)
     raise ValueError(f"unknown provider {name!r}; expected claude|codex")
 
 
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--provider", choices=["claude", "codex"], default="claude")
+    p.add_argument(
+        "--model",
+        default=None,
+        help="Override the LLM model (e.g. claude-sonnet-4-6). Default: "
+        "Opus 4.7 for claude / codex config default. Opt-in faster/cheaper.",
+    )
     p.add_argument(
         "--iteration-id",
         default=date.today().isoformat() + "-" + subprocess.check_output(
@@ -785,10 +798,11 @@ def main(argv: list[str] | None = None) -> int:
         from backtest.anti_overfit import BASELINE_HYPERPARAMS
         baseline_hyperparams = BASELINE_HYPERPARAMS
 
-    print(f"[loop {args.iteration_id}] provider={args.provider}, "
+    print(f"[loop {args.iteration_id}] provider={args.provider}"
+          f"{('/' + args.model) if args.model else ''}, "
           f"recent_attempts={len(attempts)}", flush=True)
 
-    provider = make_provider(args.provider)
+    provider = make_provider(args.provider, args.model)
     prompt = build_prompt(program, journal, strategy_text, attempts)
     raw = provider.classify(prompt, timeout=600)
     parsed = _extract_json_obj(raw)
