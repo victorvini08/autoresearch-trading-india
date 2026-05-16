@@ -1065,3 +1065,32 @@ structural learnings are codified in `program.md`. Explore freely.
 **Learning:** Sortino changed from 2.622 to 2.592 (-0.030). Aggregate DD was 12.2% versus previous kept 11.7%; negative folds were 2/13; trades=156. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 2.592 did not improve on prev 2.622326027486962.
 
 ---
+
+## Iteration 2026-05-16-443eebc — REVERTED
+
+**Hypothesis:** Adding a no-new-parameter intraday range-risk penalty will improve validation Sortino by avoiding fragile low-close-volatility uptrends whose hidden high-low/gap volatility is more likely to produce downside shocks after costs.
+
+**Change:** I added a PIT-safe true-range risk scorer over the existing volatility window, reject extreme range-risk names, and penalize range risk in the existing fixed-slot defensive trend ranking while preserving universe, sector-cap, biweekly rebalance, and order_target_percent-only sizing.
+
+**Decision:** REVERTED — sortino 2.567 did not improve on prev 2.622326027486962
+
+**Result:**
+- evaluator_version: 2026-05-16-univfloor
+- validation_sortino_mean: 2.5669852130945463
+- validation_folds: 13
+- per_fold_sortinos: [1.3639, 0.645, -1.6287, 4.2435, 7.6813, 6.3099, 4.4948, 4.1606, 2.4627, 0.8845, 1.8544, 1.6242, -0.7253]
+- calmar_mean: 6.155435456280178
+- hit_rate_mean: 0.5354120740998568
+- profit_factor_mean: 5.390546288064362
+- trade_count_total: 155
+- aggregate_max_dd: 0.11354020634894656
+- worst_fold_max_dd: 0.10023415246133957
+- max_position_frac_peak: 0.05201452818970178
+- lower_quartile_fold_calmar: 1.8667375347737465
+- n_negative_folds: 2/13
+- risk.passed: True
+- risk.violations: []
+
+**Learning:** Sortino changed from 2.622 to 2.567 (-0.055). Aggregate DD was 11.4% versus previous kept 11.7%; negative folds were 2/13; trades=155. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 2.567 did not improve on prev 2.622326027486962.
+
+---
