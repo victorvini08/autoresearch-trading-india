@@ -920,3 +920,32 @@ structural learnings are codified in `program.md`. Explore freely.
 **Learning:** Sortino changed from 2.443 to 2.453 (+0.010). Aggregate DD was 11.3% versus previous kept 11.3%; negative folds were 2/13; trades=157. Keep compounding on this change, but future iterations should still explain whether the gain came from better return, lower downside, or fewer fragile folds. Decision reason: sortino 2.453 > prev 2.442697150351653, agg_dd 11.3%, catastrophe gate clear, anti-overfit gates passed.
 
 ---
+
+## Iteration 2026-05-16-e61876f — KEPT
+
+**Hypothesis:** Adding a PIT-safe trend-persistence term will improve validation Sortino by favoring stocks whose intermediate uptrend is built across multiple recent legs rather than one noisy jump, while preserving the kept defensive low-volatility construction.
+
+**Change:** I added a multi-segment trend persistence scorer and a mild choppiness rejection inside the existing fixed-slot low-vol defensive ranking so selection prefers steadier trends without changing rebalance cadence, sizing, universe filtering, or sector caps.
+
+**Decision:** KEPT — sortino 2.622 > prev 2.453167311281237, agg_dd 11.7%, catastrophe gate clear, anti-overfit gates passed
+
+**Result:**
+- evaluator_version: 2026-05-16-univfloor
+- validation_sortino_mean: 2.622326027486962
+- validation_folds: 13
+- per_fold_sortinos: [1.2091, 0.6032, -1.4789, 4.1896, 8.0178, 6.6497, 4.4499, 4.1487, 2.5153, 1.1231, 1.9903, 1.9082, -1.2356]
+- calmar_mean: 6.540782394279262
+- hit_rate_mean: 0.5481967253460466
+- profit_factor_mean: 12.293469892056804
+- trade_count_total: 153
+- aggregate_max_dd: 0.117327930332949
+- worst_fold_max_dd: 0.09750157367736607
+- max_position_frac_peak: 0.0517795203579806
+- lower_quartile_fold_calmar: 2.2274429325453626
+- n_negative_folds: 2/13
+- risk.passed: True
+- risk.violations: []
+
+**Learning:** Sortino changed from 2.453 to 2.622 (+0.169). Aggregate DD was 11.7% versus previous kept 11.3%; negative folds were 2/13; trades=153. Keep compounding on this change, but future iterations should still explain whether the gain came from better return, lower downside, or fewer fragile folds. Decision reason: sortino 2.622 > prev 2.453167311281237, agg_dd 11.7%, catastrophe gate clear, anti-overfit gates passed.
+
+---

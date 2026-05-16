@@ -1,13 +1,13 @@
-"""India autoresearch strategy.
+'''India autoresearch strategy.
 
 PIT-strict long-only swing strategy for NSE equities. The strategy ranks only
 tickers in the injected point-in-time universe, selects positive-trend names
-with lower realized volatility, mild recent strength, and defensive relative
-strength on weak market days, applies a 25% sector cap, and sizes by fixed
-risk slots so blocked slots remain cash.
+with lower realized volatility, mild recent strength, defensive relative
+strength on weak market days, and persistent multi-leg trend quality, applies
+a 25% sector cap, and sizes by fixed risk slots so blocked slots remain cash.
 
 Trade contract: every position change goes through order_target_percent only.
-"""
+'''
 
 from __future__ import annotations
 
@@ -37,22 +37,22 @@ def resolve_active_universe(
 
 
 class IndiaMomentumQualityRegime(bt.Strategy):
-    """PIT-safe fixed-slot low-volatility trend strategy."""
+    '''PIT-safe fixed-slot low-volatility trend strategy.'''
 
     params = (
-        ("trend_days", 126),
-        ("recent_days", 21),
-        ("vol_days", 63),
-        ("max_drawdown_days", 63),
-        ("defensive_days", 42),
-        ("n_positions", 18),
-        ("gross_exposure", 0.90),
-        ("sector_cap", 0.25),
-        ("rebalance_weekday", 4),
-        ("rebalance_period_weeks", 2),
-        ("rebalance_week_parity", 0),
-        ("enforce_sector_cap", True),
-        ("universe_by_date", None),
+        ('trend_days', 126),
+        ('recent_days', 21),
+        ('vol_days', 63),
+        ('max_drawdown_days', 63),
+        ('defensive_days', 42),
+        ('n_positions', 18),
+        ('gross_exposure', 0.90),
+        ('sector_cap', 0.25),
+        ('rebalance_weekday', 4),
+        ('rebalance_period_weeks', 2),
+        ('rebalance_week_parity', 0),
+        ('enforce_sector_cap', True),
+        ('universe_by_date', None),
     )
 
     def __init__(self) -> None:
@@ -66,7 +66,7 @@ class IndiaMomentumQualityRegime(bt.Strategy):
 
     @staticmethod
     def _ticker_of(d) -> str:
-        name = getattr(d, "_name", "") or getattr(d, "name", "") or ""
+        name = getattr(d, '_name', '') or getattr(d, 'name', '') or ''
         return name.upper()
 
     def _active_universe(self, today: date) -> set[str] | None:
@@ -75,12 +75,12 @@ class IndiaMomentumQualityRegime(bt.Strategy):
     def _load_sector_map(self) -> dict[str, SectorAssignment]:
         rows = []
         for d in self.datas:
-            ind = getattr(d, "_industry", None) or getattr(d, "industry", None)
+            ind = getattr(d, '_industry', None) or getattr(d, 'industry', None)
             t = self._ticker_of(d)
 
             class _Row:
                 ticker = t
-                industry = ind or ""
+                industry = ind or ''
 
             rows.append(_Row())
         return assign_sectors(rows)
@@ -92,7 +92,7 @@ class IndiaMomentumQualityRegime(bt.Strategy):
         iso_week = today.isocalendar().week
         if not self._week_parity_initialized:
             self._week_parity_initialized = True
-            object.__setattr__(self.params, "rebalance_week_parity", iso_week % 2)
+            object.__setattr__(self.params, 'rebalance_week_parity', iso_week % 2)
             return True
         return iso_week % 2 == self.p.rebalance_week_parity
 
@@ -143,6 +143,35 @@ class IndiaMomentumQualityRegime(bt.Strategy):
             if dd < worst:
                 worst = dd
         return abs(worst)
+
+    def _trend_persistence(self, d) -> float | None:
+        segments = 6
+        step = max(1, self.p.trend_days // segments)
+        if len(d) < (segments * step) + 2:
+            return None
+
+        positive = 0
+        used = 0
+        total = 0.0
+        for idx in range(segments, 0, -1):
+            p0 = self._price_at(d, idx * step)
+            p1 = self._price_at(d, (idx - 1) * step)
+            if p0 is None or p1 is None:
+                return None
+            interval_ret = (p1 / p0) - 1.0
+            if not math.isfinite(interval_ret):
+                return None
+            if interval_ret > 0.0:
+                positive += 1
+            total += interval_ret
+            used += 1
+
+        if used < segments:
+            return None
+        hit_rate = positive / used
+        avg_step = total / used
+        clipped_avg = max(min(avg_step * 3.0, 0.15), -0.15)
+        return (hit_rate - 0.5) + clipped_avg
 
     def _recent_market_returns(self, active: set[str] | None, days: int) -> list[float] | None:
         daily_returns: list[list[float]] = []
@@ -220,15 +249,17 @@ class IndiaMomentumQualityRegime(bt.Strategy):
 
         vol = self._realized_vol(d, self.p.vol_days)
         drawdown = self._max_drawdown(d, self.p.max_drawdown_days)
-        if vol is None or drawdown is None:
+        persistence = self._trend_persistence(d)
+        if vol is None or drawdown is None or persistence is None:
             return None
-        if vol > 0.75 or drawdown > 0.35:
+        if vol > 0.75 or drawdown > 0.35 or persistence < -0.05:
             return None
 
         defensive = self._defensive_relative_strength(d, market_returns)
         return (
-            (0.68 * trend)
-            + (0.18 * recent)
+            (0.64 * trend)
+            + (0.16 * recent)
+            + (0.22 * persistence)
             + (2.25 * defensive)
             - (0.45 * vol)
             - (0.35 * drawdown)
@@ -251,8 +282,8 @@ class IndiaMomentumQualityRegime(bt.Strategy):
     def _sector_of(self, ticker: str) -> str:
         assignment = self._sector_map.get(ticker)
         if assignment is None:
-            return ""
-        sector = getattr(assignment, "sector", "") or getattr(assignment, "bucket", "") or ""
+            return ''
+        sector = getattr(assignment, 'sector', '') or getattr(assignment, 'bucket', '') or ''
         return str(sector)
 
     def _select_with_sector_cap(self, ranked: list[tuple[str, float]]) -> list[str]:
@@ -302,7 +333,7 @@ class IndiaMomentumQualityRegime(bt.Strategy):
 
         self._last_rebalance_date = today
         logger.debug(
-            "rebalance %s: active=%s ranked=%d selected=%d target_each=%.4f",
+            'rebalance %s: active=%s ranked=%d selected=%d target_each=%.4f',
             today,
             len(active) if active is not None else None,
             len(ranked),
@@ -311,4 +342,4 @@ class IndiaMomentumQualityRegime(bt.Strategy):
         )
 
 
-__all__ = ["IndiaMomentumQualityRegime"]
+__all__ = ['IndiaMomentumQualityRegime']
