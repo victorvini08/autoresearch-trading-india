@@ -4371,3 +4371,32 @@ structural learnings are codified in `program.md`. Explore freely.
 **Learning:** Sortino changed from 3.628 to 3.172 (-0.456). Aggregate DD was 16.0% versus previous kept 15.1%; negative folds were 4/13; trades=192. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 3.172 did not improve on prev 3.6277126896862444 | anti-overfit FAILED: sub_period_stationarity(signed min/max Sortino ratio across 2 sub-periods = 0.0296 (need ≥ 0.20); sub-periods = [+4.523, +0.134]).
 
 ---
+
+## Iteration 2026-05-17-d0df633 — REVERTED
+
+**Hypothesis:** Adding a PIT-safe volume-accumulation confirmation will improve validation Sortino by favoring momentum names whose trend is supported by recent participation rather than thin price drift.
+
+**Change:** I added a no-new-parameter recent-versus-intermediate volume ratio score using existing recent_days and vol_days, with a mild penalty for volume contraction and a capped reward for constructive accumulation.
+
+**Decision:** REVERTED — sortino 3.387 did not improve on prev 3.6277126896862444
+
+**Result:**
+- evaluator_version: 2026-05-16-univfloor
+- validation_sortino_mean: 3.3873149600808166
+- validation_folds: 13
+- per_fold_sortinos: [5.0725, 0.4805, -1.5147, 4.8689, 9.7651, 6.6567, 5.3403, 5.2118, 2.471, 0.5928, 1.9435, 1.2476, 1.8991]
+- calmar_mean: 7.085350051555053
+- hit_rate_mean: 0.5227604095251154
+- profit_factor_mean: 5.657595605535775
+- trade_count_total: 196
+- aggregate_max_dd: 0.14202664315912114
+- worst_fold_max_dd: 0.11799622281326275
+- max_position_frac_peak: 0.06583544398098763
+- lower_quartile_fold_calmar: 1.2845083026989013
+- n_negative_folds: 1/13
+- risk.passed: True
+- risk.violations: []
+
+**Learning:** Sortino changed from 3.628 to 3.387 (-0.240). Aggregate DD was 14.2% versus previous kept 15.1%; negative folds were 1/13; trades=196. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 3.387 did not improve on prev 3.6277126896862444.
+
+---
