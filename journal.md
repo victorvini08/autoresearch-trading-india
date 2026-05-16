@@ -1094,3 +1094,32 @@ structural learnings are codified in `program.md`. Explore freely.
 **Learning:** Sortino changed from 2.622 to 2.567 (-0.055). Aggregate DD was 11.4% versus previous kept 11.7%; negative folds were 2/13; trades=155. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 2.567 did not improve on prev 2.622326027486962.
 
 ---
+
+## Iteration 2026-05-16-0be2772 — REVERTED
+
+**Hypothesis:** A no-new-data liquidity-confirmation term will improve validation Sortino by preferring low-volatility persistent uptrends whose recent gains are supported by rising traded volume rather than thin price drift.
+
+**Change:** I added a PIT-safe relative volume score using existing OHLCV bars, lightly rewarded volume-confirmed trends, and filtered extreme recent volume droughts while preserving fixed-slot sizing, biweekly rebalance, universe filtering, and sector caps.
+
+**Decision:** REVERTED — sortino 2.113 did not improve on prev 2.622326027486962
+
+**Result:**
+- evaluator_version: 2026-05-16-univfloor
+- validation_sortino_mean: 2.112699935207194
+- validation_folds: 13
+- per_fold_sortinos: [1.3157, 1.3762, -0.5129, 3.2534, 5.967, 5.3635, 3.1018, 2.2409, 1.7854, 0.4626, 1.3125, 1.5349, 0.2641]
+- calmar_mean: 4.046093872219538
+- hit_rate_mean: 0.49294613360760065
+- profit_factor_mean: 2.031813627066274
+- trade_count_total: 181
+- aggregate_max_dd: 0.10401616867658177
+- worst_fold_max_dd: 0.09899941607704243
+- max_position_frac_peak: 0.05174988423741381
+- lower_quartile_fold_calmar: 1.608153504097266
+- n_negative_folds: 1/13
+- risk.passed: True
+- risk.violations: []
+
+**Learning:** Sortino changed from 2.622 to 2.113 (-0.510). Aggregate DD was 10.4% versus previous kept 11.7%; negative folds were 1/13; trades=181. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 2.113 did not improve on prev 2.622326027486962.
+
+---
