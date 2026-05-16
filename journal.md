@@ -4023,3 +4023,32 @@ structural learnings are codified in `program.md`. Explore freely.
 **Learning:** Sortino changed from 3.628 to 3.577 (-0.051). Aggregate DD was 15.3% versus previous kept 15.1%; negative folds were 1/13; trades=188. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 3.577 did not improve on prev 3.6277126896862444.
 
 ---
+
+## Iteration 2026-05-17-8eee07e — REVERTED
+
+**Hypothesis:** Adding a PIT-safe shallow-liquidity-stress veto based on recent zero-or-near-zero price movement will improve validation Sortino by avoiding stale or mechanically pinned names whose momentum scores are unreliable despite passing ADV universe membership.
+
+**Change:** I added a flat-price-day fraction check over the 63-day volatility window and reject candidates with excessive near-zero daily movement, preserving the existing ranker, fixed-slot sizing, biweekly cadence, universe enforcement, and sector cap.
+
+**Decision:** REVERTED — sortino 3.628 did not improve on prev 3.6277126896862444
+
+**Result:**
+- evaluator_version: 2026-05-16-univfloor
+- validation_sortino_mean: 3.6277126896862444
+- validation_folds: 13
+- per_fold_sortinos: [5.1923, 0.3537, -0.9762, 5.6907, 9.8402, 6.8286, 5.9485, 5.5371, 2.3815, 0.5568, 1.9883, 1.7262, 2.0927]
+- calmar_mean: 7.507118314640582
+- hit_rate_mean: 0.5513883363996487
+- profit_factor_mean: 6.028189846151534
+- trade_count_total: 188
+- aggregate_max_dd: 0.15118637146567923
+- worst_fold_max_dd: 0.12589683175444755
+- max_position_frac_peak: 0.06427130110377423
+- lower_quartile_fold_calmar: 1.6078656238728861
+- n_negative_folds: 1/13
+- risk.passed: True
+- risk.violations: []
+
+**Learning:** Sortino changed from 3.628 to 3.628 (+0.000). Aggregate DD was 15.1% versus previous kept 15.1%; negative folds were 1/13; trades=188. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 3.628 did not improve on prev 3.6277126896862444.
+
+---
