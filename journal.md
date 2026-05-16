@@ -787,3 +787,15 @@ structural learnings are codified in `program.md`. Explore freely.
 **Learning:** No scored strategy inference: the iteration failed before prepare.py produced validation metrics. Treat this as an implementation failure, not evidence about the hypothesis. Failure reason: prepare.py crashed: name 'ticker' is not defined.
 
 ---
+
+## Iteration 2026-05-17-098cdb9 — REJECTED
+
+**Hypothesis:** A PIT-safe down-market resilience veto will improve validation Sortino by keeping the 12-1 momentum-quality carry thesis while excluding candidates that historically participate most in broad active-universe down days.
+
+**Change:** I changed momentum_quality_scores to compute active-universe daily market returns from the same point-in-time close matrix and drop the worst-quartile candidates by average return on broad down days before ranking the remaining momentum-quality names.
+
+**Decision:** REJECTED — validation failed: no bt.Strategy subclass defined
+
+**Learning:** No scored strategy inference: the iteration failed before prepare.py produced validation metrics. Treat this as an implementation failure, not evidence about the hypothesis. Failure reason: validation failed: no bt.Strategy subclass defined.
+
+---
