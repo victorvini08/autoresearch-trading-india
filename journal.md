@@ -4922,3 +4922,32 @@ structural learnings are codified in `program.md`. Explore freely.
 **Learning:** Sortino changed from 3.628 to 3.628 (+0.000). Aggregate DD was 15.1% versus previous kept 15.1%; negative folds were 1/13; trades=188. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 3.628 did not improve on prev 3.6277126896862444.
 
 ---
+
+## Iteration 2026-05-17-740e840 — REVERTED
+
+**Hypothesis:** Increasing fixed risk slots from 16 to 18 will improve validation Sortino by reducing single-name concentration and drawdown drag while preserving the existing proven ranking signal, sector cap, and cash-aware fixed-slot sizing.
+
+**Change:** Changed only the existing n_positions parameter from 16 to 18 so each selected name receives a smaller fixed allocation without adding new hyperparameters or altering the signal family.
+
+**Decision:** REVERTED — sortino 3.493 did not improve on prev 3.6277126896862444
+
+**Result:**
+- evaluator_version: 2026-05-16-univfloor
+- validation_sortino_mean: 3.4929560237790724
+- validation_folds: 13
+- per_fold_sortinos: [5.0599, 0.3699, -0.9253, 5.1848, 9.1198, 7.1093, 5.988, 5.5469, 2.3167, 0.1473, 1.6309, 2.0368, 1.8233]
+- calmar_mean: 6.410372786880712
+- hit_rate_mean: 0.541784685902333
+- profit_factor_mean: 5.560345233822021
+- trade_count_total: 184
+- aggregate_max_dd: 0.14218645198740137
+- worst_fold_max_dd: 0.11413589621282746
+- max_position_frac_peak: 0.05682154318202802
+- lower_quartile_fold_calmar: 1.3159926789426324
+- n_negative_folds: 1/13
+- risk.passed: True
+- risk.violations: []
+
+**Learning:** Sortino changed from 3.628 to 3.493 (-0.135). Aggregate DD was 14.2% versus previous kept 15.1%; negative folds were 1/13; trades=184. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 3.493 did not improve on prev 3.6277126896862444.
+
+---
