@@ -3675,3 +3675,32 @@ structural learnings are codified in `program.md`. Explore freely.
 **Learning:** Sortino changed from 3.628 to 3.492 (-0.136). Aggregate DD was 15.7% versus previous kept 15.1%; negative folds were 2/13; trades=199. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 3.492 did not improve on prev 3.6277126896862444.
 
 ---
+
+## Iteration 2026-05-17-2f21a81 — REVERTED
+
+**Hypothesis:** Adding a PIT-safe long-horizon trend alignment check will improve validation Sortino by keeping the existing intermediate momentum ranker out of short-lived rebounds that remain below their broader 9-month trend.
+
+**Change:** I added a long_trend leg derived from existing trend_days and vol_days, requiring positive 189-day trend and lightly rewarding it in the score while preserving fixed-slot sizing, biweekly cadence, sector cap, and order_target_percent-only execution.
+
+**Decision:** REVERTED — sortino 3.247 did not improve on prev 3.6277126896862444
+
+**Result:**
+- evaluator_version: 2026-05-16-univfloor
+- validation_sortino_mean: 3.246727395264047
+- validation_folds: 13
+- per_fold_sortinos: [5.4791, 0.0641, -1.3244, 5.4779, 9.6308, 4.4203, 5.9474, 5.5079, 2.6243, 0.0514, 1.5526, 2.0775, 0.6984]
+- calmar_mean: 6.349499764384325
+- hit_rate_mean: 0.5290766763468597
+- profit_factor_mean: 4.148053805692067
+- trade_count_total: 186
+- aggregate_max_dd: 0.12895083257269452
+- worst_fold_max_dd: 0.11448392367737874
+- max_position_frac_peak: 0.06427304359228458
+- lower_quartile_fold_calmar: 0.5576090036121251
+- n_negative_folds: 3/13
+- risk.passed: True
+- risk.violations: []
+
+**Learning:** Sortino changed from 3.628 to 3.247 (-0.381). Aggregate DD was 12.9% versus previous kept 15.1%; negative folds were 3/13; trades=186. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 3.247 did not improve on prev 3.6277126896862444.
+
+---
