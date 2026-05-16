@@ -86,3 +86,15 @@ This is the autoresearch loop's persistent memory. Every iteration appends an en
 **Learning:** Sortino scored 1.767 with no prior kept baseline. Aggregate DD was 77.8%; negative folds were 9/20; trades=29. Do not reuse this exact setup: it failed the catastrophe gate, so the result is not a usable edge even if the hypothesis was economically plausible. Decision reason: catastrophe: max drawdown: 77.8% > 50% (account-wipe territory) | anti-overfit FAILED: bonferroni(p=0.9846 >= alpha/N=0.0250) · random_walk_mc(only 52.50% percentile vs RW null) · sub_period_stationarity(min/max ratio of |Sortino| across 3 sub-periods = 0.15).
 
 ---
+
+## Iteration 2026-05-16-f921e9d — REJECTED
+
+**Hypothesis:** Adding a parameter-free time-series trend overlay that exits to cash whenever Nifty 50 is below its 200-day moving average will raise mean validation Sortino by truncating the structural ~78% concentrated-long-only catastrophe drawdown that pure cross-sectional momentum cannot fix.
+
+**Change:** Added a canonical Faber-style index-trend de-risking overlay (using llm.features.nifty_vs_200dma_pct with a fixed 0.0 crossing, no new tunable hyperparameter) that forces all positions flat when the broad index is below its 200DMA, leaving the cross-sectional momentum selection untouched.
+
+**Decision:** REJECTED — validation failed: disallowed import: bisect
+
+**Learning:** No scored strategy inference: the iteration failed before prepare.py produced validation metrics. Treat this as an implementation failure, not evidence about the hypothesis. Failure reason: validation failed: disallowed import: bisect.
+
+---
