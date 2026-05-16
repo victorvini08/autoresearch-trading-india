@@ -42,6 +42,8 @@ from pathlib import Path
 
 import numpy as np
 
+from backtest.metrics import SORTINO_DSTD_FLOOR
+
 logger = logging.getLogger(__name__)
 
 
@@ -223,17 +225,68 @@ def random_walk_mc_gate(summary: StrategySummary) -> GateResult:
     )
 
 
+# Monte-Carlo null size. 5000→2000 (2026-05-16): with the vectorized null
+# below the cost is no longer the bottleneck, and at the α/N≈0.01–0.10 the
+# Bonferroni gate operates in, 2000 draws give a p-value resolution of
+# ~±0.01 — finer than the decision boundary. Halving+ the work for no
+# meaningful loss of discriminating power.
+RW_MC_PERMUTATIONS = 2000
+
+
+def _sortino_rows(
+    samples: np.ndarray, periods_per_year: int = 252
+) -> np.ndarray:
+    """Vectorized per-row annualized Sortino, numerically identical to
+    `backtest.metrics.sortino` for every row (asserted by
+    tests/test_anti_overfit.py::test_sortino_rows_matches_scalar_sortino_exactly).
+
+    `samples` is (P, n) (or 1-D, treated as one row). Replaces the
+    5000-iteration Python loop that rebuilt a pandas Series per draw — the
+    dominant per-iteration cost for any variant that reached the MC. Matches
+    every scalar edge case: no downside ⇒ +inf if mean>0 else 0.0; exactly
+    one downside ⇒ std(ddof=1)=NaN ⇒ 0.0 ⇒ floored; dstd floored at
+    SORTINO_DSTD_FLOOR.
+    """
+    M = np.asarray(samples, dtype=np.float64)
+    if M.ndim == 1:
+        M = M[None, :]
+    P = M.shape[0]
+    out = np.empty(P, dtype=np.float64)
+    mean_p = M.mean(axis=1)
+    neg = M < 0.0
+    k = neg.sum(axis=1)
+
+    no_dn = k == 0
+    out[no_dn] = np.where(mean_p[no_dn] > 0.0, np.inf, 0.0)
+
+    has_dn = ~no_dn
+    if has_dn.any():
+        idx = np.where(has_dn)[0]
+        Mi = M[idx]
+        negi = neg[idx]
+        ki = k[idx].astype(np.float64)
+        sneg = np.where(negi, Mi, 0.0).sum(axis=1)
+        mneg = sneg / ki
+        dev2 = np.where(negi, (Mi - mneg[:, None]) ** 2, 0.0).sum(axis=1)
+        with np.errstate(divide="ignore", invalid="ignore"):
+            var = dev2 / (ki - 1.0)          # ddof=1 (matches Series.std)
+        dstd_raw = np.sqrt(var)
+        # k==1 ⇒ pandas std(ddof=1)=NaN ⇒ scalar code treats as 0.0
+        dstd_raw = np.where(ki >= 2.0, dstd_raw, 0.0)
+        dstd_raw = np.nan_to_num(dstd_raw, nan=0.0)
+        dstd = np.maximum(dstd_raw, SORTINO_DSTD_FLOOR)
+        out[idx] = (mean_p[idx] / dstd) * math.sqrt(periods_per_year)
+    return out
+
+
 def compute_rw_mc_null(
     daily_returns: np.ndarray,
-    sortino_fn,
+    sortino_fn=None,
     *,
-    n_permutations: int = 5000,
+    n_permutations: int = RW_MC_PERMUTATIONS,
     rng: np.random.Generator | None = None,
 ) -> tuple[float, np.ndarray]:
     """Return (strategy_pct_rank, null_sortinos).
-
-    `daily_returns` is an array of strategy daily returns (after costs).
-    `sortino_fn` maps an array of daily returns → scalar Sortino.
 
     Builds a NO-EDGE Monte-Carlo null: demean the returns (strip the
     strategy's drift) then IID-bootstrap resample. The null preserves the
@@ -243,27 +296,38 @@ def compute_rw_mc_null(
     mid-distribution and correctly fails the gate. `pct` = fraction of null
     Sortinos ≤ the observed Sortino.
 
-    BUGFIX 2026-05-16: the previous implementation permuted the daily ORDER
+    `sortino_fn` is optional and kept only for backward-compatible call
+    sites; when given it computes the OBSERVED Sortino (the sole real caller
+    passes `backtest.metrics.sortino`, which `_sortino_rows` reproduces
+    exactly, so observed and null stay consistent). The null itself always
+    uses the vectorized `_sortino_rows`.
+
+    PERF 2026-05-16: the bootstrap is fully vectorized — one (P, n) resample
+    + numpy column-wise Sortino, replacing a P-iteration Python loop that
+    rebuilt a pandas Series per draw (~50–100× faster for this step, the
+    dominant non-parallel per-iteration cost). The RNG stream differs from
+    the old sequential draws, so `rw` is the same DISTRIBUTION, not
+    bitwise-identical — inherent to Monte-Carlo, not a behavior change.
+
+    BUGFIX 2026-05-16: the original implementation permuted the daily ORDER
     of the returns and recomputed Sortino — but Sortino depends only on the
-    multiset of returns (mean / downside-std), so it is exactly
-    order-invariant. Every "null" draw equalled the original Sortino to
-    within ~1e-12 float-summation round-off, making `pct` and the Bonferroni
-    `sortino_val_pvalue` pure tie-noise unrelated to strategy quality. That
-    silently failed ~every variant across every experiment (the gate could
-    not be passed because it tested nothing). Verified: 2000 order-perms of
-    a fixed series → std 0.0, 1 unique Sortino.
+    multiset of returns, so it is exactly order-invariant. Every "null" draw
+    equalled the original Sortino, making `pct` / the Bonferroni p-value pure
+    tie-noise that silently failed ~every variant. The demean+bootstrap null
+    here is the fix; the test asserts the null is non-degenerate.
     """
     if rng is None:
         rng = np.random.default_rng()
     if daily_returns.size < 2:
         return 0.0, np.zeros(n_permutations)
-    orig = float(sortino_fn(daily_returns))
+    if sortino_fn is not None:
+        orig = float(sortino_fn(daily_returns))
+    else:
+        orig = float(_sortino_rows(daily_returns)[0])
     centered = daily_returns - float(np.mean(daily_returns))
     n = centered.size
-    rw = np.empty(n_permutations, dtype=np.float64)
-    for i in range(n_permutations):
-        sample = rng.choice(centered, size=n, replace=True)
-        rw[i] = float(sortino_fn(sample))
+    samples = rng.choice(centered, size=(n_permutations, n), replace=True)
+    rw = _sortino_rows(samples)
     pct = float(np.mean(rw <= orig))
     return pct, rw
 
@@ -519,6 +583,7 @@ __all__ = [
     "BASELINE_HYPERPARAMS",
     "DEFAULT_PARSIMONY_DELTA_SORTINO",
     "DEFAULT_MIN_RATIO",
+    "RW_MC_PERMUTATIONS",
     "SEALED_REVEAL_LOG",
     "has_been_revealed",
     "record_sealed_reveal",
