@@ -1036,3 +1036,32 @@ structural learnings are codified in `program.md`. Explore freely.
 **Learning:** Sortino changed from 2.622 to 2.558 (-0.064). Aggregate DD was 11.8% versus previous kept 11.7%; negative folds were 2/13; trades=153. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 2.558 did not improve on prev 2.622326027486962.
 
 ---
+
+## Iteration 2026-05-16-f675e52 — REVERTED
+
+**Hypothesis:** Adding a cross-sectional median-relative trend term will improve validation Sortino by preferring low-volatility persistent uptrends that are also outperforming the current PIT liquid universe, without adding new hyperparameters or changing fixed-slot sizing.
+
+**Change:** I added PIT-safe market-relative trend and recent return context from the active universe and lightly rewarded stocks with positive excess intermediate trend while preserving the kept defensive low-volatility persistence construction.
+
+**Decision:** REVERTED — sortino 2.592 did not improve on prev 2.622326027486962
+
+**Result:**
+- evaluator_version: 2026-05-16-univfloor
+- validation_sortino_mean: 2.5920505953200927
+- validation_folds: 13
+- per_fold_sortinos: [1.2362, 0.5634, -1.4783, 4.1889, 8.0178, 6.649, 4.4498, 4.1487, 2.5153, 1.1545, 1.8711, 1.6157, -1.2356]
+- calmar_mean: 6.461206879013504
+- hit_rate_mean: 0.5482415523139504
+- profit_factor_mean: 11.81856961158141
+- trade_count_total: 156
+- aggregate_max_dd: 0.12198517277780663
+- worst_fold_max_dd: 0.10174801046610864
+- max_position_frac_peak: 0.0517795203579806
+- lower_quartile_fold_calmar: 1.8812876744272047
+- n_negative_folds: 2/13
+- risk.passed: True
+- risk.violations: []
+
+**Learning:** Sortino changed from 2.622 to 2.592 (-0.030). Aggregate DD was 12.2% versus previous kept 11.7%; negative folds were 2/13; trades=156. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 2.592 did not improve on prev 2.622326027486962.
+
+---
