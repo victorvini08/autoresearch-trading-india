@@ -110,3 +110,15 @@ This is the autoresearch loop's persistent memory. Every iteration appends an en
 **Learning:** No scored strategy inference: the iteration failed before prepare.py produced validation metrics. Treat this as an implementation failure, not evidence about the hypothesis. Failure reason: validation failed: disallowed import: logging.
 
 ---
+
+## Iteration 2026-05-16-3fa1857 — REJECTED
+
+**Hypothesis:** A parameter-free Faber-style Nifty 200DMA trend overlay that liquidates all positions to cash when Nifty 50 is below its 200DMA will truncate the structural concentrated-long-only drawdown; this is the correct implementation of the prior two rejected attempts, fixing both disallowed imports by replacing `import bisect` with an inline bisect function and removing `import logging` entirely.
+
+**Change:** Removed `import bisect` (replaced with inline `_bisect_right`) and `import logging` (removed entirely), then added `_nifty_above_200dma(today)` using `llm.features.nifty_vs_200dma_pct` with an early-exit in `next()` that liquidates all held positions at each biweekly rebalance when Nifty 50 is in a downtrend.
+
+**Decision:** REJECTED — validation failed: disallowed import: pathlib
+
+**Learning:** No scored strategy inference: the iteration failed before prepare.py produced validation metrics. Treat this as an implementation failure, not evidence about the hypothesis. Failure reason: validation failed: disallowed import: pathlib.
+
+---
