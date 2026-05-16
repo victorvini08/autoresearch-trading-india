@@ -427,3 +427,32 @@ structural learnings are codified in `program.md`. Explore freely.
 **Learning:** Sortino scored 1.733 with no prior kept baseline. Aggregate DD was 28.7%; negative folds were 4/13; trades=249. Do not reuse this exact setup: it failed the catastrophe gate, so the result is not a usable edge even if the hypothesis was economically plausible. Decision reason: catastrophe: gross exposure: max 116.0% > 100% (cash account — leverage error) | anti-overfit FAILED: bonferroni(p=0.0170 >= alpha/N=0.0100) · sub_period_stationarity(signed min/max Sortino ratio across 2 sub-periods = -0.2265 (need ≥ 0.20); sub-periods = [+2.783, -0.630]).
 
 ---
+
+## Iteration 2026-05-16-fc5c3f8 — REVERTED
+
+**Hypothesis:** A fixed-slot 52-week-high resilience book with explicit off-universe exits and no selected-count sizing will improve validation Sortino by keeping diversified exposure in persistent leaders while eliminating the prior hard-reject causes.
+
+**Change:** I replaced the no-op quality dependency with a PIT-safe price-only resilience rank, fixed sizing to gross/n_positions, and forced dropped-universe holdings to target zero.
+
+**Decision:** REVERTED — catastrophe: gross exposure: max 109.7% > 100% (cash account — leverage error) | anti-overfit FAILED: bonferroni(p=0.0340 >= alpha/N=0.0100) · sub_period_stationarity(signed min/max Sortino ratio across 2 sub-periods = -0.5189 (need ≥ 0.20); sub-periods = [+2.616, -1.357])
+
+**Result:**
+- evaluator_version: 2026-05-16-univfloor
+- validation_sortino_mean: 1.393262980760852
+- validation_folds: 13
+- per_fold_sortinos: [3.0971, 0.4832, -2.2841, 1.8399, 9.7003, 3.5511, 3.8802, 2.0042, 1.2695, -0.4744, 0.0959, -2.6483, -2.4021]
+- calmar_mean: 4.118613424134916
+- hit_rate_mean: 0.5343525975528383
+- profit_factor_mean: 3.0645447174900586
+- trade_count_total: 286
+- aggregate_max_dd: 0.25212973273008044
+- worst_fold_max_dd: 0.1711395057334021
+- max_position_frac_peak: 0.0413603400304295
+- lower_quartile_fold_calmar: -0.9645132383735757
+- n_negative_folds: 4/13
+- risk.passed: False
+- risk.violations: ['gross exposure: max 109.7% > 100% (cash account — leverage error)']
+
+**Learning:** Sortino scored 1.393 with no prior kept baseline. Aggregate DD was 25.2%; negative folds were 4/13; trades=286. Do not reuse this exact setup: it failed the catastrophe gate, so the result is not a usable edge even if the hypothesis was economically plausible. Decision reason: catastrophe: gross exposure: max 109.7% > 100% (cash account — leverage error) | anti-overfit FAILED: bonferroni(p=0.0340 >= alpha/N=0.0100) · sub_period_stationarity(signed min/max Sortino ratio across 2 sub-periods = -0.5189 (need ≥ 0.20); sub-periods = [+2.616, -1.357]).
+
+---
