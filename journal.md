@@ -1123,3 +1123,32 @@ structural learnings are codified in `program.md`. Explore freely.
 **Learning:** Sortino changed from 2.622 to 2.113 (-0.510). Aggregate DD was 10.4% versus previous kept 11.7%; negative folds were 1/13; trades=181. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 2.113 did not improve on prev 2.622326027486962.
 
 ---
+
+## Iteration 2026-05-16-ef270e5 — REVERTED
+
+**Hypothesis:** Adding a no-new-parameter incumbent score buffer will improve validation Sortino by reducing marginal biweekly turnover in the kept defensive trend book while still forcing held names through the same PIT universe, trend, risk, breadth, sector-cap, and fixed-slot constraints.
+
+**Change:** I added a small incumbent bonus only during ranking so existing holdings have to remain fundamentally qualified but are less likely to be displaced by near-tie candidates, targeting DP-cost and churn drag without changing position count, gross exposure, cadence, or selection filters.
+
+**Decision:** REVERTED — sortino 2.543 did not improve on prev 2.622326027486962
+
+**Result:**
+- evaluator_version: 2026-05-16-univfloor
+- validation_sortino_mean: 2.5426836450358454
+- validation_folds: 13
+- per_fold_sortinos: [1.2136, 0.6032, -1.4789, 4.1896, 7.6814, 6.3015, 4.4447, 4.1145, 2.5391, 1.1307, 1.7546, 1.7963, -1.2353]
+- calmar_mean: 6.189999978474575
+- hit_rate_mean: 0.5238377509870722
+- profit_factor_mean: 6.685679756146519
+- trade_count_total: 152
+- aggregate_max_dd: 0.11761957315855116
+- worst_fold_max_dd: 0.09792778395634075
+- max_position_frac_peak: 0.051645165462496326
+- lower_quartile_fold_calmar: 2.232098237130038
+- n_negative_folds: 2/13
+- risk.passed: True
+- risk.violations: []
+
+**Learning:** Sortino changed from 2.622 to 2.543 (-0.080). Aggregate DD was 11.8% versus previous kept 11.7%; negative folds were 2/13; trades=152. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 2.543 did not improve on prev 2.622326027486962.
+
+---
