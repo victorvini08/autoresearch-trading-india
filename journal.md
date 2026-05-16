@@ -2805,3 +2805,32 @@ structural learnings are codified in `program.md`. Explore freely.
 **Learning:** Sortino changed from 3.404 to 3.291 (-0.113). Aggregate DD was 12.9% versus previous kept 13.6%; negative folds were 2/13; trades=186. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 3.291 did not improve on prev 3.4038275153908293 | anti-overfit FAILED: sub_period_stationarity(signed min/max Sortino ratio across 2 sub-periods = 0.1918 (need ≥ 0.20); sub-periods = [+4.380, +0.840]).
 
 ---
+
+## Iteration 2026-05-17-4981859 — REVERTED
+
+**Hypothesis:** Adding a PIT-safe recent downside-skew preference will improve validation Sortino by favoring momentum leaders whose recent volatility is more upside-driven than downside-driven, reducing fragile long entries without adding a new sizing or cadence parameter.
+
+**Change:** I added a downside/upside semivolatility balance term using existing recent_days data, filtering only strongly downside-skewed candidates and lightly rewarding upside-skewed recent paths while preserving fixed-slot sizing, PIT universe filtering, sector caps, and order_target_percent-only execution.
+
+**Decision:** REVERTED — sortino 3.263 did not improve on prev 3.4038275153908293
+
+**Result:**
+- evaluator_version: 2026-05-16-univfloor
+- validation_sortino_mean: 3.262973336372913
+- validation_folds: 13
+- per_fold_sortinos: [4.5621, 0.1542, -0.9811, 5.5331, 9.7905, 6.2403, 5.6814, 5.2382, 2.3074, 0.6708, 1.9325, 1.7267, -0.4376]
+- calmar_mean: 7.4143582371765655
+- hit_rate_mean: 0.5516815010027678
+- profit_factor_mean: 6.3065222550253015
+- trade_count_total: 192
+- aggregate_max_dd: 0.13461287021793353
+- worst_fold_max_dd: 0.11635960389629917
+- max_position_frac_peak: 0.06452462771242871
+- lower_quartile_fold_calmar: 1.2475965156065907
+- n_negative_folds: 2/13
+- risk.passed: True
+- risk.violations: []
+
+**Learning:** Sortino changed from 3.404 to 3.263 (-0.141). Aggregate DD was 13.5% versus previous kept 13.6%; negative folds were 2/13; trades=192. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 3.263 did not improve on prev 3.4038275153908293.
+
+---
