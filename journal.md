@@ -3153,3 +3153,32 @@ structural learnings are codified in `program.md`. Explore freely.
 **Learning:** Sortino changed from 3.404 to 3.333 (-0.070). Aggregate DD was 13.6% versus previous kept 13.6%; negative folds were 2/13; trades=190. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 3.333 did not improve on prev 3.4038275153908293.
 
 ---
+
+## Iteration 2026-05-17-df694cd — REVERTED
+
+**Hypothesis:** Adding a no-new-parameter 21-day volatility-compression preference will improve validation Sortino by favoring momentum names whose recent risk is contracting rather than expanding, reducing fragile late-breakout entries while preserving fixed-slot diversification.
+
+**Change:** I added a PIT-safe short-vol versus intermediate-vol comparison inside the existing score and vetoed names with sharply expanding recent volatility, so the ranker keeps the same universe, sector cap, cadence, and fixed-slot sizing contract.
+
+**Decision:** REVERTED — sortino 3.139 did not improve on prev 3.4038275153908293
+
+**Result:**
+- evaluator_version: 2026-05-16-univfloor
+- validation_sortino_mean: 3.138560254511375
+- validation_folds: 13
+- per_fold_sortinos: [4.9399, -0.1144, -1.3088, 4.6144, 9.8261, 6.9791, 5.5324, 4.6266, 1.6721, 0.8763, 1.8062, 1.6269, -0.2754]
+- calmar_mean: 7.578885591763408
+- hit_rate_mean: 0.5402687496013288
+- profit_factor_mean: 8.08570126303193
+- trade_count_total: 192
+- aggregate_max_dd: 0.14480516012956113
+- worst_fold_max_dd: 0.12640104337863173
+- max_position_frac_peak: 0.06548627587298662
+- lower_quartile_fold_calmar: 1.9935283506633197
+- n_negative_folds: 3/13
+- risk.passed: True
+- risk.violations: []
+
+**Learning:** Sortino changed from 3.404 to 3.139 (-0.265). Aggregate DD was 14.5% versus previous kept 13.6%; negative folds were 3/13; trades=192. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 3.139 did not improve on prev 3.4038275153908293.
+
+---
