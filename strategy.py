@@ -4,9 +4,9 @@ PIT-strict long-only swing strategy for NSE equities. The strategy ranks only
 tickers in the injected point-in-time universe, selects positive-trend names
 with lower realized volatility, mild recent strength, defensive relative
 strength on weak market days, persistent multi-leg trend quality, fresh
-intermediate trend confirmation, modest short-term pullback quality, and avoids
-one-week exhaustion, applies a 25% sector cap, and sizes by fixed risk slots so
-blocked slots remain cash.
+intermediate trend confirmation, modest short-term pullback quality, avoids
+one-week exhaustion, rewards efficient intermediate trends, applies a 25%
+sector cap, and sizes by fixed risk slots so blocked slots remain cash.
 
 Trade contract: every position change goes through order_target_percent only.
 '''
@@ -149,6 +149,19 @@ class IndiaMomentumQualityRegime(bt.Strategy):
             return None
         return vol
 
+    def _trend_efficiency(self, d, days: int) -> float | None:
+        rets = self._returns(d, days)
+        if not rets or len(rets) < 20:
+            return None
+        total = sum(rets)
+        path = sum(abs(r) for r in rets)
+        if path <= 0.0 or not math.isfinite(path):
+            return None
+        efficiency = total / path
+        if not math.isfinite(efficiency):
+            return None
+        return max(min(efficiency, 1.0), -1.0)
+
     def _max_drawdown(self, d, days: int) -> float | None:
         if len(d) < days + 1:
             return None
@@ -283,9 +296,16 @@ class IndiaMomentumQualityRegime(bt.Strategy):
         drawdown = self._max_drawdown(d, self.p.max_drawdown_days)
         persistence = self._trend_persistence(d)
         ma_distance = self._simple_ma_distance(d, self.p.recent_days)
-        if vol is None or drawdown is None or persistence is None or ma_distance is None:
+        efficiency = self._trend_efficiency(d, self.p.vol_days)
+        if (
+            vol is None
+            or drawdown is None
+            or persistence is None
+            or ma_distance is None
+            or efficiency is None
+        ):
             return None
-        if vol > 0.75 or drawdown > 0.35 or persistence < -0.05 or ma_distance > 0.16:
+        if vol > 0.75 or drawdown > 0.35 or persistence < -0.05 or ma_distance > 0.16 or efficiency < -0.05:
             return None
 
         pullback_quality = -abs(ma_distance - 0.015)
@@ -295,6 +315,7 @@ class IndiaMomentumQualityRegime(bt.Strategy):
             (0.64 * trend)
             + (0.13 * recent)
             + (0.22 * persistence)
+            + (0.10 * efficiency)
             + (0.18 * pullback_quality)
             + (2.25 * defensive)
             - (0.45 * vol)

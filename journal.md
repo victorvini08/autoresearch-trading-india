@@ -1558,3 +1558,32 @@ structural learnings are codified in `program.md`. Explore freely.
 **Learning:** Sortino changed from 3.105 to 3.022 (-0.083). Aggregate DD was 11.2% versus previous kept 10.4%; negative folds were 3/13; trades=179. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 3.022 did not improve on prev 3.104746404728241.
 
 ---
+
+## Iteration 2026-05-17-a47fc2b — KEPT
+
+**Hypothesis:** Adding a PIT-safe trend-efficiency quality term will improve validation Sortino by preferring persistent uptrends that advance with less two-way churn, without changing exposure, cadence, universe enforcement, or risk-slot sizing.
+
+**Change:** I added a no-new-parameter 63-day efficiency ratio to the ranking score, lightly rewarding smoother intermediate trends and filtering only extremely choppy candidates while preserving all hard trading constraints.
+
+**Decision:** KEPT — sortino 3.155 > prev 3.104746404728241, agg_dd 10.4%, catastrophe gate clear, anti-overfit gates passed
+
+**Result:**
+- evaluator_version: 2026-05-16-univfloor
+- validation_sortino_mean: 3.154924091916563
+- validation_folds: 13
+- per_fold_sortinos: [4.058, 0.2971, -1.0201, 4.4824, 8.6638, 6.8799, 5.9905, 5.0768, 2.6769, 0.5506, 2.0011, 1.8138, -0.4569]
+- calmar_mean: 5.965498090654785
+- hit_rate_mean: 0.5397083685545223
+- profit_factor_mean: 5.442900781502686
+- trade_count_total: 175
+- aggregate_max_dd: 0.10353971981539965
+- worst_fold_max_dd: 0.09078464134780861
+- max_position_frac_peak: 0.05222323354869495
+- lower_quartile_fold_calmar: 1.0613768244374644
+- n_negative_folds: 2/13
+- risk.passed: True
+- risk.violations: []
+
+**Learning:** Sortino changed from 3.105 to 3.155 (+0.050). Aggregate DD was 10.4% versus previous kept 10.4%; negative folds were 2/13; trades=175. Keep compounding on this change, but future iterations should still explain whether the gain came from better return, lower downside, or fewer fragile folds. Decision reason: sortino 3.155 > prev 3.104746404728241, agg_dd 10.4%, catastrophe gate clear, anti-overfit gates passed.
+
+---
