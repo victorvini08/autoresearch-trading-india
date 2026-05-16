@@ -259,6 +259,9 @@ class IndiaMomentumQualityRegime(bt.Strategy):
         selected: list[str] = []
         sector_counts: dict[str, int] = {}
         max_per_sector = max(1, int(math.floor(self.p.n_positions * self.p.sector_cap)))
+        breadth_floor = max(self.p.n_positions + 4, int(math.ceil(self.p.n_positions * 1.35)))
+        if len(ranked) < breadth_floor:
+            return selected
         for ticker, _score in ranked:
             if len(selected) >= self.p.n_positions:
                 break
