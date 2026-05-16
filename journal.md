@@ -3211,3 +3211,32 @@ structural learnings are codified in `program.md`. Explore freely.
 **Learning:** Sortino changed from 3.404 to 3.404 (+0.000). Aggregate DD was 13.6% versus previous kept 13.6%; negative folds were 2/13; trades=190. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 3.404 did not improve on prev 3.4038275153908293.
 
 ---
+
+## Iteration 2026-05-17-b46e4dc — KEPT
+
+**Hypothesis:** Using a fixed ISO-week parity for biweekly rebalances will improve validation Sortino by avoiding fold-start anchoring and testing the alternate Friday schedule without changing the stock-selection thesis or adding parameters.
+
+**Change:** I changed the rebalance scheduler to honor the existing rebalance_week_parity parameter directly instead of resetting it to each fold's first eligible Friday, so the strategy trades the configured alternate-Friday calendar consistently.
+
+**Decision:** KEPT — sortino 3.598 > prev 3.4038275153908293, agg_dd 13.6%, catastrophe gate clear, anti-overfit gates passed
+
+**Result:**
+- evaluator_version: 2026-05-16-univfloor
+- validation_sortino_mean: 3.5982902404874557
+- validation_folds: 13
+- per_fold_sortinos: [5.1923, 0.432, -1.0257, 5.524, 9.7897, 6.8047, 5.9487, 5.2593, 2.3797, 0.6727, 2.0021, 1.7051, 2.0932]
+- calmar_mean: 7.506087855062573
+- hit_rate_mean: 0.5543471234647706
+- profit_factor_mean: 6.175811542964128
+- trade_count_total: 186
+- aggregate_max_dd: 0.13582530924838732
+- worst_fold_max_dd: 0.11728339561855498
+- max_position_frac_peak: 0.0646215671969394
+- lower_quartile_fold_calmar: 1.624244030969848
+- n_negative_folds: 1/13
+- risk.passed: True
+- risk.violations: []
+
+**Learning:** Sortino changed from 3.404 to 3.598 (+0.194). Aggregate DD was 13.6% versus previous kept 13.6%; negative folds were 1/13; trades=186. Keep compounding on this change, but future iterations should still explain whether the gain came from better return, lower downside, or fewer fragile folds. Decision reason: sortino 3.598 > prev 3.4038275153908293, agg_dd 13.6%, catastrophe gate clear, anti-overfit gates passed.
+
+---

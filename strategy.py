@@ -53,7 +53,7 @@ class IndiaMomentumQualityRegime(bt.Strategy):
         ('sector_cap', 0.25),
         ('rebalance_weekday', 4),
         ('rebalance_period_weeks', 2),
-        ('rebalance_week_parity', 0),
+        ('rebalance_week_parity', 1),
         ('enforce_sector_cap', True),
         ('universe_by_date', None),
     )
@@ -63,7 +63,6 @@ class IndiaMomentumQualityRegime(bt.Strategy):
         self._data_by_ticker = {self._ticker_of(d): d for d in self.datas}
         self._sector_map = self._load_sector_map()
         self._last_rebalance_date: date | None = None
-        self._week_parity_initialized = False
         ubd = self.p.universe_by_date
         self._univ_dates: list[date] | None = sorted(ubd) if ubd else None
 
@@ -93,11 +92,8 @@ class IndiaMomentumQualityRegime(bt.Strategy):
         if today.weekday() != self.p.rebalance_weekday:
             return False
         iso_week = today.isocalendar().week
-        if not self._week_parity_initialized:
-            self._week_parity_initialized = True
-            object.__setattr__(self.params, 'rebalance_week_parity', iso_week % 2)
-            return True
-        return iso_week % 2 == self.p.rebalance_week_parity
+        period = max(int(self.p.rebalance_period_weeks), 1)
+        return iso_week % period == self.p.rebalance_week_parity % period
 
     def _price_at(self, d, ago: int) -> float | None:
         try:
