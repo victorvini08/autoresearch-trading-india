@@ -55,18 +55,48 @@ if str(REPO_ROOT) not in sys.path:
 from llm.provider import ClaudeCodeProvider, CodexProvider, Provider  # noqa: E402
 from scripts._dashboard import render_dashboard  # noqa: E402
 
-# Modules a generated strategy.py is allowed to import. Any module not on this
-# list is rejected — we don't want the agent reaching for the network or the
-# filesystem.
+# Modules a generated strategy.py is allowed to import. The loop runs
+# LLM-written code automatically and unsupervised (now also in worker
+# subprocesses), so this is a SANDBOX: it blocks the agent from reaching the
+# filesystem / network / processes (os, sys, subprocess, pathlib, socket,
+# urllib, requests, pickle, importlib, shutil, ctypes, threading, … are all
+# implicitly rejected by not being here). It is NOT meant to block harmless
+# pure-computation stdlib — excluding those just wastes a full (slow) LLM
+# call when a model naturally writes `import logging`/`bisect` (observed:
+# real proposals hard-rejected on exactly these). So the list = domain libs
+# + a curated safe-stdlib set (data structures / math / typing only — none
+# can touch IO, the network, or spawn processes).
 ALLOWED_IMPORT_PREFIXES = (
+    # domain
     "backtrader",
-    "math",
     "numpy",
     "pandas",
-    "datetime",
     "data.",
     "llm.features",
     "__future__",
+    # safe pure-computation stdlib
+    "math",
+    "datetime",
+    "logging",
+    "bisect",
+    "collections",
+    "itertools",
+    "functools",
+    "statistics",
+    "random",
+    "heapq",
+    "operator",
+    "typing",
+    "dataclasses",
+    "enum",
+    "abc",
+    "numbers",
+    "decimal",
+    "fractions",
+    "copy",
+    "re",
+    "warnings",
+    "json",
 )
 
 RECENT_ATTEMPTS_N = 20
@@ -233,7 +263,10 @@ def validate_strategy_edit(
 
 
 _PROMPT_TEMPLATE = """\
-You are the autoresearch agent for a swing-trading strategy on US stocks.
+You are the autoresearch agent for a long-only swing-trading strategy on
+Indian equities (NSE, CNC delivery) — the top-200-by-ADV liquid Nifty 500
+slice, costed with the Dhan delivery model. (This is an India book, NOT US
+stocks — follow the PROGRAM spec below exactly.)
 
 Your goal: propose ONE concrete change to strategy.py that you believe will
 improve the mean validation Sortino across walk-forward folds. You must NOT
@@ -241,9 +274,12 @@ modify any file other than strategy.py — the evaluator (prepare.py) is
 immutable infrastructure.
 
 You may use ONLY these imports:
-  backtrader, math, numpy, pandas, datetime, __future__,
+  backtrader, numpy, pandas, datetime, __future__,
   data.* (price/macro/news ingest), llm.features (macro_regime, sentiment,
-  events, news_volume).
+  events, news_volume), and safe pure-computation stdlib: math, logging,
+  collections, itertools, functools, statistics, bisect, heapq, random,
+  operator, typing, dataclasses, enum, decimal, fractions, re, json.
+  (No os/sys/subprocess/pathlib/socket/requests/pickle/importlib — sandbox.)
 
 The strategy class must be a single subclass of bt.Strategy and define
 __init__ and next.
