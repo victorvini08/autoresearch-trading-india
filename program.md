@@ -78,22 +78,16 @@ you see is on the real ≥200-name universe — don't reason about that early ga
 
 ---
 
-## Parameterization is yours to design
+## Parameters
 
-There is no prescribed list of knobs to tune. Invent whatever signal,
-parameters, and structure you can justify from the data below — the
-parsimony gate counts hyperparameters dynamically and polices added
-complexity, so you are free to add, remove, or rethink parameters entirely.
-Don't merely perturb the current strategy's constants; if the reject reasons
-say "no edge", change the *thesis*, not a number.
+You choose the signal and its parameters. There is no fixed knob list; the
+parsimony gate counts hyperparameters automatically and penalizes added ones.
 
-Two parameter facts are **constraints, not tuning suggestions**:
-- **Position count ≥ ~15** (default 25, sane range 15–35). Fewer concentrates
-  the book and structurally trips the catastrophe drawdown gate —
-  diversification is signal-agnostic.
-- **Biweekly rebalance is the default cadence.** Weekly/monthly is allowed but
-  must clear the gates and be justified (DP charge ₹14.75/scrip/sell is a real
-  cost at this capital).
+Two hard constraints:
+- **Position count ≥ 15** (default 25, range 15–35). Fewer trips the
+  catastrophe drawdown gate.
+- **Rebalance: biweekly default.** Weekly/monthly allowed if it clears the
+  gates (DP charge ₹14.75/scrip/sell is a real cost).
 
 ## Data available — this is your search space
 
