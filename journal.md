@@ -598,3 +598,31 @@ This is the autoresearch loop's persistent memory. Every iteration appends an en
 **Learning:** Sortino changed from 2.172 to 1.865 (-0.307). Aggregate DD was 19.9% versus previous kept 22.2%; negative folds were 5/20; trades=230. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 1.865 did not improve on prev 2.172090958313302 | anti-overfit FAILED: bonferroni(p=0.0234 >= alpha/N=0.0050) · parsimony(baseline params=7, strategy=7; needs Sortino +0.00, has +-0.31).
 
 ---
+
+## Iteration 2026-05-16-2883cd7 — REVERTED
+
+**Hypothesis:** Monthly rebalancing (rebalance_period_weeks=4 instead of 2) will improve mean validation Sortino by cutting DP charges (~₹14.75/scrip/sell) by approximately half, reducing unnecessary signal noise in a 252-day-lookback signal that has no informational need for biweekly execution, and producing more stationary sub-period returns — consistent with George & Hwang (2004) documenting the 52-week-high effect using monthly rebalancing.
+
+**Change:** Changed rebalance_period_weeks default from 2 to 4 and generalized _is_rebalance_today to use iso_week % self.p.rebalance_period_weeks (replacing the hardcoded % 2), halving transaction frequency and DP costs with no signal or construction changes and no new hyperparameters.
+
+**Decision:** REVERTED — anti-overfit FAILED: sub_period_stationarity(min/max ratio of |Sortino| across 3 sub-periods = 0.30)
+
+**Result:**
+- validation_sortino_mean: 2.2947392511558444
+- validation_folds: 20
+- per_fold_sortinos: [10.9588, 4.1955, 0.3584, 0.7836, -0.7963, -0.8801, 0.9018, 1.6278, -0.0407, -1.8163, 5.7465, 13.145, 0.9453, 4.7497, 4.0216, 2.2624, 0.8767, 0.8961, 0.4196, -2.4605]
+- calmar_mean: 3.9407475401125516
+- hit_rate_mean: 0.42029193029193035
+- profit_factor_mean: 3.967527493205747
+- trade_count_total: 160
+- aggregate_max_dd: 0.19576189817874487
+- worst_fold_max_dd: 0.14052107150389867
+- max_position_frac_peak: 0.1996428791722996
+- lower_quartile_fold_calmar: 0.282945594495983
+- n_negative_folds: 5/20
+- risk.passed: True
+- risk.violations: []
+
+**Learning:** Sortino changed from 2.172 to 2.295 (+0.123). Aggregate DD was 19.6% versus previous kept 22.2%; negative folds were 5/20; trades=160. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: anti-overfit FAILED: sub_period_stationarity(min/max ratio of |Sortino| across 3 sub-periods = 0.30).
+
+---
