@@ -4458,3 +4458,32 @@ structural learnings are codified in `program.md`. Explore freely.
 **Learning:** Sortino changed from 3.628 to 3.541 (-0.086). Aggregate DD was 15.1% versus previous kept 15.1%; negative folds were 2/13; trades=182. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 3.541 did not improve on prev 3.6277126896862444.
 
 ---
+
+## Iteration 2026-05-17-26ccc20 — REVERTED
+
+**Hypothesis:** Replacing the binary macro-regime throttle with a continuous Nifty-50 200-DMA exposure scaler will improve validation Sortino by cutting gross exposure only during objectively weak index regimes while preserving the stock-selection edge in normal markets.
+
+**Change:** I imported nifty_vs_200dma_pct and added a smooth PIT-safe gross-exposure multiplier in next, using current gross when Nifty is above its 200-DMA, partial cash below it, and full liquidation only in deep index weakness.
+
+**Decision:** REVERTED — sortino 3.282 did not improve on prev 3.6277126896862444
+
+**Result:**
+- evaluator_version: 2026-05-16-univfloor
+- validation_sortino_mean: 3.281981275995771
+- validation_folds: 13
+- per_fold_sortinos: [4.7508, 0.229, -1.0148, 3.8509, 8.104, 6.8218, 5.9828, 5.459, 2.4, 0.5854, 1.9883, 1.7262, 1.7823]
+- calmar_mean: 6.868120261519881
+- hit_rate_mean: 0.5371162334397629
+- profit_factor_mean: 5.015173124368818
+- trade_count_total: 183
+- aggregate_max_dd: 0.15138796047723346
+- worst_fold_max_dd: 0.12404537217213206
+- max_position_frac_peak: 0.06441513019779876
+- lower_quartile_fold_calmar: 1.3521146378327087
+- n_negative_folds: 1/13
+- risk.passed: True
+- risk.violations: []
+
+**Learning:** Sortino changed from 3.628 to 3.282 (-0.346). Aggregate DD was 15.1% versus previous kept 15.1%; negative folds were 1/13; trades=183. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 3.282 did not improve on prev 3.6277126896862444.
+
+---
