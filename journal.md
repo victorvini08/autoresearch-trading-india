@@ -598,3 +598,15 @@ This is the autoresearch loop's persistent memory. Every iteration appends an en
 **Learning:** Sortino scored 1.660 with no prior kept baseline. Aggregate DD was 75.0%; negative folds were 9/20; trades=29. Do not reuse this exact setup: it failed the catastrophe gate, so the result is not a usable edge even if the hypothesis was economically plausible. Decision reason: catastrophe: max drawdown: 75.0% > 50% (account-wipe territory) | anti-overfit FAILED: bonferroni(p=0.9998 >= alpha/N=0.0050) · random_walk_mc(only 0.24% percentile vs RW null) · sub_period_stationarity(min/max ratio of |Sortino| across 3 sub-periods = 0.25).
 
 ---
+
+## Iteration 2026-05-16-0a2255d — REJECTED
+
+**Hypothesis:** Adding a simple absolute momentum filter for new entries will improve validation Sortino by avoiding long positions in relative winners whose own 12-1 return is negative, while preserving existing retention behavior and cadence.
+
+**Change:** I filtered fresh candidates to require positive 12-1 momentum before quality screening and sector-cap selection, reducing broad downtrend exposure without adding a new hyperparameter.
+
+**Decision:** REJECTED — validation failed: disallowed import: bisect
+
+**Learning:** No scored strategy inference: the iteration failed before prepare.py produced validation metrics. Treat this as an implementation failure, not evidence about the hypothesis. Failure reason: validation failed: disallowed import: bisect.
+
+---
