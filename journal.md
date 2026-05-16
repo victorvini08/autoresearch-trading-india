@@ -4429,3 +4429,32 @@ structural learnings are codified in `program.md`. Explore freely.
 **Learning:** Sortino changed from 3.628 to 3.072 (-0.556). Aggregate DD was 17.1% versus previous kept 15.1%; negative folds were 3/13; trades=104. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 3.072 did not improve on prev 3.6277126896862444.
 
 ---
+
+## Iteration 2026-05-17-de5c528 — REVERTED
+
+**Hypothesis:** Adding a PIT-safe macro-regime exposure throttle will improve validation Sortino by moving the book partially or fully to cash during India risk-off and shock regimes while leaving the existing stock-selection edge unchanged in neutral and risk-on regimes.
+
+**Change:** I imported macro_regime and added a no-new-parameter gross-exposure multiplier in next: shock liquidates, risk_off carries half gross using the same fixed-slot sizing, and neutral/risk_on preserve the current construction.
+
+**Decision:** REVERTED — sortino 3.541 did not improve on prev 3.6277126896862444
+
+**Result:**
+- evaluator_version: 2026-05-16-univfloor
+- validation_sortino_mean: 3.5412293935081114
+- validation_folds: 13
+- per_fold_sortinos: [5.2073, 0.3327, -1.0303, 5.6019, 9.6922, 6.8289, 5.9487, 5.5379, 2.3802, 0.0299, 2.1549, 1.6828, 1.6689]
+- calmar_mean: 7.2128979108891835
+- hit_rate_mean: 0.5091709760827408
+- profit_factor_mean: 6.0280732169529765
+- trade_count_total: 182
+- aggregate_max_dd: 0.15124544304167936
+- worst_fold_max_dd: 0.12605256109817975
+- max_position_frac_peak: 0.06435838110043943
+- lower_quartile_fold_calmar: 1.2744669037112022
+- n_negative_folds: 2/13
+- risk.passed: True
+- risk.violations: []
+
+**Learning:** Sortino changed from 3.628 to 3.541 (-0.086). Aggregate DD was 15.1% versus previous kept 15.1%; negative folds were 2/13; trades=182. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 3.541 did not improve on prev 3.6277126896862444.
+
+---
