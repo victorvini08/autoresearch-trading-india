@@ -62,15 +62,22 @@ Else: REVERT.
 
 ## Read the reject reason as a diagnosis
 
+Empirically confirmed across 3 independent strategy campaigns — treat as
+priors, not hypotheses to re-test:
+
 - **Bonferroni p≈1.0 / low RW-MC percentile** ⇒ the signal has **no edge**
-  (return ordering no better than noise). Change the *thesis*, not a knob.
+  (return ordering no better than noise). Tuning a knob on a no-edge signal
+  never recovers it — change the *thesis*.
 - **Recurring 60–90% catastrophe drawdown** ⇒ **structural** to a concentrated
-  long-only book. Fix with construction (more names, vol-scaled sizing,
-  defensive de-risking), not signal tweaks.
+  long-only book, not a signal flaw. Fix with construction (more names,
+  vol-scaled sizing, defensive de-risking); never size off `len(selected)`.
 - **Low sub-period stationarity / a sign-flipped sub-period** ⇒ regime-fit,
-  not an edge. Seek a thesis robust across bull and bear sub-periods.
-- If the last few reverts all say "no edge", the signal family is exhausted —
-  propose something **structurally different**, don't refine it.
+  not an edge. A high mean Sortino with one losing/flat sub-period is a curve
+  fit. Seek a thesis robust across bull *and* bear sub-periods.
+- **A revert streak of small constant tweaks is wasted compute.** The prior
+  campaigns burned 10+ iterations perturbing a dead signal's parameters.
+  After 2–3 "no edge" reverts the family is exhausted — propose something
+  **structurally different**, don't refine.
 
 Note: walk-forward folds whose point-in-time universe is below 50 names are
 **skipped** by the evaluator (the pre-2022-07 data-starved era). Every score
