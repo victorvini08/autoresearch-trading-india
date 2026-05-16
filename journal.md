@@ -949,3 +949,32 @@ structural learnings are codified in `program.md`. Explore freely.
 **Learning:** Sortino changed from 2.453 to 2.622 (+0.169). Aggregate DD was 11.7% versus previous kept 11.3%; negative folds were 2/13; trades=153. Keep compounding on this change, but future iterations should still explain whether the gain came from better return, lower downside, or fewer fragile folds. Decision reason: sortino 2.622 > prev 2.453167311281237, agg_dd 11.7%, catastrophe gate clear, anti-overfit gates passed.
 
 ---
+
+## Iteration 2026-05-16-87be2d3 — REVERTED
+
+**Hypothesis:** Adding a path-efficiency quality term will improve validation Sortino by preferring positive-trend stocks whose gains were achieved with smoother daily progress rather than noisy two-way churn.
+
+**Change:** I added a PIT-safe trend-efficiency scorer using existing trend-window returns, lightly rewarded efficient uptrends, and filtered extremely inefficient trends while preserving fixed-slot sizing, biweekly rebalancing, universe filtering, and sector caps.
+
+**Decision:** REVERTED — sortino 2.512 did not improve on prev 2.622326027486962
+
+**Result:**
+- evaluator_version: 2026-05-16-univfloor
+- validation_sortino_mean: 2.5124057519394247
+- validation_folds: 13
+- per_fold_sortinos: [1.2323, 0.6031, -1.4783, 4.1889, 7.6815, 6.301, 4.4447, 4.1145, 2.5391, 1.1628, 1.6843, 1.3438, -1.1566]
+- calmar_mean: 6.118737421159365
+- hit_rate_mean: 0.5163875089214455
+- profit_factor_mean: 5.318496122260597
+- trade_count_total: 154
+- aggregate_max_dd: 0.12282510792311421
+- worst_fold_max_dd: 0.10433675749191
+- max_position_frac_peak: 0.05190773311401055
+- lower_quartile_fold_calmar: 1.4733620394672513
+- n_negative_folds: 2/13
+- risk.passed: True
+- risk.violations: []
+
+**Learning:** Sortino changed from 2.622 to 2.512 (-0.110). Aggregate DD was 12.3% versus previous kept 11.7%; negative folds were 2/13; trades=154. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 2.512 did not improve on prev 2.622326027486962.
+
+---
