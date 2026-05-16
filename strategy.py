@@ -5,9 +5,9 @@ tickers in the injected point-in-time universe, selects positive-trend names
 with lower realized volatility, mild recent strength, defensive relative
 strength on weak market days, persistent multi-leg trend quality, fresh
 intermediate trend confirmation, modest short-term pullback quality, avoids
-one-week exhaustion, rewards efficient intermediate trends, favors constructive
-recent range location, applies a 25% sector cap, and sizes by fixed risk slots
-so blocked slots remain cash.
+one-week and one-day upside exhaustion, rewards efficient intermediate trends,
+favors constructive recent range location, applies a 25% sector cap, and sizes
+by fixed risk slots so blocked slots remain cash.
 
 Trade contract: every position change goes through order_target_percent only.
 '''
@@ -295,6 +295,7 @@ class IndiaMomentumQualityRegime(bt.Strategy):
             return None
 
         current = self._price_at(d, 0)
+        prior = self._price_at(d, 1)
         trend_start = self._price_at(d, self.p.trend_days)
         intermediate_start = self._price_at(d, self.p.vol_days)
         recent_start = self._price_at(d, self.p.recent_days)
@@ -302,6 +303,7 @@ class IndiaMomentumQualityRegime(bt.Strategy):
         fast_start = self._price_at(d, fast_days)
         if (
             current is None
+            or prior is None
             or trend_start is None
             or intermediate_start is None
             or recent_start is None
@@ -313,7 +315,8 @@ class IndiaMomentumQualityRegime(bt.Strategy):
         intermediate = (current / intermediate_start) - 1.0
         recent = (current / recent_start) - 1.0
         fast = (current / fast_start) - 1.0
-        if trend <= 0.03 or intermediate <= 0.0 or recent < -0.08:
+        one_day = (current / prior) - 1.0
+        if trend <= 0.03 or intermediate <= 0.0 or recent < -0.08 or one_day > 0.075:
             return None
 
         vol = self._realized_vol(d, self.p.vol_days)
@@ -344,6 +347,7 @@ class IndiaMomentumQualityRegime(bt.Strategy):
         pullback_quality = -abs(ma_distance - 0.015)
         range_quality = -abs(range_location - 0.72)
         fast_exhaustion = max(fast - 0.055, 0.0)
+        one_day_exhaustion = max(one_day - 0.035, 0.0)
         defensive = self._defensive_relative_strength(d, market_returns)
         return (
             (0.64 * trend)
@@ -356,6 +360,7 @@ class IndiaMomentumQualityRegime(bt.Strategy):
             - (0.45 * vol)
             - (0.35 * drawdown)
             - (0.70 * fast_exhaustion)
+            - (0.45 * one_day_exhaustion)
         )
 
     def _rank_universe(self, active: set[str] | None) -> list[tuple[str, float]]:
