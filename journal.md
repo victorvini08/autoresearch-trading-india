@@ -3182,3 +3182,32 @@ structural learnings are codified in `program.md`. Explore freely.
 **Learning:** Sortino changed from 3.404 to 3.139 (-0.265). Aggregate DD was 14.5% versus previous kept 13.6%; negative folds were 3/13; trades=192. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 3.139 did not improve on prev 3.4038275153908293.
 
 ---
+
+## Iteration 2026-05-17-7db6f7f — REVERTED
+
+**Hypothesis:** Adding a PIT-safe continuous macro stress exposure gate should improve validation Sortino by cutting gross exposure only when India VIX percentile is elevated and Nifty is below its 200dma, using external market-state information not already captured by the stock ranker.
+
+**Change:** I added optional llm.features macro scalars and a no-new-parameter gross-exposure multiplier in next(), preserving ranking, sector cap, fixed-slot sizing, and order_target_percent-only execution.
+
+**Decision:** REVERTED — sortino 3.404 did not improve on prev 3.4038275153908293
+
+**Result:**
+- evaluator_version: 2026-05-16-univfloor
+- validation_sortino_mean: 3.4038275153908293
+- validation_folds: 13
+- per_fold_sortinos: [5.1923, 0.432, -1.0257, 5.524, 9.7897, 6.8047, 5.9487, 5.2593, 2.3797, 0.6727, 2.0021, 1.7051, -0.4348]
+- calmar_mean: 7.3440874574941555
+- hit_rate_mean: 0.5433581124757595
+- profit_factor_mean: 5.780037413995571
+- trade_count_total: 190
+- aggregate_max_dd: 0.13582530924838732
+- worst_fold_max_dd: 0.11728339561855498
+- max_position_frac_peak: 0.0646215671969394
+- lower_quartile_fold_calmar: 1.250582384667222
+- n_negative_folds: 2/13
+- risk.passed: True
+- risk.violations: []
+
+**Learning:** Sortino changed from 3.404 to 3.404 (+0.000). Aggregate DD was 13.6% versus previous kept 13.6%; negative folds were 2/13; trades=190. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 3.404 did not improve on prev 3.4038275153908293.
+
+---
