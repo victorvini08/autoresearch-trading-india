@@ -1268,3 +1268,32 @@ structural learnings are codified in `program.md`. Explore freely.
 **Learning:** Sortino changed from 2.754 to 2.685 (-0.069). Aggregate DD was 11.6% versus previous kept 10.3%; negative folds were 3/13; trades=178. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 2.685 did not improve on prev 2.754021639889776 | anti-overfit FAILED: sub_period_stationarity(signed min/max Sortino ratio across 2 sub-periods = 0.1806 (need ≥ 0.20); sub-periods = [+3.591, +0.648]).
 
 ---
+
+## Iteration 2026-05-16-6a80518 — REVERTED
+
+**Hypothesis:** Adding a PIT-safe overnight gap-risk penalty will improve validation Sortino by avoiding low-volatility uptrends whose close-to-close smoothness hides repeated adverse open gaps, which are especially costly because CNC rebalances fill at next open.
+
+**Change:** I added a no-new-parameter recent gap-risk score from existing OHLC data and lightly penalized adverse overnight gap behavior while preserving fixed-slot sizing, PIT universe enforcement, sector caps, and order_target_percent-only execution.
+
+**Decision:** REVERTED — sortino 1.750 did not improve on prev 2.754021639889776 | aggregate DD regressed: 45.8% > prev 10.3% + 10pp tolerance | catastrophe: gross exposure: max 164.1% > 100% (cash account — leverage error) | anti-overfit FAILED: bonferroni(p=0.0750 >= alpha/N=0.0250) · sub_period_stationarity(signed min/max Sortino ratio across 2 sub-periods = -0.5380 (need ≥ 0.20); sub-periods = [+3.322, -1.787])
+
+**Result:**
+- evaluator_version: 2026-05-16-univfloor
+- validation_sortino_mean: 1.7499970813675003
+- validation_folds: 13
+- per_fold_sortinos: [1.0156, -0.0713, -1.7473, 4.3074, 8.4953, 5.798, 4.2132, 4.2455, 3.6424, -0.4618, -3.2724, -2.1324, -1.2824]
+- calmar_mean: 4.647478498921201
+- hit_rate_mean: 0.5223027161375577
+- profit_factor_mean: 6.091665249617782
+- trade_count_total: 182
+- aggregate_max_dd: 0.4580809729620269
+- worst_fold_max_dd: 0.28921257515755444
+- max_position_frac_peak: 0.07333655441368499
+- lower_quartile_fold_calmar: -0.8033146476603803
+- n_negative_folds: 6/13
+- risk.passed: False
+- risk.violations: ['gross exposure: max 164.1% > 100% (cash account — leverage error)']
+
+**Learning:** Sortino changed from 2.754 to 1.750 (-1.004). Aggregate DD was 45.8% versus previous kept 10.3%; negative folds were 6/13; trades=182. Do not reuse this exact setup: it failed the catastrophe gate, so the result is not a usable edge even if the hypothesis was economically plausible. Decision reason: sortino 1.750 did not improve on prev 2.754021639889776 | aggregate DD regressed: 45.8% > prev 10.3% + 10pp tolerance | catastrophe: gross exposure: max 164.1% > 100% (cash account — leverage error) | anti-overfit FAILED: bonferroni(p=0.0750 >= alpha/N=0.0250) · sub_period_stationarity(signed min/max Sortino ratio across 2 sub-periods = -0.5380 (need ≥ 0.20); sub-periods = [+3.322, -1.787]).
+
+---
