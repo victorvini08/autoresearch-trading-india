@@ -733,9 +733,9 @@ def evaluate(strategy_module: ModuleType, mode: str = "research") -> dict:
         def _sortino_arr(a: np.ndarray) -> float:
             return float(sortino(pd.Series(a)))
         orig_sortino = _sortino_arr(chained_daily)
-        rw_pct, rw = compute_rw_mc_null(
-            chained_daily, _sortino_arr, n_permutations=5000
-        )
+        # n_permutations defaults to RW_MC_PERMUTATIONS (2000); the bootstrap
+        # is vectorized in anti_overfit so this is no longer the bottleneck.
+        rw_pct, rw = compute_rw_mc_null(chained_daily, _sortino_arr)
         # Permutation p-value (temporal-exchangeability null), +1 smoothing.
         sortino_val_pvalue = float(
             (np.sum(rw >= orig_sortino) + 1) / (len(rw) + 1)
