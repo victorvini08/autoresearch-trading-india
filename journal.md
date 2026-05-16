@@ -1790,3 +1790,32 @@ structural learnings are codified in `program.md`. Explore freely.
 **Learning:** Sortino changed from 3.167 to 2.953 (-0.214). Aggregate DD was 12.9% versus previous kept 10.4%; negative folds were 3/13; trades=180. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 2.953 did not improve on prev 3.166988802108574.
 
 ---
+
+## Iteration 2026-05-17-7c4f3bb — REVERTED
+
+**Hypothesis:** Adding a PIT-safe broad-market risk throttle will improve validation Sortino by cutting exposure when Nifty 50 is below its 200DMA or India VIX is elevated, reducing downside in weak market folds without changing stock-selection ranking.
+
+**Change:** I added a continuous macro exposure scaler in next(), using nifty_vs_200dma_pct and india_vix_percentile when available, while preserving fixed-slot sizing, PIT universe enforcement, sector cap, biweekly cadence, and order_target_percent-only execution.
+
+**Decision:** REVERTED — sortino 3.099 did not improve on prev 3.166988802108574
+
+**Result:**
+- evaluator_version: 2026-05-16-univfloor
+- validation_sortino_mean: 3.099371294120833
+- validation_folds: 13
+- per_fold_sortinos: [3.6854, 0.063, -1.8322, 4.7524, 10.1142, 6.4402, 4.9971, 5.3222, 3.1905, 0.3433, 1.9545, 1.9909, -0.7297]
+- calmar_mean: 4.723632748672527
+- hit_rate_mean: 0.5144850624488633
+- profit_factor_mean: 5.094821350104268
+- trade_count_total: 170
+- aggregate_max_dd: 0.09997512009787252
+- worst_fold_max_dd: 0.06897358112085489
+- max_position_frac_peak: 0.04847925404861312
+- lower_quartile_fold_calmar: 0.5802892571955551
+- n_negative_folds: 2/13
+- risk.passed: True
+- risk.violations: []
+
+**Learning:** Sortino changed from 3.167 to 3.099 (-0.068). Aggregate DD was 10.0% versus previous kept 10.4%; negative folds were 2/13; trades=170. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 3.099 did not improve on prev 3.166988802108574.
+
+---
