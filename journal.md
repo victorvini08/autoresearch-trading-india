@@ -4777,3 +4777,32 @@ structural learnings are codified in `program.md`. Explore freely.
 **Learning:** Sortino changed from 3.628 to 3.550 (-0.078). Aggregate DD was 15.1% versus previous kept 15.1%; negative folds were 2/13; trades=192. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 3.550 did not improve on prev 3.6277126896862444.
 
 ---
+
+## Iteration 2026-05-17-e580dda — REVERTED
+
+**Hypothesis:** Adding a PIT-safe short-term reversal risk check will improve validation Sortino by avoiding momentum candidates that have just printed an unusually large 5-day advance relative to their own recent daily volatility, which current raw fast-return exhaustion does not volatility-normalize.
+
+**Change:** I added a 5-day z-scored surge helper and use it as a mild veto plus score penalty so the strategy keeps buying intermediate uptrends but avoids volatility-adjusted blow-off entries.
+
+**Decision:** REVERTED — sortino 3.579 did not improve on prev 3.6277126896862444
+
+**Result:**
+- evaluator_version: 2026-05-16-univfloor
+- validation_sortino_mean: 3.5787061120452504
+- validation_folds: 13
+- per_fold_sortinos: [5.0682, 0.3146, -0.9867, 5.682, 9.6746, 6.8048, 5.9485, 5.3203, 2.3301, 0.557, 1.9868, 1.7283, 2.0947]
+- calmar_mean: 7.418553112760083
+- hit_rate_mean: 0.5500147100260222
+- profit_factor_mean: 6.0632813611500795
+- trade_count_total: 190
+- aggregate_max_dd: 0.15265634392862487
+- worst_fold_max_dd: 0.12739062749370667
+- max_position_frac_peak: 0.06432477621632594
+- lower_quartile_fold_calmar: 1.6082769161341615
+- n_negative_folds: 1/13
+- risk.passed: True
+- risk.violations: []
+
+**Learning:** Sortino changed from 3.628 to 3.579 (-0.049). Aggregate DD was 15.3% versus previous kept 15.1%; negative folds were 1/13; trades=190. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 3.579 did not improve on prev 3.6277126896862444.
+
+---
