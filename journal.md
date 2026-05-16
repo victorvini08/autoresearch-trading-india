@@ -486,3 +486,31 @@ This is the autoresearch loop's persistent memory. Every iteration appends an en
 **Learning:** No scored strategy inference: the iteration failed before prepare.py produced validation metrics. Treat this as an implementation failure, not evidence about the hypothesis. Failure reason: prepare.py crashed: 'dict' object has no attribute 'ticker'.
 
 ---
+
+## Iteration 2026-05-16-c6dc0a1 — REVERTED
+
+**Hypothesis:** Replacing equal weights with inverse-volatility target weights for the already-selected momentum names should improve mean validation Sortino by reducing high-volatility winner concentration without changing the signal family or adding hyperparameters.
+
+**Change:** I kept the 12-1 momentum selection, retention, quality screen, regime entry gate, and cadence intact, but changed the final order_target_percent targets to inverse realized-volatility weights clipped by the existing 25% sector cap.
+
+**Decision:** REVERTED — anti-overfit FAILED: bonferroni(p=1.0000 >= alpha/N=0.0050) · random_walk_mc(only 87.62% percentile vs RW null)
+
+**Result:**
+- validation_sortino_mean: 1.353027053544714
+- validation_folds: 20
+- per_fold_sortinos: [7.3368, 3.2882, 0.0934, 1.5032, -1.6995, -3.0228, 0.1747, 4.2811, -0.4672, -1.5437, 2.525, 8.7481, 1.373, 2.6914, 0.0521, 5.4455, 0.8845, -1.3004, -0.5736, -2.7292]
+- calmar_mean: 1.6860806393624408
+- hit_rate_mean: 0.3091666666666667
+- profit_factor_mean: 3.9763222486583762
+- trade_count_total: 32
+- aggregate_max_dd: 0.3079565382925208
+- worst_fold_max_dd: 0.1915316301722045
+- max_position_frac_peak: 0.25984594676673634
+- lower_quartile_fold_calmar: -0.6468872667893536
+- n_negative_folds: 8/20
+- risk.passed: True
+- risk.violations: []
+
+**Learning:** Sortino scored 1.353 with no prior kept baseline. Aggregate DD was 30.8%; negative folds were 8/20; trades=32. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: anti-overfit FAILED: bonferroni(p=1.0000 >= alpha/N=0.0050) · random_walk_mc(only 87.62% percentile vs RW null).
+
+---
