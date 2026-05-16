@@ -543,3 +543,32 @@ structural learnings are codified in `program.md`. Explore freely.
 **Learning:** Sortino scored 1.749 with no prior kept baseline. Aggregate DD was 7.1%; negative folds were 4/13; trades=95. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: anti-overfit FAILED: bonferroni(p=0.0150 >= alpha/N=0.0100) · sub_period_stationarity(signed min/max Sortino ratio across 2 sub-periods = -0.1415 (need ≥ 0.20); sub-periods = [+2.696, -0.382]).
 
 ---
+
+## Iteration 2026-05-16-d69ab9e — REVERTED
+
+**Hypothesis:** A PIT-safe diversified momentum book with fixed-slot sizing and continuous macro crash de-risking will improve validation Sortino by preserving the prior volume-confirmed edge while cutting exposure during high-VIX or below-200DMA market regimes that caused the negative sub-period.
+
+**Change:** I replaced concentrated selected-count sizing with 25 fixed risk slots, added liquidity/volume-confirmed risk-adjusted 12-1 momentum, removed forbidden pathlib usage, enforced PIT exits, and scaled gross exposure down under adverse macro signals.
+
+**Decision:** REVERTED — anti-overfit FAILED: sub_period_stationarity(signed min/max Sortino ratio across 2 sub-periods = -0.1839 (need ≥ 0.20); sub-periods = [+2.327, -0.428])
+
+**Result:**
+- evaluator_version: 2026-05-16-univfloor
+- validation_sortino_mean: 1.4792598801505759
+- validation_folds: 13
+- per_fold_sortinos: [0.8641, -0.6545, -2.0942, 2.1642, 7.9218, 3.7514, 2.509, 3.5948, 2.8855, 1.141, 1.845, -2.086, -2.6117]
+- calmar_mean: 4.216643932950861
+- hit_rate_mean: 0.5170354205213695
+- profit_factor_mean: 4.0547940783499605
+- trade_count_total: 227
+- aggregate_max_dd: 0.18762922862034045
+- worst_fold_max_dd: 0.12007738341594765
+- max_position_frac_peak: 0.046123588559188265
+- lower_quartile_fold_calmar: -0.9293204844414228
+- n_negative_folds: 4/13
+- risk.passed: True
+- risk.violations: []
+
+**Learning:** Sortino scored 1.479 with no prior kept baseline. Aggregate DD was 18.8%; negative folds were 4/13; trades=227. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: anti-overfit FAILED: sub_period_stationarity(signed min/max Sortino ratio across 2 sub-periods = -0.1839 (need ≥ 0.20); sub-periods = [+2.327, -0.428]).
+
+---
