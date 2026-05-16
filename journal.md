@@ -474,3 +474,15 @@ This is the autoresearch loop's persistent memory. Every iteration appends an en
 **Learning:** Sortino scored 1.768 with no prior kept baseline. Aggregate DD was 77.7%; negative folds were 9/20; trades=29. Do not reuse this exact setup: it failed the catastrophe gate, so the result is not a usable edge even if the hypothesis was economically plausible. Decision reason: catastrophe: max drawdown: 77.7% > 50% (account-wipe territory) | anti-overfit FAILED: bonferroni(p=1.0000 >= alpha/N=0.0029) · random_walk_mc(only 0.80% percentile vs RW null) · sub_period_stationarity(min/max ratio of |Sortino| across 3 sub-periods = 0.15).
 
 ---
+
+## Iteration 2026-05-16-9353e61 — REJECTED
+
+**Hypothesis:** Adding a no-new-parameter absolute market trend sleeve that only carries half gross exposure when Nifty 50 is below its 200-day average should improve mean validation Sortino by reducing broad-market drawdown without fully abandoning momentum exposure.
+
+**Change:** I replaced the entry-only regime gate with a continuous gross-exposure scaler using existing macro signals, preserving ranking, retention, sector cap, and order_target_percent-only execution.
+
+**Decision:** REJECTED — prepare.py crashed: 'dict' object has no attribute 'ticker'
+
+**Learning:** No scored strategy inference: the iteration failed before prepare.py produced validation metrics. Treat this as an implementation failure, not evidence about the hypothesis. Failure reason: prepare.py crashed: 'dict' object has no attribute 'ticker'.
+
+---
