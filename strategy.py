@@ -23,7 +23,8 @@ Tunable signal hyperparameters:
   - entry_pct (0.20) — only the most-oversold tail is entry-eligible
   - regime_pct (95) — regime-gate threshold (structurally parallel to A;
     the gate currently keys off the macro_regime label)
-  - n_positions (6) — target portfolio size
+  - n_positions (25) — target portfolio size (diversified; <10 caused the
+    structural ~80% catastrophe drawdown — see 2026-05-16)
   - sector_cap (0.25) — max single-sector weight
 
 Trade contract: every position-change goes through
@@ -196,7 +197,7 @@ class IndiaResidualReversalStatArb(bt.Strategy):
         ("retention_mult", 2.0),
         ("entry_pct", 0.20),
         ("regime_pct", 95),
-        ("n_positions", 6),
+        ("n_positions", 25),
         ("sector_cap", 0.25),
         # Rebalance cadence (biweekly = every other Friday) — plumbing.
         ("rebalance_weekday", 4),       # Friday

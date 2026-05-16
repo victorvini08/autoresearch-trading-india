@@ -32,7 +32,10 @@ exposure), expecting reversion.
 - `entry_pct` (only the most-oversold tail is entry-eligible)
 - `regime_pct` (regime-gate threshold; reversion is fragile in trending
   crashes so the defensive gate matters more, not less)
-- `n_positions` (target position count; 4-10 acceptable range)
+- `n_positions` (target position count; 15-35 acceptable range — the old
+  4-10 cap encoded a concentration assumption that caused the structural
+  ~80% catastrophe drawdown; diversification is signal-agnostic, see
+  2026-05-16)
 - `rebalance_freq` (biweekly default; may propose weekly/monthly with full justification)
 
 **Data the strategy may use** — all accessors are point-in-time
