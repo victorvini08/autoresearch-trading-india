@@ -61,6 +61,7 @@ orders fill next open — no look-ahead). Import from `llm.features`:
   the class name and the `order_target_percent`-only trade contract.
   Mentally compile it before returning — a syntax error = immediate reject,
   no backtest, a wasted iteration.
+- Import ONLY whitelisted modules: `backtrader`, `numpy`, `pandas`, `datetime`, `data.*`, `llm.features`, `__future__`, plus safe stdlib (`math`, `logging`, `collections`, `itertools`, `functools`, `statistics`, `bisect`, `random`, `typing`, `dataclasses`, `re`, `json`) — ANY other import (`os`, `sys`, `subprocess`, `pathlib`, `requests`, …) is an instant reject, no backtest, wasted iteration.
 
 **Decision criteria for KEEP:**
 A variant is KEPT iff all gates pass:
