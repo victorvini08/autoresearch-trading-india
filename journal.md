@@ -178,3 +178,31 @@ This is the autoresearch loop's persistent memory. Every iteration appends an en
 **Learning:** Sortino scored 1.688 with no prior kept baseline. Aggregate DD was 80.2%; negative folds were 9/20; trades=32. Do not reuse this exact setup: it failed the catastrophe gate, so the result is not a usable edge even if the hypothesis was economically plausible. Decision reason: catastrophe: max drawdown: 80.2% > 50% (account-wipe territory) | anti-overfit FAILED: bonferroni(p=0.8484 >= alpha/N=0.0167) · sub_period_stationarity(min/max ratio of |Sortino| across 3 sub-periods = 0.16).
 
 ---
+
+## Iteration 2026-05-16-ffb5ca4 — REVERTED
+
+**Hypothesis:** Scaling total portfolio gross exposure inversely with realized 21-day portfolio volatility (targeting a 12% annual portfolio vol) will break the structural 80-86% aggregate drawdown by dynamically cutting position sizes to ~30-50% during high-volatility bear market periods while restoring full 99% exposure in calm bull markets — addressing the 'vol-scaled sizing' construction fix called out explicitly in the program spec.
+
+**Change:** Added _realized_vol() and _vol_scale_exposure() methods that estimate equal-weight portfolio daily vol from individual stock 21-day realized returns (with a correlation-adjustment divisor of 2.5 for Indian equity co-movement), then multiply the 0.99 gross exposure cap by min(target_daily_vol / port_vol_est, 1.0) before dividing by position count; also removed the disallowed `pathlib` import and pass fundamentals_db_path as a plain string.
+
+**Decision:** REVERTED — anti-overfit FAILED: bonferroni(p=1.0000 >= alpha/N=0.0125) · random_walk_mc(only 90.42% percentile vs RW null) · sub_period_stationarity(min/max ratio of |Sortino| across 3 sub-periods = 0.21)
+
+**Result:**
+- validation_sortino_mean: 1.538269424338637
+- validation_folds: 20
+- per_fold_sortinos: [10.9017, 4.9413, 0.598, 0.6802, -1.0115, -1.8831, -3.2434, -1.4152, -2.0368, -2.9316, 7.135, 11.9529, 4.3797, 3.6344, 3.7262, 2.9956, 0.8411, -0.6268, -3.463, -4.4093]
+- calmar_mean: 3.0497317764654293
+- hit_rate_mean: 0.38345238095238093
+- profit_factor_mean: 2.0557522608445726
+- trade_count_total: 74
+- aggregate_max_dd: 0.3587002504697492
+- worst_fold_max_dd: 0.16250342876837526
+- max_position_frac_peak: 0.5126483937131874
+- lower_quartile_fold_calmar: -1.9486268207024624
+- n_negative_folds: 9/20
+- risk.passed: True
+- risk.violations: []
+
+**Learning:** Sortino scored 1.538 with no prior kept baseline. Aggregate DD was 35.9%; negative folds were 9/20; trades=74. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: anti-overfit FAILED: bonferroni(p=1.0000 >= alpha/N=0.0125) · random_walk_mc(only 90.42% percentile vs RW null) · sub_period_stationarity(min/max ratio of |Sortino| across 3 sub-periods = 0.21).
+
+---
