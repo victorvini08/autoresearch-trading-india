@@ -4487,3 +4487,32 @@ structural learnings are codified in `program.md`. Explore freely.
 **Learning:** Sortino changed from 3.628 to 3.282 (-0.346). Aggregate DD was 15.1% versus previous kept 15.1%; negative folds were 1/13; trades=183. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 3.282 did not improve on prev 3.6277126896862444.
 
 ---
+
+## Iteration 2026-05-17-41009a9 — REVERTED
+
+**Hypothesis:** Replacing the raw linear stock score with a cross-sectional rank-normalized composite will improve validation Sortino by making selection less sensitive to regime-dependent feature scale shifts while preserving the existing PIT-safe momentum-quality thesis.
+
+**Change:** I changed ranking to compute feature components once per ticker, then rank-normalize each component across the active universe before applying the existing directional preferences, sector cap, fixed-slot sizing, and order_target_percent-only execution.
+
+**Decision:** REVERTED — sortino 1.973 did not improve on prev 3.6277126896862444 | anti-overfit FAILED: bonferroni(p=0.0330 >= alpha/N=0.0100)
+
+**Result:**
+- evaluator_version: 2026-05-16-univfloor
+- validation_sortino_mean: 1.9727572379282978
+- validation_folds: 13
+- per_fold_sortinos: [0.4415, -1.2511, -2.6927, 0.4041, 4.284, 4.4159, 6.9314, 7.5866, 3.008, 0.0223, 1.412, 1.8512, -0.7671]
+- calmar_mean: 1.076191694429991
+- hit_rate_mean: 0.5305073131996209
+- profit_factor_mean: 4.964059980466778
+- trade_count_total: 182
+- aggregate_max_dd: 0.10812375397677464
+- worst_fold_max_dd: 0.06506354647654959
+- max_position_frac_peak: 0.06166576945148685
+- lower_quartile_fold_calmar: -0.0074855542813612175
+- n_negative_folds: 4/13
+- risk.passed: True
+- risk.violations: []
+
+**Learning:** Sortino changed from 3.628 to 1.973 (-1.655). Aggregate DD was 10.8% versus previous kept 15.1%; negative folds were 4/13; trades=182. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 1.973 did not improve on prev 3.6277126896862444 | anti-overfit FAILED: bonferroni(p=0.0330 >= alpha/N=0.0100).
+
+---
