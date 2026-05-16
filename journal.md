@@ -2834,3 +2834,32 @@ structural learnings are codified in `program.md`. Explore freely.
 **Learning:** Sortino changed from 3.404 to 3.263 (-0.141). Aggregate DD was 13.5% versus previous kept 13.6%; negative folds were 2/13; trades=192. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 3.263 did not improve on prev 3.4038275153908293.
 
 ---
+
+## Iteration 2026-05-17-3273648 — REVERTED
+
+**Hypothesis:** Adding a no-new-parameter weak-market absolute trend guard will improve validation Sortino by avoiding long entries when the current liquid NSE universe median intermediate trend is negative, while preserving the proven stock-level ranker and fixed-slot sizing.
+
+**Change:** I added a PIT-safe universe median intermediate-trend check at rebalance time and return an empty selection when fewer than half of active liquid stocks have positive 63-day trend, leaving blocked slots in cash instead of forcing long exposure during broad selloffs.
+
+**Decision:** REVERTED — sortino 2.979 did not improve on prev 3.4038275153908293
+
+**Result:**
+- evaluator_version: 2026-05-16-univfloor
+- validation_sortino_mean: 2.9785179543241354
+- validation_folds: 13
+- per_fold_sortinos: [4.7508, -0.6318, -1.7418, 4.1437, 8.1077, 6.825, 6.1282, 5.3333, 2.4051, 0.738, 2.0021, 1.7095, -1.0489]
+- calmar_mean: 6.796625833647988
+- hit_rate_mean: 0.49110195360195347
+- profit_factor_mean: 4.460162796846111
+- trade_count_total: 178
+- aggregate_max_dd: 0.16758152893298914
+- worst_fold_max_dd: 0.11477420168687472
+- max_position_frac_peak: 0.06441810841618469
+- lower_quartile_fold_calmar: 1.4664961067964615
+- n_negative_folds: 3/13
+- risk.passed: True
+- risk.violations: []
+
+**Learning:** Sortino changed from 3.404 to 2.979 (-0.425). Aggregate DD was 16.8% versus previous kept 13.6%; negative folds were 3/13; trades=178. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 2.979 did not improve on prev 3.4038275153908293.
+
+---
