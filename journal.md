@@ -973,3 +973,32 @@ structural learnings are codified in `program.md`. Explore freely.
 **Learning:** Sortino changed from 2.925 to 2.783 (-0.142). Aggregate DD was 3.5% versus previous kept 5.5%; negative folds were 1/13; trades=50. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 2.783 did not improve on prev 2.9249943159478287.
 
 ---
+
+## Iteration 2026-05-17-67a3f8f — REVERTED
+
+**Hypothesis:** Adding a residual downside-efficiency rank to the kept residual momentum book will improve validation Sortino by favoring stock-specific winners whose residual momentum arrives with less idiosyncratic downside volatility.
+
+**Change:** I added a cross-sectional residual_efficiency component equal to market-residual momentum scaled by residual downside volatility, while leaving PIT universe handling, fixed-slot sizing, biweekly cadence, breadth gross scaling, and the 25% sector cap unchanged.
+
+**Decision:** REVERTED — anti-overfit FAILED: universe_respect(variant traded tickers outside the point-in-time universe — survivorship/look-ahead reintroduced (hard reject)) · bonferroni(p=1.0000 >= alpha/N=0.0500) · random_walk_mc(only 0.00% percentile vs RW null)
+
+**Result:**
+- evaluator_version: 2026-05-16-univfloor
+- validation_sortino_mean: 3.435984062781348
+- validation_folds: 13
+- per_fold_sortinos: [-0.7035, -0.2004, 0.1357, 6.7843, 8.2606, 5.1403, 9.2444, 5.9771, 2.1422, 0.9599, 2.3069, 3.3351, 1.2852]
+- calmar_mean: 1.6799733100309027
+- hit_rate_mean: 0.5643772893772894
+- profit_factor_mean: 1.6085839916986606
+- trade_count_total: 46
+- aggregate_max_dd: 0.053551475483202084
+- worst_fold_max_dd: 0.040006948059745244
+- max_position_frac_peak: 0.039231652947556775
+- lower_quartile_fold_calmar: 0.4068389876699996
+- n_negative_folds: 2/13
+- risk.passed: True
+- risk.violations: []
+
+**Learning:** Sortino changed from 2.925 to 3.436 (+0.511). Aggregate DD was 5.4% versus previous kept 5.5%; negative folds were 2/13; trades=46. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: anti-overfit FAILED: universe_respect(variant traded tickers outside the point-in-time universe — survivorship/look-ahead reintroduced (hard reject)) · bonferroni(p=1.0000 >= alpha/N=0.0500) · random_walk_mc(only 0.00% percentile vs RW null).
+
+---
