@@ -311,3 +311,32 @@ structural learnings are codified in `program.md`. Explore freely.
 **Learning:** Sortino scored 1.265 with no prior kept baseline. Aggregate DD was 10.4%; negative folds were 4/13; trades=79. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: anti-overfit FAILED: bonferroni(p=0.0735 >= alpha/N=0.0100) · sub_period_stationarity(signed min/max Sortino ratio across 2 sub-periods = -0.5628 (need ≥ 0.20); sub-periods = [+2.437, -1.371]).
 
 ---
+
+## Iteration 2026-05-16-e83fab7 — REVERTED
+
+**Hypothesis:** A volatility-contraction breakout book will improve validation Sortino by selecting liquid NSE names with positive intermediate trend, compressed recent ranges, and fresh upside confirmation rather than chasing raw 12-1 momentum.
+
+**Change:** Replaced the baseline 12-1 momentum rank with a PIT-safe volatility-contraction breakout score, removed the dead fundamentals/path dependency, and sized strictly by fixed risk slots under the sector cap.
+
+**Decision:** REVERTED — sortino -0.463 not positive — won't compound on losing baseline | anti-overfit FAILED: bonferroni(p=1.0000 >= alpha/N=0.0100) · random_walk_mc(only 0.00% percentile vs RW null) · parsimony(baseline params=7, strategy=8; +1 param(s) need Sortino +0.10, has -0.46)
+
+**Result:**
+- evaluator_version: 2026-05-16-univfloor
+- validation_sortino_mean: -0.4627004398143193
+- validation_folds: 13
+- per_fold_sortinos: [2.749, -2.3274, -5.3429, 0.0549, 1.4799, 1.1871, 3.4567, -2.0752, -2.9492, -2.9243, -2.7701, 5.3735, -1.9272]
+- calmar_mean: -0.29137468962859353
+- hit_rate_mean: 0.4134415573180755
+- profit_factor_mean: 1.2493633273589764
+- trade_count_total: 184
+- aggregate_max_dd: 0.26273869521887483
+- worst_fold_max_dd: 0.08288428400659305
+- max_position_frac_peak: 0.05802694724170715
+- lower_quartile_fold_calmar: -2.166639060678244
+- n_negative_folds: 7/13
+- risk.passed: True
+- risk.violations: []
+
+**Learning:** Sortino scored -0.463 with no prior kept baseline. Aggregate DD was 26.3%; negative folds were 7/13; trades=184. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino -0.463 not positive — won't compound on losing baseline | anti-overfit FAILED: bonferroni(p=1.0000 >= alpha/N=0.0100) · random_walk_mc(only 0.00% percentile vs RW null) · parsimony(baseline params=7, strategy=8; +1 param(s) need Sortino +0.10, has -0.46).
+
+---
