@@ -5125,3 +5125,32 @@ structural learnings are codified in `program.md`. Explore freely.
 **Learning:** Sortino changed from 3.628 to 3.401 (-0.226). Aggregate DD was 13.3% versus previous kept 15.1%; negative folds were 4/13; trades=175. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 3.401 did not improve on prev 3.6277126896862444 | anti-overfit FAILED: sub_period_stationarity(signed min/max Sortino ratio across 2 sub-periods = 0.0380 (need ≥ 0.20); sub-periods = [+4.832, +0.183]).
 
 ---
+
+## Iteration 2026-05-17-3f71fee — REVERTED
+
+**Hypothesis:** Conditioning the existing momentum-quality ranking on active-universe weakness will improve validation Sortino by rotating defensive relative-strength and low-risk names into the fixed slots during broad NSE drawdowns without reducing gross exposure across all regimes.
+
+**Change:** I added a PIT-safe market-pressure score derived from the active universe's recent median return stream and used it only to increase the defensive-strength reward and volatility/drawdown penalties when that broad return stream is negative.
+
+**Decision:** REVERTED — sortino 3.628 did not improve on prev 3.6277126896862444
+
+**Result:**
+- evaluator_version: 2026-05-16-univfloor
+- validation_sortino_mean: 3.6277126896862444
+- validation_folds: 13
+- per_fold_sortinos: [5.1923, 0.3537, -0.9762, 5.6907, 9.8402, 6.8286, 5.9485, 5.5371, 2.3815, 0.5568, 1.9883, 1.7262, 2.0927]
+- calmar_mean: 7.507118314640582
+- hit_rate_mean: 0.5513883363996487
+- profit_factor_mean: 6.028189846151534
+- trade_count_total: 188
+- aggregate_max_dd: 0.15118637146567923
+- worst_fold_max_dd: 0.12589683175444755
+- max_position_frac_peak: 0.06427130110377423
+- lower_quartile_fold_calmar: 1.6078656238728861
+- n_negative_folds: 1/13
+- risk.passed: True
+- risk.violations: []
+
+**Learning:** Sortino changed from 3.628 to 3.628 (+0.000). Aggregate DD was 15.1% versus previous kept 15.1%; negative folds were 1/13; trades=188. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 3.628 did not improve on prev 3.6277126896862444.
+
+---
