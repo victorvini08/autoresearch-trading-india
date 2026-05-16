@@ -1,37 +1,19 @@
-"""Strategy B — long-only residual mean-reversion statistical arbitrage.
+"""Strategy B - long-only cross-sectional momentum-quality carry.
 
-Branch: mean-reversion-quant-strategy. The structural inverse of the
-momentum book on `main`: this strategy buys names that are oversold
-*relative to their market + size factor exposures* (cumulative factor
-residual most negative), expecting reversion. Sparse — 7 tunable signal
-knobs, matching the momentum book's parsimony footprint so neither
-autoresearch loop starts with a parsimony-gate advantage.
+Branch: mean-reversion-quant-strategy. This variant deliberately changes the
+entry thesis away from residual falling-knife reversion: it owns liquid NSE
+names with persistent 12-1 style relative strength, smooth downside behavior,
+and limited drawdown, then keeps the book diversified with fixed risk slots
+and a whole-book sector cap.
 
-The signal math is extracted into pure functions (`ols_beta`,
-`market_factor`, `smb_factor`, `reversion_scores`) so the bug-prone parts
-are unit-testable without a backtrader scaffold — same discipline that
-kept `resolve_active_universe` pure.
+Rebalance: biweekly (every other Friday). On non-rebalance bars the strategy
+returns early; every position change goes through ``order_target_percent``.
 
-Rebalance: biweekly (every other Friday). On non-rebalance bars the
-strategy returns early — no `order_target_percent` call.
-
-Tunable signal hyperparameters:
-  - beta_window (60) — rolling OLS window for market/size betas
-  - formation_days (5) — residual accumulation / reversion horizon
-  - retention_mult (2.0) — held names retained if still in top
-    retention_mult × n_positions by score (turnover/cost control)
-  - entry_pct (0.20) — only the most-oversold tail is entry-eligible
-  - regime_pct (95) — regime-gate threshold (structurally parallel to A;
-    the gate currently keys off the macro_regime label)
-  - n_positions (25) — target portfolio size (diversified; <10 caused the
-    structural ~80% catastrophe drawdown — see 2026-05-16)
-  - sector_cap (0.25) — max single-sector weight
-
-Trade contract: every position-change goes through
-`self.order_target_percent` — never the direct buy/close order calls.
-Required by `scripts.signal_today` capture logic.
-
-Design: docs/superpowers/specs/2026-05-15-strategy-b-residual-reversal-statarb-design.md
+Trade contract:
+  - Long-only CNC delivery behavior.
+  - Trade only the injected point-in-time universe.
+  - Size each selected name from fixed risk slots: gross / n_positions.
+  - Never size from len(selected); unused or blocked slots remain cash.
 """
 
 from __future__ import annotations
@@ -57,13 +39,12 @@ def resolve_active_universe(
     sorted_dates: list[date] | None,
     today: date,
 ) -> set[str] | None:
-    """Resolve the point-in-time eligible universe (audit-2026-05-15 Fix B).
+    """Resolve the point-in-time eligible universe.
 
-    - None              → no PIT universe injected; all loaded feeds eligible.
-    - most-recent ≤ today → that snapshot's membership.
-    - today before the earliest snapshot → empty set (nothing eligible yet;
-      NEVER fall forward to a future snapshot — that would reintroduce the
-      look-ahead this fix exists to remove).
+    - None -> no PIT universe injected; all loaded feeds eligible.
+    - most-recent <= today -> that snapshot's membership.
+    - today before earliest snapshot -> empty set. Never fall forward to a
+      future snapshot.
     """
     if not universe_by_date or not sorted_dates:
         return None
@@ -73,29 +54,19 @@ def resolve_active_universe(
     return set(universe_by_date[sorted_dates[i]])
 
 
-# ──────────────────────────────────────────────────────────────────────
-# Pure signal core (no backtrader) — unit-tested in test_strategy_reversion
-# ──────────────────────────────────────────────────────────────────────
+# ----------------------------------------------------------------------
+# Legacy pure residual helpers retained for unit-test compatibility.
+# The strategy below no longer trades this signal.
+# ----------------------------------------------------------------------
 
 
 def ols_beta(
     y: list[float], factors: list[list[float]]
 ) -> list[float] | None:
-    """Least squares of `y` on an intercept + each factor column. Returns
-    `[intercept, b_1, ..., b_K]`, or `None` only when the system is
-    underdetermined (too few rows to fit K+1 parameters).
-
-    Collinear / near-constant factors are NOT rejected: `np.linalg.lstsq`
-    returns the minimum-norm solution, and the fitted values (hence the
-    residuals — the actual reversion signal) are unique even when the
-    coefficients are not. Hard-rejecting collinearity made the strategy go
-    inert in low-dispersion regimes (e.g. when the cross-sectional market
-    factor has near-zero variance).
-    """
     yv = np.asarray(y, dtype=float)
     T = yv.shape[0]
     K = len(factors)
-    if T < K + 2:  # need comfortably more rows than the K+1 parameters
+    if T < K + 2:
         return None
     X = np.column_stack(
         [np.ones(T)] + [np.asarray(f, dtype=float) for f in factors]
@@ -105,9 +76,6 @@ def ols_beta(
 
 
 def market_factor(returns_by_ticker: dict[str, list[float]]) -> list[float]:
-    """Equal-weight cross-sectional mean return per day (the 'market mode').
-    Assumes all return lists are aligned and equal length.
-    """
     if not returns_by_ticker:
         return []
     M = np.asarray(list(returns_by_ticker.values()), dtype=float)
@@ -118,11 +86,6 @@ def smb_factor(
     returns_by_ticker: dict[str, list[float]],
     adv_by_ticker: dict[str, float],
 ) -> list[float]:
-    """Size proxy: mean return of the small-ADV tercile minus the
-    large-ADV tercile, per day. We have no market cap (program.md "NOT
-    available"); ADV is the size/liquidity proxy. Returns a zero series
-    when there are fewer than 3 ranked tickers (tercile undefined).
-    """
     tickers = [t for t in returns_by_ticker if t in adv_by_ticker]
     T = len(next(iter(returns_by_ticker.values()))) if returns_by_ticker else 0
     if len(tickers) < 3:
@@ -142,12 +105,6 @@ def reversion_scores(
     beta_window: int,
     formation_days: int,
 ) -> dict[str, float]:
-    """Per-ticker reversion score = **negative** cross-sectional z-score of
-    the cumulative market+size factor residual over the last
-    `formation_days`. Higher score = more oversold relative to factor
-    exposure = stronger buy. Tickers with < `beta_window` history are
-    omitted (cannot estimate betas).
-    """
     rbt = {
         t: list(r)[-beta_window:]
         for t, r in returns_by_ticker.items()
@@ -179,63 +136,189 @@ def reversion_scores(
     return {t: -((v - mu) / sd) for t, v in cum_resid.items()}
 
 
-# ──────────────────────────────────────────────────────────────────────
-# backtrader adapter
-# ──────────────────────────────────────────────────────────────────────
+# ----------------------------------------------------------------------
+# Momentum-quality signal core.
+# ----------------------------------------------------------------------
+
+
+def _rank_metric(
+    rows: dict[str, dict[str, float]],
+    key: str,
+    higher_is_better: bool = True,
+) -> dict[str, float]:
+    if not rows:
+        return {}
+    ordered = sorted((vals[key], t) for t, vals in rows.items())
+    n = len(ordered)
+    if n == 1:
+        return {ordered[0][1]: 0.5}
+    ranks: dict[str, float] = {}
+    denom = float(n - 1)
+    for i, (_, t) in enumerate(ordered):
+        pct = i / denom
+        ranks[t] = pct if higher_is_better else 1.0 - pct
+    return ranks
+
+
+def _max_drawdown(closes: np.ndarray) -> float:
+    peaks = np.maximum.accumulate(closes)
+    drawdowns = closes / peaks - 1.0
+    return abs(float(np.min(drawdowns)))
+
+
+def _downside_volatility(returns: np.ndarray) -> float:
+    downside = returns[returns < 0.0]
+    if downside.size == 0:
+        return 0.0
+    return float(np.sqrt(np.mean(downside * downside)))
+
+
+def momentum_quality_scores(
+    close_by_ticker: dict[str, list[float]],
+    adv_by_ticker: dict[str, float],
+    lookback_days: int,
+    skip_days: int,
+) -> dict[str, float]:
+    """Rank positive 12-1 style momentum by quality of the path.
+
+    Higher score favors names with positive long and medium relative strength,
+    current price still near its trailing high, smaller drawdown, and lower
+    downside volatility. All components are cross-sectional percentile ranks,
+    so no scale fitting is needed.
+    """
+    rows: dict[str, dict[str, float]] = {}
+    skip = max(1, int(skip_days))
+    lookback = max(skip + 21, int(lookback_days))
+
+    for t, raw_closes in close_by_ticker.items():
+        if len(raw_closes) < lookback + 1:
+            continue
+        closes = np.asarray(raw_closes[-(lookback + 1):], dtype=float)
+        if closes.size < lookback + 1:
+            continue
+        if bool(np.any(~np.isfinite(closes))) or bool(np.any(closes <= 0.0)):
+            continue
+
+        now = float(closes[-1])
+        pre_skip = float(closes[-(skip + 1)])
+        start = float(closes[0])
+        half = max(skip + 21, lookback // 2)
+        mid_start = float(closes[-(half + 1)])
+        ma_window = min(200, max(50, lookback * 3 // 4))
+        moving_average = float(np.mean(closes[-ma_window:]))
+
+        long_mom = pre_skip / start - 1.0
+        mid_mom = pre_skip / mid_start - 1.0
+        if long_mom <= 0.0 or mid_mom <= 0.0 or now < moving_average:
+            continue
+
+        returns = closes[1:] / closes[:-1] - 1.0
+        trailing_high = float(np.max(closes))
+        high_proximity = now / trailing_high if trailing_high > 0.0 else 0.0
+        rows[t] = {
+            "long_mom": long_mom,
+            "mid_mom": mid_mom,
+            "high_proximity": high_proximity,
+            "max_drawdown": _max_drawdown(closes),
+            "downside_vol": _downside_volatility(returns),
+            "adv": float(adv_by_ticker.get(t, 0.0)),
+        }
+
+    if len(rows) < 2:
+        return {}
+
+    long_rank = _rank_metric(rows, "long_mom", True)
+    mid_rank = _rank_metric(rows, "mid_mom", True)
+    high_rank = _rank_metric(rows, "high_proximity", True)
+    dd_rank = _rank_metric(rows, "max_drawdown", False)
+    downvol_rank = _rank_metric(rows, "downside_vol", False)
+    adv_rank = _rank_metric(rows, "adv", True)
+
+    scores: dict[str, float] = {}
+    for t in rows:
+        scores[t] = (
+            long_rank[t]
+            + mid_rank[t]
+            + high_rank[t]
+            + dd_rank[t]
+            + downvol_rank[t]
+            + 0.25 * adv_rank[t]
+        )
+    return scores
+
+
+def breadth_scaled_gross(
+    close_by_ticker: dict[str, list[float]], lookback_days: int
+) -> float:
+    """Conservative gross exposure from cross-sectional market health.
+
+    The book remains long-only, but when fewer names are above their own
+    intermediate moving average and the median three-month return is weak,
+    the fixed slots are funded with less gross instead of concentrating risk.
+    """
+    above = 0
+    usable = 0
+    short_rets: list[float] = []
+    ma_window = min(200, max(50, int(lookback_days) * 3 // 4))
+    ret_window = min(63, max(21, int(lookback_days) // 4))
+
+    for raw_closes in close_by_ticker.values():
+        if len(raw_closes) < max(ma_window, ret_window) + 1:
+            continue
+        closes = np.asarray(raw_closes, dtype=float)
+        if bool(np.any(~np.isfinite(closes))) or bool(np.any(closes <= 0.0)):
+            continue
+        usable += 1
+        now = float(closes[-1])
+        if now >= float(np.mean(closes[-ma_window:])):
+            above += 1
+        short_rets.append(now / float(closes[-(ret_window + 1)]) - 1.0)
+
+    if usable < 20:
+        return 0.75
+    breadth = above / float(usable)
+    median_short_ret = float(np.median(np.asarray(short_rets, dtype=float)))
+
+    if breadth < 0.35 and median_short_ret < 0.0:
+        return 0.35
+    if breadth < 0.45:
+        return 0.55
+    if breadth < 0.55 or median_short_ret < 0.0:
+        return 0.75
+    return 0.99
 
 
 class IndiaResidualReversalStatArb(bt.Strategy):
-    """Long-only cross-sectional residual mean-reversion + sector cap +
-    regime gate. Buys the most-oversold tail of the factor-residual
-    distribution, retains names still scoring well, exits the rest."""
+    """Long-only PIT-universe momentum-quality carry with fixed slots."""
 
-    _ADV_WINDOW = 20  # in-feed ADV proxy lookback (structural, not tuned)
+    _ADV_WINDOW = 20
 
     params = (
-        ("beta_window", 60),
-        ("formation_days", 5),
+        ("beta_window", 252),
+        ("formation_days", 21),
         ("retention_mult", 2.0),
-        ("entry_pct", 0.20),
+        ("entry_pct", 0.30),
         ("regime_pct", 95),
         ("n_positions", 25),
         ("sector_cap", 0.25),
-        # Rebalance cadence (biweekly = every other Friday) — plumbing.
-        ("rebalance_weekday", 4),       # Friday
+        ("rebalance_weekday", 4),
         ("rebalance_period_weeks", 2),
-        ("rebalance_week_parity", 0),   # 0 or 1 — pinned at start of backtest
-        # Optional sidecar DB paths (defaults match runtime layout) —
-        # plumbing; the signal itself is self-contained (in-feed ADV).
+        ("rebalance_week_parity", 0),
         ("universe_db_path", "storage/universe.duckdb"),
         ("macro_db_path", "storage/macro.duckdb"),
-        # Sector cap: when True, sector_map is loaded from `data.sectors`
-        # using the per-ticker industry tag carried on the data feeds.
         ("enforce_sector_cap", True),
-        # Point-in-time universe injected by the evaluator / live runner:
-        # {snapshot_date: frozenset(tickers)}. When set, only names in the
-        # most-recent snapshot ON OR BEFORE the rebalance date are eligible
-        # for ranking/entry (exits of dropped names still fire). When None,
-        # every loaded feed is eligible (standalone / unit-test behaviour).
-        # audit-2026-05-15 Fix B guard — must not be removed by the loop.
         ("universe_by_date", None),
     )
-
-    # ──────────────────────────────────────────────────────────
-    # Setup
-    # ──────────────────────────────────────────────────────────
 
     def __init__(self) -> None:
         self._data_by_ticker = {self._ticker_of(d): d for d in self.datas}
         self._sector_map = self._load_sector_map()
         self._last_rebalance_date: date | None = None
-        self._regime_cache: dict[date, str] = {}
         self._week_parity_initialized = False
         ubd = self.p.universe_by_date
         self._univ_dates: list[date] | None = sorted(ubd) if ubd else None
 
     def _active_universe(self, today: date) -> set[str] | None:
-        """Tickers eligible for ranking/entry as of `today`. Thin wrapper
-        over the pure resolver so the point-in-time lookup is unit-testable
-        without a backtrader scaffold."""
         return resolve_active_universe(
             self.p.universe_by_date, self._univ_dates, today
         )
@@ -258,10 +341,6 @@ class IndiaResidualReversalStatArb(bt.Strategy):
             rows.append(_Row())
         return assign_sectors(rows)
 
-    # ──────────────────────────────────────────────────────────
-    # Rebalance gate
-    # ──────────────────────────────────────────────────────────
-
     def _is_rebalance_today(self) -> bool:
         today = self.datas[0].datetime.date(0)
         if today.weekday() != self.p.rebalance_weekday:
@@ -275,153 +354,131 @@ class IndiaResidualReversalStatArb(bt.Strategy):
             return True
         return iso_week % 2 == self.p.rebalance_week_parity
 
-    # ──────────────────────────────────────────────────────────
-    # Feed → pure-signal extraction
-    # ──────────────────────────────────────────────────────────
+    def _held_positions(self) -> dict[str, float]:
+        held = {
+            self._ticker_of(d): self.getposition(d).size for d in self.datas
+        }
+        return {t: q for t, q in held.items() if q > 0}
 
-    def _returns_and_adv(
+    def _close_and_adv(
         self, active: set[str] | None
     ) -> tuple[dict[str, list[float]], dict[str, float]]:
-        """Build aligned trailing return series + an in-feed ADV proxy for
-        every eligible feed with enough history. Returns oldest→newest."""
-        w = self.p.beta_window
-        need = w + 1
-        returns_by_ticker: dict[str, list[float]] = {}
+        lookback = int(self.p.beta_window)
+        need = max(lookback + 1, self._ADV_WINDOW)
+        close_by_ticker: dict[str, list[float]] = {}
         adv_by_ticker: dict[str, float] = {}
+
         for d in self.datas:
             t = self._ticker_of(d)
             if active is not None and t not in active:
                 continue
-            if len(d) < max(need, self._ADV_WINDOW):
+            if len(d) < need:
                 continue
-            closes = [d.close[-i] for i in range(w, -1, -1)]  # oldest→newest
-            if any(c is None or c <= 0 for c in closes):
-                continue
-            rets = [
-                closes[i] / closes[i - 1] - 1.0 for i in range(1, len(closes))
+            closes = [
+                float(d.close[-i]) for i in range(lookback, -1, -1)
             ]
+            if any(c <= 0.0 for c in closes):
+                continue
             adv = float(
                 np.mean(
                     [
-                        d.close[-i] * d.volume[-i]
+                        float(d.close[-i]) * float(d.volume[-i])
                         for i in range(self._ADV_WINDOW)
                     ]
                 )
             )
-            returns_by_ticker[t] = rets
+            if adv <= 0.0:
+                continue
+            close_by_ticker[t] = closes
             adv_by_ticker[t] = adv
-        return returns_by_ticker, adv_by_ticker
+        return close_by_ticker, adv_by_ticker
 
-    # ──────────────────────────────────────────────────────────
-    # Regime gate
-    # ──────────────────────────────────────────────────────────
-
-    def _regime_gate(self, today: date) -> bool:
-        """True if new entries are ALLOWED today. Reversion is fragile in
-        trending crashes ('falling knife'), so a defensive gate matters
-        MORE here, not less. Falls back to permissive when the macro cache
-        is not yet precomputed."""
-        try:
-            from llm.features import macro_regime_for  # type: ignore
-
-            regime = macro_regime_for(today)
-            self._regime_cache[today] = regime
-            return regime in ("risk_on", "neutral")
-        except Exception:
-            return True
-
-    # ──────────────────────────────────────────────────────────
-    # backtrader hook
-    # ──────────────────────────────────────────────────────────
+    def _exit_ineligible_held(
+        self, held: dict[str, float], active: set[str] | None
+    ) -> dict[str, float]:
+        if active is None:
+            return held
+        still_held: dict[str, float] = {}
+        for d in self.datas:
+            t = self._ticker_of(d)
+            if t not in held:
+                continue
+            if t in active:
+                still_held[t] = held[t]
+            else:
+                self.order_target_percent(d, target=0.0)
+        return still_held
 
     def next(self) -> None:
         if not self._is_rebalance_today():
             return
 
         today = self.datas[0].datetime.date(0)
-
-        # 1. Eligible feeds (point-in-time universe; Fix B guard)
         active = self._active_universe(today)
-        returns_by_ticker, adv_by_ticker = self._returns_and_adv(active)
-        if len(returns_by_ticker) < 3:
+        held = self._exit_ineligible_held(self._held_positions(), active)
+        close_by_ticker, adv_by_ticker = self._close_and_adv(active)
+        if len(close_by_ticker) < 3:
+            self._last_rebalance_date = today
             return
 
-        # 2. Residual reversion score; rank most-oversold first
-        scores = reversion_scores(
-            returns_by_ticker,
+        scores = momentum_quality_scores(
+            close_by_ticker,
             adv_by_ticker,
-            self.p.beta_window,
-            self.p.formation_days,
+            int(self.p.beta_window),
+            int(self.p.formation_days),
         )
         if not scores:
+            for d in self.datas:
+                t = self._ticker_of(d)
+                if t in held:
+                    self.order_target_percent(d, target=0.0)
+            self._last_rebalance_date = today
             return
+
         ranked = sorted(scores.items(), key=lambda kv: kv[1], reverse=True)
-
-        # 3. Only the most-oversold tail is entry-eligible
         eligible_n = max(
-            self.p.n_positions, int(self.p.entry_pct * len(ranked))
+            int(self.p.n_positions), int(float(self.p.entry_pct) * len(ranked))
         )
-        candidates = [t for t, _ in ranked[:eligible_n]]
+        retain_n = max(
+            int(self.p.n_positions),
+            int(float(self.p.retention_mult) * int(self.p.n_positions)),
+        )
 
-        # 4. Regime gate (block new entries on risk_off / shock)
-        allow_new = self._regime_gate(today)
+        retained_priority = [t for t, _ in ranked[:retain_n] if t in held]
+        entry_priority = [t for t, _ in ranked[:eligible_n] if t not in held]
+        priority = retained_priority + entry_priority
 
-        # 5. Retention buffer: held names still scoring in the top
-        #    retention_mult × n band are kept (suppresses turnover/DP drag)
-        held = {
-            self._ticker_of(d): self.getposition(d).size for d in self.datas
-        }
-        held = {t: q for t, q in held.items() if q > 0}
-        retention_cap = int(self.p.retention_mult * self.p.n_positions)
-        top_retain = {
-            t for t, _ in ranked[: max(retention_cap, self.p.n_positions)]
-        }
-        retained = [t for t in held if t in top_retain]
-        slots_remaining = self.p.n_positions - len(retained)
+        gross = breadth_scaled_gross(close_by_ticker, int(self.p.beta_window))
+        target_each = gross / max(int(self.p.n_positions), 1)
 
-        # 6. New entries (if allowed), respecting the sector cap
-        new_entries: list[str] = []
-        if allow_new and slots_remaining > 0:
-            new_candidates = [
-                t
-                for t in candidates
-                if t not in retained and t not in held
-            ]
-            if self.p.enforce_sector_cap and self._sector_map:
-                target_each = 1.0 / max(self.p.n_positions, 1)
-                new_entries = enforce_sector_cap(
-                    ranked_candidates=new_candidates,
-                    target_fraction_each=target_each,
-                    sector_map=self._sector_map,
-                    max_sector_fraction=self.p.sector_cap,
-                    n_target=slots_remaining,
-                )
-            else:
-                new_entries = new_candidates[:slots_remaining]
+        if self.p.enforce_sector_cap and self._sector_map:
+            selected = enforce_sector_cap(
+                ranked_candidates=priority,
+                target_fraction_each=target_each,
+                sector_map=self._sector_map,
+                max_sector_fraction=float(self.p.sector_cap),
+                n_target=int(self.p.n_positions),
+            )
+        else:
+            selected = priority[: int(self.p.n_positions)]
 
-        selected = retained + new_entries
-        # 1% cash buffer for commission + slippage; without it backtrader can
-        # silently reject the final order when the cumulative target hits 100%.
-        target_each = 0.99 / max(len(selected), 1) if selected else 0.0
-
-        # 7. order_target_percent for every name (exits get 0.0)
+        selected_set = set(selected)
         for d in self.datas:
             t = self._ticker_of(d)
-            if t in selected:
+            if t in selected_set:
                 self.order_target_percent(d, target=target_each)
             elif t in held:
                 self.order_target_percent(d, target=0.0)
 
         self._last_rebalance_date = today
         logger.debug(
-            "rebalance %s: scored=%d, eligible=%d, retained=%d, new=%d, "
-            "target=%d",
+            "rebalance %s: scored=%d, selected=%d, held=%d, gross=%.2f, slot=%.4f",
             today,
             len(scores),
-            len(candidates),
-            len(retained),
-            len(new_entries),
             len(selected),
+            len(held),
+            gross,
+            target_each,
         )
 
 
@@ -431,5 +488,7 @@ __all__ = [
     "market_factor",
     "smb_factor",
     "reversion_scores",
+    "momentum_quality_scores",
+    "breadth_scaled_gross",
     "IndiaResidualReversalStatArb",
 ]
