@@ -4139,3 +4139,32 @@ structural learnings are codified in `program.md`. Explore freely.
 **Learning:** Sortino changed from 3.628 to 3.494 (-0.134). Aggregate DD was 14.5% versus previous kept 15.1%; negative folds were 2/13; trades=191. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 3.494 did not improve on prev 3.6277126896862444.
 
 ---
+
+## Iteration 2026-05-17-eb482c9 — REVERTED
+
+**Hypothesis:** Adding an active-universe breadth confirmation gate will improve validation Sortino by holding cash on rebalance dates when too few PIT universe names have positive 63-day momentum, avoiding broad-market drawdown regimes without using external macro labels.
+
+**Change:** I added a PIT-safe median 63-day breadth calculation from the active universe and require at least 52% positive intermediate momentum before ranking, preserving the existing stock score, fixed-slot sizing, sector cap, cadence, and order_target_percent-only execution.
+
+**Decision:** REVERTED — sortino 3.090 did not improve on prev 3.6277126896862444 | anti-overfit FAILED: parsimony(baseline params=8, strategy=9; +1 param(s) need Sortino +0.10, has -0.54)
+
+**Result:**
+- evaluator_version: 2026-05-16-univfloor
+- validation_sortino_mean: 3.089512926676443
+- validation_folds: 13
+- per_fold_sortinos: [4.7508, -0.7174, -1.5785, 4.2843, 7.6511, 6.3325, 6.0772, 5.517, 2.5096, 0.5545, 1.9883, 1.7316, 1.0626]
+- calmar_mean: 6.392082046767415
+- hit_rate_mean: 0.5036171470560611
+- profit_factor_mean: 5.396638360321149
+- trade_count_total: 169
+- aggregate_max_dd: 0.16971774086650526
+- worst_fold_max_dd: 0.12158873478469112
+- max_position_frac_peak: 0.06450034369066955
+- lower_quartile_fold_calmar: 0.8981107094562876
+- n_negative_folds: 2/13
+- risk.passed: True
+- risk.violations: []
+
+**Learning:** Sortino changed from 3.628 to 3.090 (-0.538). Aggregate DD was 17.0% versus previous kept 15.1%; negative folds were 2/13; trades=169. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 3.090 did not improve on prev 3.6277126896862444 | anti-overfit FAILED: parsimony(baseline params=8, strategy=9; +1 param(s) need Sortino +0.10, has -0.54).
+
+---
