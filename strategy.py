@@ -7,8 +7,8 @@ strength on weak market days, persistent multi-leg trend quality, fresh
 intermediate trend confirmation, modest short-term pullback quality, avoids
 one-week and one-day upside exhaustion, rewards efficient intermediate trends,
 favors constructive recent range location, requires basic accumulation support,
-applies a 25% sector cap, and sizes by fixed risk slots so blocked slots remain
-cash.
+adds close-location accumulation confirmation, applies a 25% sector cap, and
+sizes by fixed risk slots so blocked slots remain cash.
 
 Trade contract: every position change goes through order_target_percent only.
 '''
@@ -99,6 +99,33 @@ class IndiaMomentumQualityRegime(bt.Strategy):
     def _price_at(self, d, ago: int) -> float | None:
         try:
             px = float(d.close[-ago])
+        except Exception:
+            return None
+        if not math.isfinite(px) or px <= 0:
+            return None
+        return px
+
+    def _open_at(self, d, ago: int) -> float | None:
+        try:
+            px = float(d.open[-ago])
+        except Exception:
+            return None
+        if not math.isfinite(px) or px <= 0:
+            return None
+        return px
+
+    def _high_at(self, d, ago: int) -> float | None:
+        try:
+            px = float(d.high[-ago])
+        except Exception:
+            return None
+        if not math.isfinite(px) or px <= 0:
+            return None
+        return px
+
+    def _low_at(self, d, ago: int) -> float | None:
+        try:
+            px = float(d.low[-ago])
         except Exception:
             return None
         if not math.isfinite(px) or px <= 0:
@@ -218,6 +245,36 @@ class IndiaMomentumQualityRegime(bt.Strategy):
         if used < 20 or total <= 0.0:
             return None
         score = (up_value - down_value) / total
+        if not math.isfinite(score):
+            return None
+        return max(min(score, 1.0), -1.0)
+
+    def _close_location_accumulation(self, d, days: int) -> float | None:
+        if len(d) < days + 2:
+            return None
+        weighted = 0.0
+        total_value = 0.0
+        used = 0
+        for i in range(days, 0, -1):
+            close_px = self._price_at(d, i - 1)
+            high_px = self._high_at(d, i - 1)
+            low_px = self._low_at(d, i - 1)
+            vol = self._volume_at(d, i - 1)
+            if close_px is None or high_px is None or low_px is None or vol is None:
+                return None
+            daily_range = high_px - low_px
+            if daily_range <= 0.0 or not math.isfinite(daily_range):
+                continue
+            value = close_px * vol
+            if not math.isfinite(value) or value < 0.0:
+                return None
+            close_location = ((close_px - low_px) / daily_range) - 0.5
+            weighted += value * close_location
+            total_value += value
+            used += 1
+        if used < 20 or total_value <= 0.0:
+            return None
+        score = 2.0 * weighted / total_value
         if not math.isfinite(score):
             return None
         return max(min(score, 1.0), -1.0)
@@ -362,6 +419,7 @@ class IndiaMomentumQualityRegime(bt.Strategy):
         efficiency = self._trend_efficiency(d, self.p.vol_days)
         range_location = self._range_location(d, self.p.vol_days)
         accumulation = self._volume_accumulation(d, self.p.vol_days)
+        close_accumulation = self._close_location_accumulation(d, self.p.vol_days)
         if (
             vol is None
             or drawdown is None
@@ -370,6 +428,7 @@ class IndiaMomentumQualityRegime(bt.Strategy):
             or efficiency is None
             or range_location is None
             or accumulation is None
+            or close_accumulation is None
         ):
             return None
         if (
@@ -380,11 +439,12 @@ class IndiaMomentumQualityRegime(bt.Strategy):
             or efficiency < -0.05
             or range_location < 0.32
             or accumulation < -0.12
+            or close_accumulation < -0.18
         ):
             return None
 
         pullback_quality = -abs(ma_distance - 0.015)
-        range_quality = -abs(range_location - 0.72)
+        range_quality = -abs(range_location - 0.75)
         fast_exhaustion = max(fast - 0.055, 0.0)
         one_day_exhaustion = max(one_day - 0.035, 0.0)
         defensive = self._defensive_relative_strength(d, market_returns)
@@ -396,6 +456,7 @@ class IndiaMomentumQualityRegime(bt.Strategy):
             + (0.08 * range_quality)
             + (0.18 * pullback_quality)
             + (0.06 * accumulation)
+            + (0.045 * close_accumulation)
             + (2.25 * defensive)
             - (0.45 * vol)
             - (0.35 * drawdown)
