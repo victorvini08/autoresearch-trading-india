@@ -6575,3 +6575,32 @@ structural learnings are codified in `program.md`. Explore freely.
 **Learning:** Sortino changed from 3.835 to 3.835 (-0.000). Aggregate DD was 12.0% versus previous kept 12.0%; negative folds were 1/13; trades=188. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 3.835 did not improve on prev 3.8348443215568286.
 
 ---
+
+## Iteration 2026-05-17-bb126f8 — REVERTED
+
+**Hypothesis:** Adding a PIT-safe market crash-day breadth veto will improve validation Sortino by moving to cash only when the liquid universe shows broad same-day downside pressure, avoiding systemic selloff entries without repeating the slower Nifty-200DMA regime veto.
+
+**Change:** I added a rebalance-day cross-sectional market stress check using same-day returns across the active universe and skip new exposure when the median active return is below -1.2% and fewer than 35% of names are positive, while preserving fixed-slot sizing, sector caps, universe gating, and order_target_percent-only execution.
+
+**Decision:** REVERTED — sortino 3.288 did not improve on prev 3.8348443215568286
+
+**Result:**
+- evaluator_version: 2026-05-16-univfloor
+- validation_sortino_mean: 3.287513745938562
+- validation_folds: 13
+- per_fold_sortinos: [3.3506, -0.8379, -2.7338, 7.5936, 10.9061, 4.7895, 6.0044, 5.5322, 2.7967, 0.9059, 2.0256, 1.7483, 0.6564]
+- calmar_mean: 5.358725605022045
+- hit_rate_mean: 0.5395402674248829
+- profit_factor_mean: 5.517149574908501
+- trade_count_total: 183
+- aggregate_max_dd: 0.13825165179428245
+- worst_fold_max_dd: 0.10631762564081036
+- max_position_frac_peak: 0.06371803513146512
+- lower_quartile_fold_calmar: 1.8295335350019766
+- n_negative_folds: 2/13
+- risk.passed: True
+- risk.violations: []
+
+**Learning:** Sortino changed from 3.835 to 3.288 (-0.547). Aggregate DD was 13.8% versus previous kept 12.0%; negative folds were 2/13; trades=183. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 3.288 did not improve on prev 3.8348443215568286.
+
+---
