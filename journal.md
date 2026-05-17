@@ -1292,3 +1292,110 @@ structural learnings are codified in `program.md`. Explore freely.
 **Learning:** Sortino changed from 2.925 to 3.117 (+0.192). Aggregate DD was 6.3% versus previous kept 5.5%; negative folds were 1/13; trades=39. Keep compounding on this change, but future iterations should still explain whether the gain came from better return, lower downside, or fewer fragile folds. Decision reason: sortino 3.117 > prev 2.9249943159478287, agg_dd 6.3%, catastrophe gate clear, anti-overfit gates passed.
 
 ---
+
+## Iteration 2026-05-17-A1-volscale-median — REVERTED (manual dev)
+
+**Hypothesis:** Replacing the 4-level breadth step-function gross with a
+conditional Barroso–Santa-Clara realized-vol scaling law (de-risk the whole
+book when its own realized vol is elevated vs its trailing history) will
+raise mean validation Sortino AND lift the worst regime sub-period by
+gracefully de-risking into momentum crashes without truncating the bull.
+Roadmap improvement A. Zero new counted hyperparameters (reuses
+formation_days/beta_window; preserves the existing 0.35 floor & 0.99 cap).
+
+**Change:** Added `conditional_vol_scaled_gross` (risk variable = the
+equal-weight active-universe daily return = existing `market_factor`;
+sigma_fast = std of last formation_days, sigma_ref = MEDIAN of the trailing
+rolling formation_days-window std over beta_window; m=1 if sigma_fast<=
+sigma_ref else sigma_ref/sigma_fast, clipped [0.35,1], times 0.99 cap),
+wired `next()` to use it instead of `breadth_scaled_gross`. Fixed-slot
+sizing, PIT handling, sector cap, structural exit, cadence unchanged.
+
+**Decision:** REVERTED — validation Sortino 2.143 < baseline 2.626 (does
+not improve, KEEP criterion 1 fail) | worst sub-period collapsed 1.717 →
+0.465 (roadmap's primary robustness bar degraded — the OPPOSITE of intent)
+| anti-overfit FAILED: sub_period_stationarity(signed min/max ratio
+0.465/2.889 = 0.161 < 0.20; sub-periods = [+2.889, +0.465]). Bonferroni
+(p=0.0140) and RW-MC (0.9865) PASSED — so there is edge; this is a
+regime-degradation failure, not a no-edge failure.
+
+**Result:**
+- evaluator_version: 2026-05-16-univfloor
+- validation_sortino_mean: 2.1428598161247634 (baseline 2.6255412901936075)
+- validation_folds: 13
+- per_fold_sortinos: [-0.0243, -0.0152, 0.0122, 4.4661, 6.5422, 2.4571, 3.0321, 6.536, 2.9915, 0.274, 0.4847, 0.0203, 1.0807]
+- sub_period_sortinos: [2.8886, 0.4649] (baseline [3.0293, 1.7172])
+- aggregate_dd: 0.04538 (baseline 0.05181 — improved, but not tradeable for Sortino/robustness)
+- n_trades: 56 ; n_hyperparameters: 6 (parsimony N/A) ; universe_respected: True
+- risk.passed: True ; risk.violations: []
+
+**Learning:** Conditional vol-scaling cushioned the early down folds as
+designed (fold 2 −2.07→+0.01) but TRUNCATED the strong bull folds
+(fold 4 10.16→6.54, fold 3 5.91→4.47) and cratered the 2024 bucket
+(fold 11 3.99→0.02), dropping the worst sub-period 1.717→0.465 and failing
+the sub-period gate. Root cause: a MEDIAN threshold flags vol "elevated"
+~50% of the time by construction, so the book de-risks on routine
+above-median vol inside healthy uptrends — i.e. it behaved like partial
+NAIVE vol-targeting, the exact bull-truncation failure roadmap §4 warns
+against. The thesis (de-risk on the book's own realized-vol TAIL) has edge;
+the operationalisation of "elevated" was too loose. Next single change
+(A.v2): gate de-risk to the genuine upper tail of the realized-vol
+distribution (trailing 80th percentile = top-quintile "elevated state",
+theory-pinned and pre-committed, NOT searched against the backtest — that
+would be the §6 burned trap), keeping calm/normal/moderate vol at full
+exposure. Still 0 new counted knobs. If A.v2 also fails the bar, the
+A-family is done — proceed to roadmap improvement B (do not tweak-streak).
+
+## Iteration 2026-05-17-A2-volscale-p80 — REVERTED (manual dev)
+
+**Hypothesis:** Gating the conditional vol-scaling to the book's own
+trailing 80th-percentile realized-vol (top-quintile "elevated state",
+pre-committed not searched) instead of the median will keep full exposure
+through bull/neutral and de-risk only in genuine vol tails, raising mean
+validation Sortino and lifting the worst sub-period. Roadmap improvement A,
+corrected operationalisation. Zero new counted hyperparameters.
+
+**Change:** `conditional_vol_scaled_gross` with sigma_ref =
+np.percentile(rolling formation_days-window std over beta_window, 80)
+instead of np.median; m=1 if sigma_fast<=sigma_ref else sigma_ref/
+sigma_fast, clip [0.35,1], x0.99 cap; 0.75 insufficient-data fallback.
+next() uses it instead of breadth_scaled_gross. Sizing/PIT/sector-cap/
+structural-exit/cadence unchanged.
+
+**Decision:** REVERTED — validation Sortino 2.256 < baseline 2.626 (does
+not improve, KEEP criterion 1 fail) | worst sub-period 0.686 still well
+below baseline 1.717 (roadmap's primary robustness bar still degraded).
+Anti-overfit gates ALL pass now (bonferroni p=0.0125, RW-MC 0.988,
+sub_period_stationarity ratio 0.686/2.954=0.232 >= 0.20, parsimony N/A) —
+but the KEEP gate requires strict mean-Sortino improvement, which fails.
+
+**Result:**
+- evaluator_version: 2026-05-16-univfloor
+- validation_sortino_mean: 2.2558901039154815 (baseline 2.6255412901936075)
+- per_fold_sortinos: [0.0502, 0.2872, 0.886, 4.6424, 6.5686, 2.1501, 2.4855, 6.3763, 3.1359, 0.4192, 0.7112, 0.1584, 1.4556]
+- sub_period_sortinos: [2.9536, 0.6861] (baseline [3.0293, 1.7172])
+- aggregate_dd: 0.04171 (baseline 0.05181 — best yet)
+- n_negative_folds: 0/13 (baseline 3/13) ; worst fold +0.05 (baseline -2.069)
+- n_trades: 52 ; n_hyperparameters: 6 (parsimony N/A) ; universe_respected: True
+- risk.passed: True ; risk.violations: []
+
+**Learning:** A.v2 strictly dominated baseline on EVERY robustness axis —
+0 negative folds (vs 3), lowest drawdown 4.17% (vs 5.18%), worst fold
++0.05 (vs -2.07), and it cleanly passes the sub-period gate — yet mean
+Sortino is LOWER (2.256 < 2.626). Per-fold: it cushions the early crash
+folds (fold 2 -2.07->+0.89) but clips the explosive bull folds (fold 4
+10.16->6.57, fold 3 5.91->4.64). ROOT CAUSE (structural, not tunable):
+this long-only momentum-quality book's high backtest Sortino is
+right-tail-driven — a few melt-up folds dominate the mean — and realized-
+vol scaling is SYMMETRIC: in Indian midcaps a high-realized-vol regime is
+frequently an explosive move UP, so scaling gross down on vol clips
+melt-ups as much as it cushions crashes. Barroso–Santa-Clara's ~2x Sharpe
+is for the long-SHORT momentum factor; on a long-only right-tail book even
+*conditional, tail-gated* gross vol-scaling nets less upside than the
+downside it saves over this window. Two A-family reverts (median, p80),
+same root cause => the GROSS-VOL-SCALING family is structurally exhausted;
+do NOT try more thresholds (that is the burned tweak-streak). Proceed to
+roadmap improvement B (inverse-vol / risk-parity PER-NAME sizing within
+FIXED gross): structurally different — gross stays fully invested (no
+bull-melt-up truncation), only intra-book weights tilt to lower-vol names,
+dampening downside variance without clipping the right tail.

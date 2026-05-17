@@ -65,6 +65,10 @@ Aug-2024 onward, Nifty Quality 30 and Low Vol 50 decisively outperformed Nifty M
 
 Top 5 Nifty 100 weights = 24%; financials 35-38% of the broad index. Without a sector cap, momentum-ranked portfolios collapse into financials beta. The 25% sector cap is non-negotiable.
 
+### 3.5 Gross volatility-scaling clips the right tail of a long-only momentum book
+
+Conditional realized-vol scaling of *gross* (Barroso–Santa-Clara crash defense) was tested twice on the momentum-quality book (2026-05-17, journal `A1-volscale-median`, `A2-volscale-p80`). Both REVERTED for the **same structural reason**, so the gross-vol-scaling family is exhausted — do not retry with new thresholds. Finding: it strictly improves *every* robustness axis (A.v2: 0/13 negative folds vs 3, drawdown 4.17% vs 5.18%, worst fold +0.05 vs −2.07, passes the sub-period gate) yet *lowers* mean validation Sortino (2.26 vs 2.63). Cause: this long-only book's Sortino is **right-tail-driven** (a few explosive bull folds dominate the mean), and realized vol is **symmetric** — in Indian midcaps a high-realized-vol regime is frequently an explosive move *up*, so any gross reduction clips melt-ups as much as it cushions crashes. Barroso–Santa-Clara's ~2× Sharpe is for the long-*short* momentum factor, not a long-only right-tail book. Implication: defend the downside *without* touching gross — re-weight *within* fixed gross (inverse-vol / risk-parity per-name sizing) or change the entry thesis; never scale gross down on a long-only right-tail momentum book.
+
 ---
 
 ## 4. SEBI retail algo framework (effective 2026-04-01)
