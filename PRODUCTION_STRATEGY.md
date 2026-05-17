@@ -99,3 +99,45 @@ OOS per-quarter (#2): 2025 Q1 −0.56% · Q2 +2.22% · Q3 −1.54% · Q4 +4.13% 
 
 `strategy.py` here is byte-identical to checkpoint #2 so the OOS numbers above
 remain reproducible. Make changes deliberately, one at a time, from this base.
+
+---
+
+## 6. Manual development log — 2026-05-17 (session 1)
+
+Worst-regime-first manual phase. Anchor = the measured committed #2 base
+(`prepare.py research`, evaluator `2026-05-16-univfloor`): `sub_period_
+sortinos` **[2.819, 1.717]** (worst bucket **1.717**), worst fold **−2.069**,
+agg_dd **5.17%**, mean 2.480, all anti-overfit gates pass. Acceptance test
+applied throughout (per STRATEGY_DEVELOPMENT_PLAN §HOW TO VALIDATE, **not**
+the loop's mean-first rule): a change is kept **only if** the worst
+sub-period does not degrade/sign-flip **and** every statistical gate passes
+**and** drawdown stays controlled **and** gross ≤ 100% — mean Sortino is a
+reference, never the objective. `promotion` never run; sealed set untouched.
+
+| # | Commit | Change | Verdict |
+|---|---|---|---|
+| 1 | `9bc8b2c` | Remove dead `regime_pct` param (declared + parsimony-counted but never read; verified repo-wide) | **KEPT** — provably behaviour-neutral (per-fold/sub-period byte-identical); honest parsimony 7→6 |
+| — | _(reverted)_ | Vol-distance trailing stop (`stop_vol_mult`·σ_dn band) | **REVERTED** — anti-momentum whipsaw: turnover 0.11→0.44, worst bucket 1.72→0.75, universe hard-reject. Learning: a price-distance band amputates momentum's right tail; the exit must be a **trend-state** break, not a distance band |
+| 2 | `e745434` | **Symmetric structural trend exit**: sell a held name on any non-rebalance bar once close falls below the SAME `beta_window`-derived structural MA the entry requires it to be above (shared `_structural_ma_window`; **0 new params**) | **KEPT** — worst bucket **byte-identical** [3.029, **1.717**], worst fold −2.069 unchanged, agg_dd 5.18% & turnover 0.111 flat, only 3/13 folds changed (fires rarely), all gates pass. Installs the forward bear/transition defence the base structurally lacked (was calendar luck) |
+| — | _(reverted)_ | Unbounded "let winners run" retention (retain all still-qualifying incumbents; retire `retention_mult`) | **REVERTED** — degrades worst bucket 1.7172→1.7107 **and** bucket-0 3.03→2.54 / mean 2.63→2.28 (a ~15-20 % haircut to the strong-regime right-tail edge) to buy −31 % turnover. Sound principle, over-corrected implementation; the binding rule forbids trading worst-regime/right-tail for cost |
+
+**State after session:** HEAD `e745434`. Honest 6-param base + a genuine,
+gate-clean, zero-cost, theory-grounded (Asness/Novy-Marx trend filter on
+momentum) forward bear/transition defence; worst sub-period preserved exactly.
+
+**Why the session stopped here (not a premature halt):** the
+structurally-sound, evidence-supported lever was captured (#2). The remaining
+plan leads are exhausted or contraindicated: adding cross-sectional ranks is
+the proven over-fit path (journal #3→#4); binary **and** continuous macro
+gross gates degrade the in-sample worst bucket (both in-sample sub-periods
+are bull — any de-risk depresses them) and #2 already gives *emergent*
+de-risking without a gate; refining the just-reverted retention idea is the
+"wasted compute" program.md warns against. Pushing further would chase the
+backtest number — the exact failure this whole effort exists to avoid.
+
+**Honest limitation & recommendation:** both in-session sub-periods are
+bull/neutral, so `research` **cannot certify** real-bear behaviour — only
+that #2's defence is non-destructive, gate-clean and theory-sound. The real
+arbiter remains forward `dhan-paper` validation (roadmap #4). Recommend:
+promote `e745434` to forward paper; do **not** chase further `research`
+gains.
