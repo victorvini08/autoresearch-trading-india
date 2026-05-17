@@ -6488,3 +6488,32 @@ structural learnings are codified in `program.md`. Explore freely.
 **Learning:** Sortino changed from 3.835 to 3.455 (-0.380). Aggregate DD was 17.5% versus previous kept 12.0%; negative folds were 3/13; trades=114. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 3.455 did not improve on prev 3.8348443215568286.
 
 ---
+
+## Iteration 2026-05-17-cd693fa — REVERTED
+
+**Hypothesis:** Adding a PIT-safe recent volatility expansion penalty will improve validation Sortino by preserving the kept momentum/accumulation ranking while demoting names whose latest month has become materially noisier than their intermediate volatility profile.
+
+**Change:** I added a score-only recent-volatility-expansion penalty using the existing recent_days and vol_days windows, so unstable momentum names are ranked lower without changing universe gating, fixed-slot sizing, sector caps, or rebalance cadence.
+
+**Decision:** REVERTED — sortino 3.455 did not improve on prev 3.8348443215568286
+
+**Result:**
+- evaluator_version: 2026-05-16-univfloor
+- validation_sortino_mean: 3.4547777685993446
+- validation_folds: 13
+- per_fold_sortinos: [1.336, 1.3015, -0.0018, 5.7129, 9.7902, 6.6586, 5.9548, 5.5517, 2.4903, 0.7762, 1.9355, 1.4465, 1.9597]
+- calmar_mean: 7.5992596974722435
+- hit_rate_mean: 0.5623418248418249
+- profit_factor_mean: 7.505060207210547
+- trade_count_total: 183
+- aggregate_max_dd: 0.12736108778788108
+- worst_fold_max_dd: 0.10892328055576575
+- max_position_frac_peak: 0.06439392411807983
+- lower_quartile_fold_calmar: 1.5970036848608449
+- n_negative_folds: 1/13
+- risk.passed: True
+- risk.violations: []
+
+**Learning:** Sortino changed from 3.835 to 3.455 (-0.380). Aggregate DD was 12.7% versus previous kept 12.0%; negative folds were 1/13; trades=183. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 3.455 did not improve on prev 3.8348443215568286.
+
+---
