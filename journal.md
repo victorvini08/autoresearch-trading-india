@@ -1458,3 +1458,42 @@ baseline: test adding A.v2 (conditional 80th-pct vol-scaled gross) ON TOP
 regime-balanced Sortino B preserves) keep it, else revert to B alone
 (prefer the simpler single change — roadmap "don't add complexity not
 earned").
+
+## Iteration 2026-05-17-AB-volscale-plus-invvol — REVERTED (manual dev)
+
+**Hypothesis:** Layering A.v2 (conditional 80th-pct vol-scaled gross) ON
+TOP of the kept B inverse-vol book further improves real-world robustness
+(even lower drawdown) without losing B's regime-balanced return.
+
+**Change:** next() gross sourced from conditional_vol_scaled_gross instead
+of breadth_scaled_gross, keeping B's inverse_vol_tilt + apply_sector_cap.
+0 new counted hyperparameters.
+
+**Decision:** REVERTED (revert to B alone). All anti-overfit gates pass,
+but on the corrected robustness criterion A.v2+B is strictly worse than B:
+mean Sortino 1.980 (B 2.604), sub_period [2.437, 0.953] vs B [3.027,
+1.653] — the strong bull bucket degraded 3.03->2.44 (A's right-tail clip
+reappearing on top of B), stationarity ratio 0.391 (B 0.546). It buys only
+0.13pp lower drawdown (3.28% vs B 3.41%) and removes 2 already-shallow
+negative folds (worst -0.85) — not worth a 0.62 Sortino drop + degraded
+bull regime. Roadmap "don't add complexity the loop hasn't earned": the
+2-change stack is dominated by the 1-change B.
+
+**Result:**
+- validation_sortino_mean: 1.980133219521942 (B 2.6040939804723893)
+- per_fold_sortinos: [0.3256, 0.9352, 0.6547, 3.1015, 3.4794, 1.0667, 3.0816, 6.433, 2.8523, 0.256, 1.0547, 1.9786, 0.5225]
+- sub_period_sortinos: [2.4367, 0.9530] (B [3.0270, 1.6527])
+- aggregate_dd: 0.03282 (B 0.03411) ; n_negative_folds: 0/13 (B 2/13)
+- bonferroni p: 0.01349 ; rw_mc_null_pct: 0.987 ; n_trades: 50
+- n_hyperparameters: 6 ; universe_respected: True ; risk.passed: True
+
+**Learning:** Confirms learnings.md §3.5 a third time: ANY gross-down
+scaling on this long-only right-tail book clips the bull/regime-balanced
+return, even when layered on B's downside-variance-reducing tilt. B alone
+(inverse-vol within FIXED gross) is the robust optimum. FINAL comparative
+selection (baseline / A.v2 / B / A.v2+B): **B is chosen** — sole variant
+that improves robustness (DD 5.18->3.41%, neg folds 3->2, worst fold
+-2.07->-0.85, strongest gates p=0.0050) WITHOUT sacrificing regime-balanced
+return (Sortino & sub-periods ~= baseline, no sign-flip), parsimony-neutral,
+one clean change. B stays the committed strategy; proceed to the single
+sealed-test reveal on B.
