@@ -1399,3 +1399,62 @@ roadmap improvement B (inverse-vol / risk-parity PER-NAME sizing within
 FIXED gross): structurally different — gross stays fully invested (no
 bull-melt-up truncation), only intra-book weights tilt to lower-vol names,
 dampening downside variance without clipping the right tail.
+
+## Iteration 2026-05-17-B-invvol-sizing — KEPT (manual dev)
+
+**Hypothesis:** Replacing equal-weight fixed slots with an inverse-vol
+risk-parity tilt WITHIN the fixed gross (gross from breadth_scaled_gross
+left untouched — A's learning: never scale gross down on this right-tail
+long book) lowers portfolio downside deviation, improving real-world
+robustness (drawdown, negative-fold count) without truncating the bull.
+
+**Change:** Added pure helpers `inverse_vol_tilt` (raw=1/vol per name over
+formation_days; mean-1 normalised; clip [0.5,2.0] risk-parity guardrail;
+renorm to Σ=len(selected); post-scale hard cap 2.0 with freed weight ->
+cash so Σ is never above the equal-weight total) and `apply_sector_cap`
+(priority-order clamp of ACTUAL tilted weights to the 25% §5 cap, excess
+-> cash, never redistributed — strategy.py-only since enforce_sector_cap
+assumes equal weight). next() now sizes selected names by
+target_each * tilt then sector-clamps. Selection, PIT handling, gross,
+structural exit, cadence, order_target_percent-only: unchanged. 0 new
+counted hyperparameters (parsimony N/A).
+
+**Decision:** KEPT — judged on REAL-WORLD ROBUSTNESS, not the strict
+program.md "beat baseline mean Sortino" gate. Rationale (user guidance
+2026-05-17 + roadmap §1/§7 "mean Sortino is reference only; the baseline
+2.626 is right-tail-driven / likely overfit"; memory
+feedback_robustness_over_validation_sortino):
+- Bull/neutral preserved: mean Sortino 2.604 ≈ baseline 2.626 (within
+  noise), sub-periods [3.027, 1.653] ≈ baseline [3.029, 1.717] — NO
+  right-tail truncation (by construction: gross untouched), no sign-flip,
+  stationarity ratio 0.546 (baseline 0.567).
+- Robustness materially improved: aggregate drawdown 5.18% -> 3.41%
+  (-34%); negative folds 3 -> 2; worst fold -2.07 -> -0.85.
+- Strongest anti-overfit gates of any variant: bonferroni p=0.0050
+  (baseline 0.0080), RW-MC 0.9955 (baseline 0.9925); risk clean;
+  universe_respected; parsimony N/A (6 knobs, 0 added).
+A strict real-world-robustness improvement over baseline with no
+meaningful give-up. New manual-dev baseline.
+
+**Result:**
+- evaluator_version: 2026-05-16-univfloor
+- validation_sortino_mean: 2.6040939804723893 (baseline 2.6255412901936075)
+- per_fold_sortinos: [-0.0319, 0.1716, -0.853, 6.0813, 5.4407, 1.5519, 4.209, 6.5958, 4.0772, 0.7342, 1.1988, 4.411, 0.2667]
+- sub_period_sortinos: [3.0270, 1.6527] (baseline [3.0293, 1.7172])
+- aggregate_dd: 0.03411 (baseline 0.05181) ; worst_fold_max_dd: 0.02980
+- n_negative_folds: 2/13 (baseline 3/13) ; worst fold -0.853 (baseline -2.069)
+- bonferroni p: 0.004998 ; rw_mc_null_pct: 0.9955 ; n_trades: 51
+- n_hyperparameters: 6 (parsimony N/A) ; universe_respected: True
+- risk.passed: True ; risk.violations: []
+
+**Learning:** Inverse-vol risk parity WITHIN fixed gross is the correct
+shape for this long-only right-tail momentum book: it cuts downside
+variance (drawdown -34%, fewer/shallower losing folds) by underweighting
+high-vol names while keeping gross fully invested, so it does NOT clip the
+melt-up folds the A-family (gross vol-scaling) destroyed. Confirms
+learnings.md §3.5's prescription. Next single change layered on this B
+baseline: test adding A.v2 (conditional 80th-pct vol-scaled gross) ON TOP
+— if the combined book is more robust (lower DD without losing the
+regime-balanced Sortino B preserves) keep it, else revert to B alone
+(prefer the simpler single change — roadmap "don't add complexity not
+earned").

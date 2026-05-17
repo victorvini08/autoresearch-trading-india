@@ -22,20 +22,28 @@ selected set** so the aggregate is identical to equal-weight:
    the closes already loaded in `next()`; `formation_days` is an existing
    param — no new horizon knob). Floor `vol_i` at a tiny eps (no div0).
 2. `raw_i = 1 / vol_i`; `tilt_i = raw_i / mean_{j∈selected}(raw_j)`.
-3. `tilt_i = clip(tilt_i, 0.5, 2.0)` — the textbook risk-parity
+3. `clipped_i = clip(tilt_i, 0.5, 2.0)` — the textbook risk-parity
    "0.5×–2× equal weight" concentration guardrail; one structural
    convention, pre-committed, **not** searched against any window, **not**
    a `params` entry.
-4. Renormalise: `scale = len(selected) / Σ clipped_tilt`;
-   `tilt_i ← clipped_i * scale` ⇒ `Σ tilt_i = len(selected)` **exactly**.
+4. `scale = len(selected) / Σ clipped_i`; `tilt_i = clipped_i * scale`
+   (this alone gives `Σ tilt_i = len(selected)`). Then a **post-scale
+   hard cap** `tilt_i = min(tilt_i, 2.0)` — freed weight becomes **cash,
+   not redistributed**. So `Σ tilt_i ≤ len(selected)` **always, never
+   above** (gross can only ever stay equal or drop a hair — never
+   increased ⇒ the >100% gross catastrophe gate cannot trip), with
+   equality (exact aggregate preservation) whenever the post-scale cap
+   does not bind — the common case.
 5. `target_i = target_each * tilt_i`.
 
 Consequences, by construction:
-- `Σ_{i∈selected} target_i = target_each * len(selected)` — **identical**
-  to equal-weight. Unfilled slots `(n_positions − len(selected)) *
-  target_each` stay cash. The §4 fixed-slot invariant holds **exactly**;
-  gross is **unchanged** ⇒ B cannot clip the right tail like A did
-  (verified by the mean-1 aggregate invariant, unit-tested).
+- `Σ_{i∈selected} target_i ≤ target_each * len(selected)`, with equality
+  in the common (no-cap-bind) case — never *above* equal-weight. Unfilled
+  slots `(n_positions − len(selected)) * target_each` stay cash; any
+  cap-freed weight also stays cash. The §4 fixed-slot invariant holds
+  (gross **never increased** ⇒ B cannot clip the right tail like A did,
+  and cannot trip the catastrophe gate; verified by the aggregate
+  invariant unit test).
 - All-equal vols ⇒ all `tilt_i = 1` ⇒ B reduces to today's equal-weight
   (a strict generalisation; no behaviour change when risk is uniform).
 - Lower-vol names up-weighted, higher-vol down-weighted ⇒ lower portfolio

@@ -326,6 +326,81 @@ def breadth_scaled_gross(
     return 0.99
 
 
+def inverse_vol_tilt(
+    selected: list[str],
+    vol_by_ticker: dict[str, float],
+) -> dict[str, float]:
+    '''Mean~1 inverse-vol risk-parity tilt within fixed slots.
+
+    raw_i = 1/vol_i (vol floored; missing/invalid -> neutral = mean raw).
+    tilt0_i = raw_i / mean(raw); clip to [0.5, 2.0] (the standard
+    risk-parity 0.5x-2x-equal concentration guardrail — pre-committed, not
+    searched, not a tunable param); renormalise so the clipped tilts sum
+    to len(selected); then a post-scale hard cap of 2.0 whose freed weight
+    becomes CASH (NOT redistributed) so the sum is NEVER above
+    len(selected). Gross can therefore only stay equal to or drop a hair
+    below equal-weight, never increase — it cannot trip the >100% gross
+    catastrophe gate and (unlike scaling GROSS, learnings.md 3.5) cannot
+    clip the long book's right tail. Identity (all tilt == 1.0) when vols
+    are uniform, so this is a strict generalisation of equal-weight.
+    '''
+    n = len(selected)
+    if n == 0:
+        return {}
+    if n == 1:
+        return {selected[0]: 1.0}
+    eps = 1e-9
+    raw: dict[str, float | None] = {}
+    present: list[float] = []
+    for t in selected:
+        v = vol_by_ticker.get(t)
+        if v is None or not np.isfinite(v) or v <= 0.0:
+            raw[t] = None
+        else:
+            rv = 1.0 / max(float(v), eps)
+            raw[t] = rv
+            present.append(rv)
+    if not present:
+        return {t: 1.0 for t in selected}     # no risk info -> equal-weight
+    neutral = float(np.mean(present))
+    raws = np.array(
+        [neutral if raw[t] is None else raw[t] for t in selected],
+        dtype=float,
+    )
+    t0 = raws / float(np.mean(raws))
+    clipped = np.clip(t0, 0.5, 2.0)
+    scale = n / float(np.sum(clipped))
+    tilt = np.minimum(clipped * scale, 2.0)   # post-scale cap; excess -> cash
+    return {t: float(tilt[i]) for i, t in enumerate(selected)}
+
+
+def apply_sector_cap(
+    selected: list[str],
+    targets: dict[str, float],
+    sector_of: dict[str, str],
+    cap: float,
+) -> dict[str, float]:
+    '''Clamp per-name targets so no sector exceeds `cap` on ACTUAL
+    (tilted) weights — the §5 25% hard cap, enforced in strategy.py since
+    only this file is editable and `enforce_sector_cap` assumes equal
+    weight. Walk `selected` in priority order; each name gets
+    min(target, sector remaining room); a name into a full sector gets
+    0.0 (cash). Excess is NEVER redistributed (that is precisely the §4
+    banned concentration mode) — it stays cash. Pure, deterministic.
+    '''
+    out: dict[str, float] = {}
+    sec_sum: dict[str, float] = {}
+    for t in selected:
+        tgt = float(targets.get(t, 0.0))
+        sec = sector_of.get(t, 'OTHER')
+        used = sec_sum.get(sec, 0.0)
+        room = cap - used
+        give = tgt if tgt <= room else max(0.0, room)
+        out[t] = give
+        sec_sum[sec] = used + give
+    return out
+
+
 class IndiaMomentumQualityCarry(bt.Strategy):
     '''Long-only PIT-universe momentum-quality carry with fixed slots.'''
 
@@ -561,11 +636,41 @@ class IndiaMomentumQualityCarry(bt.Strategy):
         else:
             selected = priority[: int(self.p.n_positions)]
 
+        # Improvement B: inverse-vol risk-parity tilt WITHIN the fixed
+        # slots. Gross (breadth_scaled_gross) is deliberately untouched —
+        # A's learning (learnings.md 3.5): scaling gross down clips this
+        # long book's right tail. Σ targets is never above the
+        # equal-weight total, so the §4 fixed-slot/unfilled-stays-cash
+        # invariant and the gross<=100% gate still hold; only the
+        # intra-book distribution tilts toward lower-realized-vol names
+        # (lowers downside deviation without truncating melt-ups).
+        fd = max(2, int(self.p.formation_days))
+        vol_by_ticker: dict[str, float] = {}
+        for t in selected:
+            c = close_by_ticker.get(t)
+            if not c or len(c) < fd + 1:
+                continue
+            arr = np.asarray(c[-(fd + 1):], dtype=float)
+            rr = arr[1:] / arr[:-1] - 1.0
+            vol_by_ticker[t] = float(rr.std())
+        tilt = inverse_vol_tilt(selected, vol_by_ticker)
+        sector_of = {
+            t: (self._sector_map[t].sector
+                if self._sector_map.get(t) else 'OTHER')
+            for t in selected
+        }
+        targets = apply_sector_cap(
+            selected,
+            {t: target_each * tilt.get(t, 1.0) for t in selected},
+            sector_of,
+            float(self.p.sector_cap),
+        )
+
         selected_set = set(selected)
         for d in self.datas:
             t = self._ticker_of(d)
             if t in selected_set:
-                self.order_target_percent(d, target=target_each)
+                self.order_target_percent(d, target=targets.get(t, 0.0))
             elif t in held:
                 self.order_target_percent(d, target=0.0)
 
@@ -589,5 +694,7 @@ __all__ = [
     'reversion_scores',
     'momentum_quality_scores',
     'breadth_scaled_gross',
+    'inverse_vol_tilt',
+    'apply_sector_cap',
     'IndiaMomentumQualityCarry',
 ]
