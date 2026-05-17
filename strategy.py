@@ -323,7 +323,6 @@ class IndiaMomentumQualityCarry(bt.Strategy):
         ('formation_days', 21),
         ('retention_mult', 2.0),
         ('entry_pct', 0.30),
-        ('regime_pct', 95),
         ('n_positions', 25),
         ('sector_cap', 0.25),
         ('rebalance_weekday', 4),
