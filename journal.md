@@ -6604,3 +6604,32 @@ structural learnings are codified in `program.md`. Explore freely.
 **Learning:** Sortino changed from 3.835 to 3.288 (-0.547). Aggregate DD was 13.8% versus previous kept 12.0%; negative folds were 2/13; trades=183. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 3.288 did not improve on prev 3.8348443215568286.
 
 ---
+
+## Iteration 2026-05-17-59cfb85 — REVERTED
+
+**Hypothesis:** Replacing the close-only intermediate range-location measure with a true OHLC high-low range location will improve validation Sortino by better distinguishing stocks closing constructively within their actual traded range from names that only look strong on close-to-close data.
+
+**Change:** I changed the existing range-location calculation to use intraday highs and lows over the lookback window while preserving the current thresholds, ranking weights, universe gate, fixed-slot sizing, sector cap, and biweekly cadence.
+
+**Decision:** REVERTED — sortino 3.781 did not improve on prev 3.8348443215568286
+
+**Result:**
+- evaluator_version: 2026-05-16-univfloor
+- validation_sortino_mean: 3.78132671780861
+- validation_folds: 13
+- per_fold_sortinos: [5.0546, 1.2149, -0.0479, 5.9292, 9.8111, 6.7634, 5.8541, 5.5528, 2.4526, 0.7633, 1.9351, 1.5052, 2.369]
+- calmar_mean: 7.758214344002537
+- hit_rate_mean: 0.5565802786956632
+- profit_factor_mean: 6.321721215197783
+- trade_count_total: 187
+- aggregate_max_dd: 0.12980683488143377
+- worst_fold_max_dd: 0.10988877199711539
+- max_position_frac_peak: 0.06439116937127917
+- lower_quartile_fold_calmar: 1.8730910706748194
+- n_negative_folds: 1/13
+- risk.passed: True
+- risk.violations: []
+
+**Learning:** Sortino changed from 3.835 to 3.781 (-0.054). Aggregate DD was 13.0% versus previous kept 12.0%; negative folds were 1/13; trades=187. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 3.781 did not improve on prev 3.8348443215568286.
+
+---
