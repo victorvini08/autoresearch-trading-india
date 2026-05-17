@@ -6807,3 +6807,32 @@ structural learnings are codified in `program.md`. Explore freely.
 **Learning:** Sortino changed from 3.835 to 3.700 (-0.135). Aggregate DD was 10.9% versus previous kept 12.0%; negative folds were 1/13; trades=182. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 3.700 did not improve on prev 3.8348443215568286.
 
 ---
+
+## Iteration 2026-05-17-7935198 — REVERTED
+
+**Hypothesis:** Adding a PIT-safe volatility contraction confirmation will improve validation Sortino by favoring momentum candidates whose recent realized volatility has compressed versus their intermediate volatility, indicating cleaner trend continuation without changing exposure, cadence, sector caps, or universe gating.
+
+**Change:** I added a recent-versus-intermediate volatility contraction score to the existing ranking, with a veto on severe recent volatility expansion, so noisy momentum names are demoted while stable trends remain eligible.
+
+**Decision:** REVERTED — sortino 3.630 did not improve on prev 3.8348443215568286
+
+**Result:**
+- evaluator_version: 2026-05-16-univfloor
+- validation_sortino_mean: 3.62995805726263
+- validation_folds: 13
+- per_fold_sortinos: [5.1695, 1.4234, 0.1214, 5.0284, 8.4257, 6.3948, 6.0593, 5.7563, 2.6267, 0.777, 1.7767, 1.0439, 2.5866]
+- calmar_mean: 7.698835113172927
+- hit_rate_mean: 0.525074925074925
+- profit_factor_mean: 7.122149434502405
+- trade_count_total: 183
+- aggregate_max_dd: 0.12766028415067354
+- worst_fold_max_dd: 0.10786329330108879
+- max_position_frac_peak: 0.0649557497450998
+- lower_quartile_fold_calmar: 1.84783323586835
+- n_negative_folds: 0/13
+- risk.passed: True
+- risk.violations: []
+
+**Learning:** Sortino changed from 3.835 to 3.630 (-0.205). Aggregate DD was 12.8% versus previous kept 12.0%; negative folds were 0/13; trades=183. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 3.630 did not improve on prev 3.8348443215568286.
+
+---
