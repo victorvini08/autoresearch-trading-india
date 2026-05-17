@@ -6430,3 +6430,32 @@ structural learnings are codified in `program.md`. Explore freely.
 **Learning:** Sortino changed from 3.828 to 3.835 (+0.007). Aggregate DD was 12.0% versus previous kept 12.0%; negative folds were 1/13; trades=188. Keep compounding on this change, but future iterations should still explain whether the gain came from better return, lower downside, or fewer fragile folds. Decision reason: sortino 3.835 > prev 3.8279484160617105, agg_dd 12.0%, catastrophe gate clear, anti-overfit gates passed.
 
 ---
+
+## Iteration 2026-05-17-63b54a9 — REVERTED
+
+**Hypothesis:** Adding a PIT-safe index-trend stress veto will improve validation Sortino by keeping the proven stock-selection book active in normal regimes while moving to cash only when the broad Nifty 50 tape is below its 200-day trend and therefore most likely to turn long-only momentum into downside exposure.
+
+**Change:** I added a conservative portfolio-level market regime check using nifty_vs_200dma_pct before ranking, without changing fixed-slot sizing, sector caps, or any stock-level ranking logic.
+
+**Decision:** REVERTED — sortino 3.503 did not improve on prev 3.8348443215568286
+
+**Result:**
+- evaluator_version: 2026-05-16-univfloor
+- validation_sortino_mean: 3.503498337225753
+- validation_folds: 13
+- per_fold_sortinos: [4.6181, 1.173, -0.0071, 4.029, 8.3849, 6.6869, 5.9293, 5.4943, 2.8165, 0.955, 1.9812, 1.4938, 1.9906]
+- calmar_mean: 7.29184919690655
+- hit_rate_mean: 0.5545787545787546
+- profit_factor_mean: 5.605251534862121
+- trade_count_total: 183
+- aggregate_max_dd: 0.11830538902597802
+- worst_fold_max_dd: 0.10627273418654375
+- max_position_frac_peak: 0.06233933051000101
+- lower_quartile_fold_calmar: 1.9754489758443847
+- n_negative_folds: 1/13
+- risk.passed: True
+- risk.violations: []
+
+**Learning:** Sortino changed from 3.835 to 3.503 (-0.331). Aggregate DD was 11.8% versus previous kept 12.0%; negative folds were 1/13; trades=183. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 3.503 did not improve on prev 3.8348443215568286.
+
+---
