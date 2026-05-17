@@ -6749,3 +6749,32 @@ structural learnings are codified in `program.md`. Explore freely.
 **Learning:** Sortino changed from 3.835 to 3.275 (-0.560). Aggregate DD was 11.7% versus previous kept 12.0%; negative folds were 1/13; trades=194. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 3.275 did not improve on prev 3.8348443215568286.
 
 ---
+
+## Iteration 2026-05-17-ea54ca8 — REVERTED
+
+**Hypothesis:** Adding a PIT-safe stale-breakout penalty will improve validation Sortino by favoring momentum names whose intermediate trend is still making recent highs rather than drifting below an older peak.
+
+**Change:** I added a 63-day days-since-high measure, vetoed very stale intermediate highs, and applied a small ranking penalty so unresolved post-peak momentum candidates are demoted without changing sizing, cadence, PIT universe gating, or sector caps.
+
+**Decision:** REVERTED — sortino 3.271 did not improve on prev 3.8348443215568286
+
+**Result:**
+- evaluator_version: 2026-05-16-univfloor
+- validation_sortino_mean: 3.271100213960317
+- validation_folds: 13
+- per_fold_sortinos: [3.2338, 1.237, 0.3669, 4.2031, 7.8284, 6.8562, 5.6097, 5.723, 2.8514, -0.4607, 0.5218, 1.8111, 2.7425]
+- calmar_mean: 7.460757417020115
+- hit_rate_mean: 0.5656655310501464
+- profit_factor_mean: 10.066472018275183
+- trade_count_total: 122
+- aggregate_max_dd: 0.16169885248106403
+- worst_fold_max_dd: 0.12613284468364613
+- max_position_frac_peak: 0.06260743977985428
+- lower_quartile_fold_calmar: 1.5531803502772763
+- n_negative_folds: 1/13
+- risk.passed: True
+- risk.violations: []
+
+**Learning:** Sortino changed from 3.835 to 3.271 (-0.564). Aggregate DD was 16.2% versus previous kept 12.0%; negative folds were 1/13; trades=122. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 3.271 did not improve on prev 3.8348443215568286.
+
+---
