@@ -6024,3 +6024,32 @@ structural learnings are codified in `program.md`. Explore freely.
 **Learning:** Sortino changed from 3.652 to 3.797 (+0.145). Aggregate DD was 15.1% versus previous kept 15.1%; negative folds were 1/13; trades=189. Keep compounding on this change, but future iterations should still explain whether the gain came from better return, lower downside, or fewer fragile folds. Decision reason: sortino 3.797 > prev 3.652368255577813, agg_dd 15.1%, catastrophe gate clear, anti-overfit gates passed.
 
 ---
+
+## Iteration 2026-05-17-77518a6 — REVERTED
+
+**Hypothesis:** Adding a PIT-safe red-day close-resilience term will improve validation Sortino by preferring momentum names that attract intraday dip-buying on down closes, reducing downside-tail exposure without changing fixed-slot construction.
+
+**Change:** I added a 21-day down-day close-location resilience metric with a light score reward and only a narrow veto for repeated weak closes on red days, preserving PIT universe gating, biweekly cadence, fixed-slot sizing, sector cap, and order_target_percent-only execution.
+
+**Decision:** REVERTED — sortino 0.566 did not improve on prev 3.7968885204229252 | anti-overfit FAILED: bonferroni(p=0.4303 >= alpha/N=0.1000) · random_walk_mc(only 57.00% percentile vs RW null)
+
+**Result:**
+- evaluator_version: 2026-05-16-univfloor
+- validation_sortino_mean: 0.5659287111718669
+- validation_folds: 13
+- per_fold_sortinos: [-0.7236, 0.0, 0.0, -0.0532, 1.2665, 1.8928, 2.3411, -0.5148, -0.2351, -1.0041, -0.4275, 4.4249, 0.39]
+- calmar_mean: 0.3826289062750074
+- hit_rate_mean: 0.48252324598478447
+- profit_factor_mean: 1.6338646862011945
+- trade_count_total: 100
+- aggregate_max_dd: 0.16662061591782987
+- worst_fold_max_dd: 0.10233231859241843
+- max_position_frac_peak: 0.06199645656688255
+- lower_quartile_fold_calmar: -0.8831181676822617
+- n_negative_folds: 6/13
+- risk.passed: True
+- risk.violations: []
+
+**Learning:** Sortino changed from 3.797 to 0.566 (-3.231). Aggregate DD was 16.7% versus previous kept 15.1%; negative folds were 6/13; trades=100. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 0.566 did not improve on prev 3.7968885204229252 | anti-overfit FAILED: bonferroni(p=0.4303 >= alpha/N=0.1000) · random_walk_mc(only 57.00% percentile vs RW null).
+
+---
