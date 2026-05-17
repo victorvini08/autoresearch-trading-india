@@ -5531,3 +5531,32 @@ structural learnings are codified in `program.md`. Explore freely.
 **Learning:** Sortino changed from 3.628 to 3.646 (+0.018). Aggregate DD was 15.1% versus previous kept 15.1%; negative folds were 1/13; trades=189. Keep compounding on this change, but future iterations should still explain whether the gain came from better return, lower downside, or fewer fragile folds. Decision reason: sortino 3.646 > prev 3.6277126896862444, agg_dd 15.1%, catastrophe gate clear, anti-overfit gates passed.
 
 ---
+
+## Iteration 2026-05-17-0e272a9 — REVERTED
+
+**Hypothesis:** Adding a PIT-safe volatility compression term will improve validation Sortino by favoring momentum names whose recent advance is becoming less noisy rather than increasingly unstable.
+
+**Change:** I added a 21-day versus 63-day realized-volatility compression score and veto only sharp recent volatility expansions while leaving universe handling, cadence, sizing, sector caps, and the existing accumulation signal unchanged.
+
+**Decision:** REVERTED — sortino 3.629 did not improve on prev 3.645505465789117
+
+**Result:**
+- evaluator_version: 2026-05-16-univfloor
+- validation_sortino_mean: 3.6293118938676137
+- validation_folds: 13
+- per_fold_sortinos: [5.4828, 0.4365, -1.0343, 5.5588, 9.897, 6.5361, 5.6376, 5.77, 2.5662, 0.697, 1.8854, 1.3854, 2.3626]
+- calmar_mean: 7.461465399097744
+- hit_rate_mean: 0.5528808798039567
+- profit_factor_mean: 6.6446376264383
+- trade_count_total: 188
+- aggregate_max_dd: 0.14294282607087558
+- worst_fold_max_dd: 0.1215659733934479
+- max_position_frac_peak: 0.06600805098001256
+- lower_quartile_fold_calmar: 1.8723087002923
+- n_negative_folds: 1/13
+- risk.passed: True
+- risk.violations: []
+
+**Learning:** Sortino changed from 3.646 to 3.629 (-0.016). Aggregate DD was 14.3% versus previous kept 15.1%; negative folds were 1/13; trades=188. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 3.629 did not improve on prev 3.645505465789117.
+
+---
