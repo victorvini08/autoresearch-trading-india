@@ -7,8 +7,9 @@ strength on weak market days, persistent multi-leg trend quality, fresh
 intermediate trend confirmation, modest short-term pullback quality, avoids
 one-week and one-day upside exhaustion, rewards efficient intermediate trends,
 favors constructive recent range location, requires basic accumulation support,
-adds intermediate and recent close-location accumulation confirmation, applies
-a 25% sector cap, and sizes by fixed risk slots so blocked slots remain cash.
+adds intermediate and recent close-location accumulation confirmation, avoids
+recent downside shocks, applies a 25% sector cap, and sizes by fixed risk slots
+so blocked slots remain cash.
 
 Trade contract: every position change goes through order_target_percent only.
 '''
@@ -152,6 +153,15 @@ class IndiaMomentumQualityRegime(bt.Strategy):
                 return None
             out.append((p1 / p0) - 1.0)
         return out
+
+    def _worst_return(self, d, days: int) -> float | None:
+        rets = self._returns(d, days)
+        if not rets:
+            return None
+        vals = [r for r in rets if math.isfinite(r)]
+        if len(vals) < max(10, days // 2):
+            return None
+        return min(vals)
 
     def _simple_ma_distance(self, d, days: int) -> float | None:
         if len(d) < days + 1:
@@ -421,6 +431,7 @@ class IndiaMomentumQualityRegime(bt.Strategy):
         accumulation = self._volume_accumulation(d, self.p.vol_days)
         close_accumulation = self._close_location_accumulation(d, self.p.vol_days)
         recent_close_accumulation = self._close_location_accumulation(d, self.p.recent_days)
+        worst_recent = self._worst_return(d, self.p.recent_days)
         if (
             vol is None
             or drawdown is None
@@ -431,6 +442,7 @@ class IndiaMomentumQualityRegime(bt.Strategy):
             or accumulation is None
             or close_accumulation is None
             or recent_close_accumulation is None
+            or worst_recent is None
         ):
             return None
         if (
@@ -443,6 +455,7 @@ class IndiaMomentumQualityRegime(bt.Strategy):
             or accumulation < -0.12
             or close_accumulation < -0.18
             or recent_close_accumulation < -0.24
+            or worst_recent < -0.085
         ):
             return None
 
