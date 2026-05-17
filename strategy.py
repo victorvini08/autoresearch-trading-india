@@ -194,6 +194,19 @@ def _trend_consistency(closes: np.ndarray, skip: int) -> float:
     return float(np.mean(positive))
 
 
+def _structural_ma_window(lookback: int) -> int:
+    '''Length of the structural trend MA, derived from the signal lookback.
+
+    Single source of truth so the entry filter (price must be ABOVE this MA
+    to qualify) and the between-rebalance structural exit (sell once price
+    falls BELOW it) provably use the SAME definition and cannot drift apart.
+    Not a new tunable knob — this is the strategy's pre-existing inline
+    convention (was `min(200, max(50, lookback*3//4))` in
+    momentum_quality_scores), now named and shared.
+    '''
+    return min(200, max(50, int(lookback) * 3 // 4))
+
+
 def momentum_quality_scores(
     close_by_ticker: dict[str, list[float]],
     adv_by_ticker: dict[str, float],
@@ -226,7 +239,7 @@ def momentum_quality_scores(
         start = float(closes[0])
         half = max(skip + 21, lookback // 2)
         mid_start = float(closes[-(half + 1)])
-        ma_window = min(200, max(50, lookback * 3 // 4))
+        ma_window = _structural_ma_window(lookback)
         moving_average = float(np.mean(closes[-ma_window:]))
 
         long_mom = pre_skip / start - 1.0
@@ -341,6 +354,10 @@ class IndiaMomentumQualityCarry(bt.Strategy):
         self._week_parity_initialized = False
         ubd = self.p.universe_by_date
         self._univ_dates: list[date] | None = sorted(ubd) if ubd else None
+        # Names whose structural-exit order is submitted but not yet filled;
+        # suppresses duplicate exits across the bars until the fill. Cleared
+        # deterministically in notify_trade when the round-trip closes.
+        self._stop_pending: set[str] = set()
 
     def _active_universe(self, today: date) -> set[str] | None:
         return resolve_active_universe(
@@ -433,8 +450,66 @@ class IndiaMomentumQualityCarry(bt.Strategy):
                 self.order_target_percent(d, target=0.0)
         return still_held
 
+    def notify_trade(self, trade) -> None:
+        '''Clear pending-exit state the bar a round-trip closes.
+
+        backtrader delivers this before ``next()`` on the fill bar, so a
+        name exited (structurally or by rebalance) is stop-eligible again
+        the moment it is re-entered — no stale flag can silently disable a
+        future structural exit on a re-bought position.
+        '''
+        if getattr(trade, 'isclosed', False):
+            self._stop_pending.discard(self._ticker_of(trade.data))
+
+    def _apply_structural_exit(self) -> None:
+        '''Trend-state exit, symmetric with the entry's structural filter.
+
+        The entry (momentum_quality_scores) only buys a name whose close is
+        ABOVE its own beta_window-derived structural MA. This sells a held
+        name once its close falls BELOW that SAME MA — i.e. its long
+        uptrend has objectively broken. A ~190-day MA does not move on the
+        routine 5-10% Indian mid-cap pullbacks (so intact winners are never
+        churned — momentum's right tail is preserved), only on a sustained
+        breakdown (regime transition / bear), where many names breaking
+        together cascade the book toward cash: emergent graceful de-risking
+        with no binary macro gate and gross only ever falling (long-only,
+        <=100%, no leverage). Adds no tunable hyperparameter — the MA is the
+        strategy's existing structural definition applied symmetrically.
+
+        Runs only on non-rebalance bars so the rebalance owns every order
+        decision on its own bar (no same-bar double-ordering); a structurally
+        exited name may be re-entered at any later rebalance if it requalifies.
+        '''
+        skip = max(1, int(self.p.formation_days))
+        lookback = max(skip + 21, int(self.p.beta_window))
+        ma_window = _structural_ma_window(lookback)
+
+        for d in self.datas:
+            t = self._ticker_of(d)
+            if self.getposition(d).size <= 0:
+                self._stop_pending.discard(t)
+                continue
+            if t in self._stop_pending:
+                continue  # exit submitted; await next-open fill
+            if len(d) < ma_window + 1:
+                continue
+            closes = np.asarray(
+                [float(d.close[-i]) for i in range(ma_window, -1, -1)],
+                dtype=float,
+            )
+            if bool(np.any(~np.isfinite(closes))) or bool(
+                np.any(closes <= 0.0)
+            ):
+                continue
+            close_now = float(closes[-1])
+            structural_ma = float(np.mean(closes[-ma_window:]))
+            if close_now < structural_ma:
+                self.order_target_percent(d, target=0.0)
+                self._stop_pending.add(t)
+
     def next(self) -> None:
         if not self._is_rebalance_today():
+            self._apply_structural_exit()
             return
 
         today = self.datas[0].datetime.date(0)
