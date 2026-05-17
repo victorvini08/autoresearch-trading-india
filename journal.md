@@ -6372,3 +6372,32 @@ structural learnings are codified in `program.md`. Explore freely.
 **Learning:** Sortino changed from 3.828 to 3.744 (-0.084). Aggregate DD was 10.9% versus previous kept 12.0%; negative folds were 1/13; trades=187. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 3.744 did not improve on prev 3.8279484160617105.
 
 ---
+
+## Iteration 2026-05-17-bcfae9e — REVERTED
+
+**Hypothesis:** Lowering fixed risk slots from 16 to 15 will improve validation Sortino by modestly concentrating the already high-conviction ranked book while staying within the catastrophe-gate minimum position count and preserving fixed-slot sizing.
+
+**Change:** I changed only n_positions from 16 to 15, leaving the ranking, PIT universe gate, sector cap, biweekly cadence, and order_target_percent-only execution unchanged.
+
+**Decision:** REVERTED — sortino 3.672 did not improve on prev 3.8279484160617105
+
+**Result:**
+- evaluator_version: 2026-05-16-univfloor
+- validation_sortino_mean: 3.6723067089514183
+- validation_folds: 13
+- per_fold_sortinos: [4.3813, 1.1912, 0.173, 5.7951, 9.6433, 6.8795, 6.1562, 5.7301, 2.731, 0.648, 1.6118, 0.8938, 1.9057]
+- calmar_mean: 7.270823494372786
+- hit_rate_mean: 0.5477108361723745
+- profit_factor_mean: 5.599361104688766
+- trade_count_total: 142
+- aggregate_max_dd: 0.1264617384027291
+- worst_fold_max_dd: 0.1069897638888412
+- max_position_frac_peak: 0.06617935811795742
+- lower_quartile_fold_calmar: 1.421987500561915
+- n_negative_folds: 0/13
+- risk.passed: True
+- risk.violations: []
+
+**Learning:** Sortino changed from 3.828 to 3.672 (-0.156). Aggregate DD was 12.6% versus previous kept 12.0%; negative folds were 0/13; trades=142. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 3.672 did not improve on prev 3.8279484160617105.
+
+---
