@@ -6285,3 +6285,32 @@ structural learnings are codified in `program.md`. Explore freely.
 **Learning:** Sortino changed from 3.828 to 3.808 (-0.020). Aggregate DD was 12.0% versus previous kept 12.0%; negative folds were 1/13; trades=190. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 3.808 did not improve on prev 3.8279484160617105.
 
 ---
+
+## Iteration 2026-05-17-52c0dba — REVERTED
+
+**Hypothesis:** Adding a PIT-safe active-universe breadth throttle will improve validation Sortino by cutting gross exposure during broad-market weakness while preserving the proven stock ranking in normal regimes.
+
+**Change:** I added a market-breadth exposure multiplier derived from median active-universe returns over the defensive window, so fixed slots scale down to partial cash only when the liquid NSE universe shows sustained weakness.
+
+**Decision:** REVERTED — sortino 3.534 did not improve on prev 3.8279484160617105
+
+**Result:**
+- evaluator_version: 2026-05-16-univfloor
+- validation_sortino_mean: 3.5336846822692154
+- validation_folds: 13
+- per_fold_sortinos: [5.3152, 0.96, 0.1328, 5.4716, 9.2114, 6.765, 5.1179, 5.3158, 2.8993, 0.5636, 1.4824, 1.2107, 1.4922]
+- calmar_mean: 6.822853853718447
+- hit_rate_mean: 0.5657859485913785
+- profit_factor_mean: 6.2766749615102375
+- trade_count_total: 180
+- aggregate_max_dd: 0.10590742172295378
+- worst_fold_max_dd: 0.09342810474116545
+- max_position_frac_peak: 0.061788820906404245
+- lower_quartile_fold_calmar: 1.0904341838198497
+- n_negative_folds: 0/13
+- risk.passed: True
+- risk.violations: []
+
+**Learning:** Sortino changed from 3.828 to 3.534 (-0.294). Aggregate DD was 10.6% versus previous kept 12.0%; negative folds were 0/13; trades=180. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 3.534 did not improve on prev 3.8279484160617105.
+
+---
