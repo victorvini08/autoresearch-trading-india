@@ -6314,3 +6314,32 @@ structural learnings are codified in `program.md`. Explore freely.
 **Learning:** Sortino changed from 3.828 to 3.534 (-0.294). Aggregate DD was 10.6% versus previous kept 12.0%; negative folds were 0/13; trades=180. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 3.534 did not improve on prev 3.8279484160617105.
 
 ---
+
+## Iteration 2026-05-17-77bba17 — REVERTED
+
+**Hypothesis:** Switching the biweekly rebalance parity to the alternate Friday cohort will improve validation Sortino by changing entry and exit timing while preserving the kept stock-selection thesis, fixed-slot sizing, PIT universe gate, sector cap, and Dhan-cost-aware cadence.
+
+**Change:** I changed only rebalance_week_parity from 1 to 0 so the strategy keeps the same ranking and construction logic but tests the other biweekly execution schedule.
+
+**Decision:** REVERTED — sortino 2.594 did not improve on prev 3.8279484160617105 | anti-overfit FAILED: sub_period_stationarity(signed min/max Sortino ratio across 2 sub-periods = -0.1539 (need ≥ 0.20); sub-periods = [+4.021, -0.619])
+
+**Result:**
+- evaluator_version: 2026-05-16-univfloor
+- validation_sortino_mean: 2.593548952385655
+- validation_folds: 13
+- per_fold_sortinos: [4.1958, 0.868, -0.9775, 4.8081, 9.7513, 7.8814, 3.7727, 3.7103, 2.1824, -0.0721, -0.0861, -1.7205, -0.5975]
+- calmar_mean: 5.417579471032431
+- hit_rate_mean: 0.4734088623794506
+- profit_factor_mean: 4.549748149999612
+- trade_count_total: 195
+- aggregate_max_dd: 0.195959214640526
+- worst_fold_max_dd: 0.1178890755290711
+- max_position_frac_peak: 0.07122572575694573
+- lower_quartile_fold_calmar: -0.4007809117655157
+- n_negative_folds: 5/13
+- risk.passed: True
+- risk.violations: []
+
+**Learning:** Sortino changed from 3.828 to 2.594 (-1.234). Aggregate DD was 19.6% versus previous kept 12.0%; negative folds were 5/13; trades=195. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 2.594 did not improve on prev 3.8279484160617105 | anti-overfit FAILED: sub_period_stationarity(signed min/max Sortino ratio across 2 sub-periods = -0.1539 (need ≥ 0.20); sub-periods = [+4.021, -0.619]).
+
+---
