@@ -5821,3 +5821,32 @@ structural learnings are codified in `program.md`. Explore freely.
 **Learning:** Sortino changed from 3.646 to 3.646 (+0.000). Aggregate DD was 15.1% versus previous kept 15.1%; negative folds were 1/13; trades=189. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 3.646 did not improve on prev 3.645505465789117.
 
 ---
+
+## Iteration 2026-05-17-698f0a2 — REVERTED
+
+**Hypothesis:** Adding a PIT-safe rebalance retention band will improve validation Sortino by reducing cost-heavy churn and short-horizon whipsaw while keeping only currently qualified holdings that remain strong enough under the existing score.
+
+**Change:** I changed selection to retain existing holdings that still rank within a fixed top-2x-position band before filling new names, preserving the sector cap, PIT universe gate, fixed-slot sizing, and order_target_percent-only execution.
+
+**Decision:** REVERTED — sortino 2.720 did not improve on prev 3.645505465789117
+
+**Result:**
+- evaluator_version: 2026-05-16-univfloor
+- validation_sortino_mean: 2.719723367831772
+- validation_folds: 13
+- per_fold_sortinos: [2.243, -0.2948, -1.3606, 4.6958, 11.0083, 4.4841, 4.2403, 5.0877, 2.299, -0.3406, 0.8999, 1.0629, 1.3313]
+- calmar_mean: 5.6521416580861885
+- hit_rate_mean: 0.6233744887591042
+- profit_factor_mean: 7.192704571235105
+- trade_count_total: 112
+- aggregate_max_dd: 0.1778929762978217
+- worst_fold_max_dd: 0.12784255863605956
+- max_position_frac_peak: 0.06514114332152747
+- lower_quartile_fold_calmar: 1.509892283515551
+- n_negative_folds: 3/13
+- risk.passed: True
+- risk.violations: []
+
+**Learning:** Sortino changed from 3.646 to 2.720 (-0.926). Aggregate DD was 17.8% versus previous kept 15.1%; negative folds were 3/13; trades=112. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 2.720 did not improve on prev 3.645505465789117.
+
+---
