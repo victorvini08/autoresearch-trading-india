@@ -5502,3 +5502,32 @@ structural learnings are codified in `program.md`. Explore freely.
 **Learning:** Sortino changed from 3.628 to 3.628 (+0.000). Aggregate DD was 15.1% versus previous kept 15.1%; negative folds were 1/13; trades=188. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 3.628 did not improve on prev 3.6277126896862444.
 
 ---
+
+## Iteration 2026-05-17-7eb1b82 — KEPT
+
+**Hypothesis:** Adding a PIT-safe volume-confirmed accumulation term will improve validation Sortino by preferring momentum names whose advance is supported by heavier up-day participation rather than fragile price-only moves.
+
+**Change:** I added an up-volume versus down-volume accumulation score to the existing ranking and veto only clearly distribution-heavy candidates while leaving cadence, sizing, universe gating, and sector caps unchanged.
+
+**Decision:** KEPT — sortino 3.646 > prev 3.6277126896862444, agg_dd 15.1%, catastrophe gate clear, anti-overfit gates passed
+
+**Result:**
+- evaluator_version: 2026-05-16-univfloor
+- validation_sortino_mean: 3.645505465789117
+- validation_folds: 13
+- per_fold_sortinos: [5.1923, 0.3537, -0.9762, 5.6907, 9.8402, 6.8286, 5.9485, 5.4646, 2.3561, 0.557, 1.9529, 1.5828, 2.6003]
+- calmar_mean: 7.485932309318195
+- hit_rate_mean: 0.5324614299727422
+- profit_factor_mean: 5.883363948825357
+- trade_count_total: 189
+- aggregate_max_dd: 0.15130025262259741
+- worst_fold_max_dd: 0.12598967743333822
+- max_position_frac_peak: 0.06432321564169123
+- lower_quartile_fold_calmar: 2.0192331288161514
+- n_negative_folds: 1/13
+- risk.passed: True
+- risk.violations: []
+
+**Learning:** Sortino changed from 3.628 to 3.646 (+0.018). Aggregate DD was 15.1% versus previous kept 15.1%; negative folds were 1/13; trades=189. Keep compounding on this change, but future iterations should still explain whether the gain came from better return, lower downside, or fewer fragile folds. Decision reason: sortino 3.646 > prev 3.6277126896862444, agg_dd 15.1%, catastrophe gate clear, anti-overfit gates passed.
+
+---

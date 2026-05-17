@@ -6,8 +6,9 @@ with lower realized volatility, mild recent strength, defensive relative
 strength on weak market days, persistent multi-leg trend quality, fresh
 intermediate trend confirmation, modest short-term pullback quality, avoids
 one-week and one-day upside exhaustion, rewards efficient intermediate trends,
-favors constructive recent range location, applies a 25% sector cap, and sizes
-by fixed risk slots so blocked slots remain cash.
+favors constructive recent range location, requires basic accumulation support,
+applies a 25% sector cap, and sizes by fixed risk slots so blocked slots remain
+cash.
 
 Trade contract: every position change goes through order_target_percent only.
 '''
@@ -104,6 +105,15 @@ class IndiaMomentumQualityRegime(bt.Strategy):
             return None
         return px
 
+    def _volume_at(self, d, ago: int) -> float | None:
+        try:
+            vol = float(d.volume[-ago])
+        except Exception:
+            return None
+        if not math.isfinite(vol) or vol < 0:
+            return None
+        return vol
+
     def _returns(self, d, days: int) -> list[float] | None:
         if len(d) < days + 2:
             return None
@@ -181,6 +191,36 @@ class IndiaMomentumQualityRegime(bt.Strategy):
         if not math.isfinite(location):
             return None
         return max(min(location, 1.0), 0.0)
+
+    def _volume_accumulation(self, d, days: int) -> float | None:
+        if len(d) < days + 2:
+            return None
+        up_value = 0.0
+        down_value = 0.0
+        used = 0
+        for i in range(days, 0, -1):
+            p0 = self._price_at(d, i)
+            p1 = self._price_at(d, i - 1)
+            vol = self._volume_at(d, i - 1)
+            if p0 is None or p1 is None or vol is None:
+                return None
+            value = vol * p1
+            if not math.isfinite(value) or value < 0.0:
+                return None
+            ret = (p1 / p0) - 1.0
+            if ret > 0.0:
+                up_value += value
+                used += 1
+            elif ret < 0.0:
+                down_value += value
+                used += 1
+        total = up_value + down_value
+        if used < 20 or total <= 0.0:
+            return None
+        score = (up_value - down_value) / total
+        if not math.isfinite(score):
+            return None
+        return max(min(score, 1.0), -1.0)
 
     def _max_drawdown(self, d, days: int) -> float | None:
         if len(d) < days + 1:
@@ -321,6 +361,7 @@ class IndiaMomentumQualityRegime(bt.Strategy):
         ma_distance = self._simple_ma_distance(d, self.p.recent_days)
         efficiency = self._trend_efficiency(d, self.p.vol_days)
         range_location = self._range_location(d, self.p.vol_days)
+        accumulation = self._volume_accumulation(d, self.p.vol_days)
         if (
             vol is None
             or drawdown is None
@@ -328,6 +369,7 @@ class IndiaMomentumQualityRegime(bt.Strategy):
             or ma_distance is None
             or efficiency is None
             or range_location is None
+            or accumulation is None
         ):
             return None
         if (
@@ -337,6 +379,7 @@ class IndiaMomentumQualityRegime(bt.Strategy):
             or ma_distance > 0.16
             or efficiency < -0.05
             or range_location < 0.32
+            or accumulation < -0.12
         ):
             return None
 
@@ -352,6 +395,7 @@ class IndiaMomentumQualityRegime(bt.Strategy):
             + (0.10 * efficiency)
             + (0.08 * range_quality)
             + (0.18 * pullback_quality)
+            + (0.06 * accumulation)
             + (2.25 * defensive)
             - (0.45 * vol)
             - (0.35 * drawdown)
