@@ -6836,3 +6836,32 @@ structural learnings are codified in `program.md`. Explore freely.
 **Learning:** Sortino changed from 3.835 to 3.630 (-0.205). Aggregate DD was 12.8% versus previous kept 12.0%; negative folds were 0/13; trades=183. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 3.630 did not improve on prev 3.8348443215568286.
 
 ---
+
+## Iteration 2026-05-17-89f812f — REVERTED
+
+**Hypothesis:** Adding a PIT-safe downside capture veto will improve validation Sortino by avoiding momentum candidates that still lose materially on weak market days despite passing the average defensive relative-strength score.
+
+**Change:** I added a worst-weak-market relative-return check to the existing defensive relative strength logic so candidates with clustered downside beta during broad selloffs are filtered before ranking.
+
+**Decision:** REVERTED — sortino 2.755 did not improve on prev 3.8348443215568286
+
+**Result:**
+- evaluator_version: 2026-05-16-univfloor
+- validation_sortino_mean: 2.7550264230203356
+- validation_folds: 13
+- per_fold_sortinos: [1.3957, 1.1474, -0.2951, 4.2501, 7.7706, 5.5503, 4.1905, 3.7609, 2.3724, 0.9042, 1.1412, 1.7975, 1.8295]
+- calmar_mean: 5.925400556425957
+- hit_rate_mean: 0.5567979802738078
+- profit_factor_mean: 5.3807394315151535
+- trade_count_total: 193
+- aggregate_max_dd: 0.09536007257923165
+- worst_fold_max_dd: 0.07931141785541915
+- max_position_frac_peak: 0.06270789335949946
+- lower_quartile_fold_calmar: 2.6559687349676686
+- n_negative_folds: 1/13
+- risk.passed: True
+- risk.violations: []
+
+**Learning:** Sortino changed from 3.835 to 2.755 (-1.080). Aggregate DD was 9.5% versus previous kept 12.0%; negative folds were 1/13; trades=193. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 2.755 did not improve on prev 3.8348443215568286.
+
+---
