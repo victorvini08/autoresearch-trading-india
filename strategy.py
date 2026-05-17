@@ -313,7 +313,7 @@ def breadth_scaled_gross(
     return 0.99
 
 
-class IndiaResidualReversalStatArb(bt.Strategy):
+class IndiaMomentumQualityCarry(bt.Strategy):
     '''Long-only PIT-universe momentum-quality carry with fixed slots.'''
 
     _ADV_WINDOW = 20
@@ -515,5 +515,5 @@ __all__ = [
     'reversion_scores',
     'momentum_quality_scores',
     'breadth_scaled_gross',
-    'IndiaResidualReversalStatArb',
+    'IndiaMomentumQualityCarry',
 ]

@@ -154,7 +154,7 @@ def test_single_strategy_class_is_residual_reversal():
     from prepare import _find_strategy_class, count_hyperparameters
 
     cls = _find_strategy_class(s)
-    assert cls.__name__ == "IndiaResidualReversalStatArb"
+    assert cls.__name__ == "IndiaMomentumQualityCarry"
     # Parsimony footprint matched to the momentum book (7 counted knobs) so
     # neither autoresearch loop starts with a parsimony-gate advantage.
     assert count_hyperparameters(cls) == 7

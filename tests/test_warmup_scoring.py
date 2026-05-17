@@ -11,7 +11,7 @@ import numpy as np
 import pandas as pd
 
 from prepare import _as_date, _score_window
-from strategy import IndiaResidualReversalStatArb
+from strategy import IndiaMomentumQualityCarry
 
 
 def _feeds(n_days: int = 520, n_tickers: int = 30) -> dict[str, pd.DataFrame]:
@@ -54,7 +54,7 @@ def test_strategy_trades_when_warmed():
     gross exposure (the pre-Fix-1 bug left the book in cash forever);
     rotation additionally yields closed round-trips. This is the core proof
     Fix 1 works."""
-    out = _score_window(IndiaResidualReversalStatArb, _feeds())
+    out = _score_window(IndiaMomentumQualityCarry, _feeds())
     g = out["gross_exposure_daily"]
     assert len(g) > 0 and float(g.max()) > 0.0, (
         "strategy never took a position with full history — still inert"
@@ -66,8 +66,8 @@ def test_score_start_excludes_warmup():
     feeds = _feeds()
     cut = date(2022, 4, 1)  # well after the ~274-bar warm-up requirement
 
-    full = _score_window(IndiaResidualReversalStatArb, feeds)
-    sliced = _score_window(IndiaResidualReversalStatArb, feeds, score_start=cut)
+    full = _score_window(IndiaMomentumQualityCarry, feeds)
+    sliced = _score_window(IndiaMomentumQualityCarry, feeds, score_start=cut)
 
     # Equity curve and daily returns start at/after the cut.
     eq = sliced["equity_curve"]
@@ -95,7 +95,7 @@ def test_score_start_none_is_legacy_behaviour():
     """score_start=None must reproduce the pre-Fix-1 path exactly (whole fed
     window scored) so signal_today / existing callers are unaffected."""
     feeds = _feeds()
-    a = _score_window(IndiaResidualReversalStatArb, feeds)
-    b = _score_window(IndiaResidualReversalStatArb, feeds, score_start=None)
+    a = _score_window(IndiaMomentumQualityCarry, feeds)
+    b = _score_window(IndiaMomentumQualityCarry, feeds, score_start=None)
     assert a["trade_count"] == b["trade_count"]
     assert len(a["equity_curve"]) == len(b["equity_curve"])

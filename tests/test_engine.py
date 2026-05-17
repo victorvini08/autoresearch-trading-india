@@ -7,7 +7,7 @@ from backtest.engine import run_backtest
 # Branch mean-reversion-quant-strategy: strategy.py is the residual
 # mean-reversion stat-arb book; aliased so the engine tests stay
 # strategy-agnostic.
-from strategy import IndiaResidualReversalStatArb as StrategyUnderTest
+from strategy import IndiaMomentumQualityCarry as StrategyUnderTest
 
 
 # In-test strategy fixtures so the new gross-exposure tests below don't

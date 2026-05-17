@@ -56,7 +56,7 @@ def test_find_strategy_class_returns_residual_reversal():
     bt.Strategy subclass, the residual mean-reversion stat-arb book."""
     strat_mod = importlib.import_module("strategy")
     cls = _find_strategy_class(strat_mod)
-    assert cls.__name__ == "IndiaResidualReversalStatArb"
+    assert cls.__name__ == "IndiaMomentumQualityCarry"
 
 
 def test_research_mode_hides_test_set(monkeypatch):
