@@ -7039,3 +7039,32 @@ structural learnings are codified in `program.md`. Explore freely.
 **Learning:** Sortino changed from 3.835 to 3.532 (-0.303). Aggregate DD was 11.8% versus previous kept 12.0%; negative folds were 1/13; trades=182. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 3.532 did not improve on prev 3.8348443215568286 | anti-overfit FAILED: parsimony(baseline params=8, strategy=9; +1 param(s) need Sortino +0.10, has -0.30).
 
 ---
+
+## Iteration 2026-05-17-afb145f — REVERTED
+
+**Hypothesis:** Reducing fixed risk slots from 16 to 15 will improve validation Sortino by modestly concentrating capital in the highest-ranked names while staying within the program's minimum diversification constraint and preserving all existing PIT, sector, and fixed-slot safeguards.
+
+**Change:** I changed only n_positions from 16 to 15 so the existing proven ranking allocates slightly more to its strongest candidates without adding any new hyperparameters or altering signal construction.
+
+**Decision:** REVERTED — sortino 3.672 did not improve on prev 3.8348443215568286
+
+**Result:**
+- evaluator_version: 2026-05-16-univfloor
+- validation_sortino_mean: 3.6723067089514183
+- validation_folds: 13
+- per_fold_sortinos: [4.3813, 1.1912, 0.173, 5.7951, 9.6433, 6.8795, 6.1562, 5.7301, 2.731, 0.648, 1.6118, 0.8938, 1.9057]
+- calmar_mean: 7.270823494372786
+- hit_rate_mean: 0.5477108361723745
+- profit_factor_mean: 5.599361104688766
+- trade_count_total: 142
+- aggregate_max_dd: 0.1264617384027291
+- worst_fold_max_dd: 0.1069897638888412
+- max_position_frac_peak: 0.06617935811795742
+- lower_quartile_fold_calmar: 1.421987500561915
+- n_negative_folds: 0/13
+- risk.passed: True
+- risk.violations: []
+
+**Learning:** Sortino changed from 3.835 to 3.672 (-0.163). Aggregate DD was 12.6% versus previous kept 12.0%; negative folds were 0/13; trades=142. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 3.672 did not improve on prev 3.8348443215568286.
+
+---
