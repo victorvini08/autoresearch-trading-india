@@ -6198,3 +6198,32 @@ structural learnings are codified in `program.md`. Explore freely.
 **Learning:** Sortino changed from 3.828 to 3.800 (-0.028). Aggregate DD was 12.9% versus previous kept 12.0%; negative folds were 1/13; trades=189. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 3.800 did not improve on prev 3.8279484160617105.
 
 ---
+
+## Iteration 2026-05-17-38f030a — REVERTED
+
+**Hypothesis:** Adding a PIT-safe adverse-news veto will improve validation Sortino by avoiding technically strong momentum names on days with actionable negative company news before the price-based filters fully decay.
+
+**Change:** I imported the cached LLM news accessors and added a narrow adverse-news penalty/veto inside scoring while preserving the kept ranking logic, fixed-slot sizing, PIT universe gate, sector cap, and order_target_percent-only execution.
+
+**Decision:** REVERTED — sortino 3.828 did not improve on prev 3.8279484160617105
+
+**Result:**
+- evaluator_version: 2026-05-16-univfloor
+- validation_sortino_mean: 3.8279484160617105
+- validation_folds: 13
+- per_fold_sortinos: [5.0536, 1.2639, -0.0186, 5.8438, 9.8882, 6.7454, 5.8962, 5.5512, 2.7967, 0.9059, 1.9812, 1.4938, 2.362]
+- calmar_mean: 7.830672298724033
+- hit_rate_mean: 0.5689209546109999
+- profit_factor_mean: 6.442842667511247
+- trade_count_total: 188
+- aggregate_max_dd: 0.11955532408447701
+- worst_fold_max_dd: 0.10631762564081036
+- max_position_frac_peak: 0.06371803513146512
+- lower_quartile_fold_calmar: 1.862876675930103
+- n_negative_folds: 1/13
+- risk.passed: True
+- risk.violations: []
+
+**Learning:** Sortino changed from 3.828 to 3.828 (+0.000). Aggregate DD was 12.0% versus previous kept 12.0%; negative folds were 1/13; trades=188. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 3.828 did not improve on prev 3.8279484160617105.
+
+---
