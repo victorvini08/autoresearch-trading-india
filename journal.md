@@ -6633,3 +6633,32 @@ structural learnings are codified in `program.md`. Explore freely.
 **Learning:** Sortino changed from 3.835 to 3.781 (-0.054). Aggregate DD was 13.0% versus previous kept 12.0%; negative folds were 1/13; trades=187. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 3.781 did not improve on prev 3.8348443215568286.
 
 ---
+
+## Iteration 2026-05-17-82a8bc9 — REVERTED
+
+**Hypothesis:** Replacing the full realized-volatility penalty with downside-only semivolatility will improve validation Sortino by keeping constructive upside trend variability while still avoiding names with poor downside tails.
+
+**Change:** I changed the volatility input used by the score and hard volatility veto from total realized volatility to downside semivolatility over the same lookback, leaving universe gating, fixed-slot sizing, sector caps, cadence, and order_target_percent execution unchanged.
+
+**Decision:** REVERTED — sortino 3.056 did not improve on prev 3.8348443215568286 | catastrophe: gross exposure: max 142.7% > 100% (cash account — leverage error) | anti-overfit FAILED: sub_period_stationarity(signed min/max Sortino ratio across 2 sub-periods = -0.0037 (need ≥ 0.20); sub-periods = [+4.422, -0.016])
+
+**Result:**
+- evaluator_version: 2026-05-16-univfloor
+- validation_sortino_mean: 3.056249031501864
+- validation_folds: 13
+- per_fold_sortinos: [5.6466, 1.1434, -0.2299, 5.2841, 8.8787, 5.5585, 5.2691, 5.4428, 2.8029, -0.0974, 0.2188, -0.9675, 0.7812]
+- calmar_mean: 6.681805785635536
+- hit_rate_mean: 0.5481987542239983
+- profit_factor_mean: 5.122381836838392
+- trade_count_total: 183
+- aggregate_max_dd: 0.12838980387395763
+- worst_fold_max_dd: 0.11541254261721998
+- max_position_frac_peak: 0.21897671197360485
+- lower_quartile_fold_calmar: 0.157399609044383
+- n_negative_folds: 3/13
+- risk.passed: False
+- risk.violations: ['gross exposure: max 142.7% > 100% (cash account — leverage error)']
+
+**Learning:** Sortino changed from 3.835 to 3.056 (-0.779). Aggregate DD was 12.8% versus previous kept 12.0%; negative folds were 3/13; trades=183. Do not reuse this exact setup: it failed the catastrophe gate, so the result is not a usable edge even if the hypothesis was economically plausible. Decision reason: sortino 3.056 did not improve on prev 3.8348443215568286 | catastrophe: gross exposure: max 142.7% > 100% (cash account — leverage error) | anti-overfit FAILED: sub_period_stationarity(signed min/max Sortino ratio across 2 sub-periods = -0.0037 (need ≥ 0.20); sub-periods = [+4.422, -0.016]).
+
+---
