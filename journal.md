@@ -6778,3 +6778,32 @@ structural learnings are codified in `program.md`. Explore freely.
 **Learning:** Sortino changed from 3.835 to 3.271 (-0.564). Aggregate DD was 16.2% versus previous kept 12.0%; negative folds were 1/13; trades=122. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 3.271 did not improve on prev 3.8348443215568286.
 
 ---
+
+## Iteration 2026-05-17-883e4be — REVERTED
+
+**Hypothesis:** Adding a PIT-safe macro stress de-risking overlay will improve validation Sortino by reducing fixed-slot exposure only when continuous India VIX and Nifty 50 trend signals indicate unusually hostile market conditions, while leaving stock selection unchanged in normal regimes.
+
+**Change:** I added a continuous macro stress multiplier using india_vix_percentile and nifty_vs_200dma_pct to scale gross exposure down during severe broad-market stress without adding stock-level filters or changing the proven ranking logic.
+
+**Decision:** REVERTED — sortino 3.700 did not improve on prev 3.8348443215568286
+
+**Result:**
+- evaluator_version: 2026-05-16-univfloor
+- validation_sortino_mean: 3.699981360792134
+- validation_folds: 13
+- per_fold_sortinos: [4.7834, 1.2768, -0.0208, 5.0133, 9.2178, 6.6896, 6.0303, 5.804, 3.1354, 0.5427, 1.7985, 1.3107, 2.518]
+- calmar_mean: 7.475118589438086
+- hit_rate_mean: 0.5460025268848798
+- profit_factor_mean: 6.134126507320398
+- trade_count_total: 182
+- aggregate_max_dd: 0.1087103771215965
+- worst_fold_max_dd: 0.0942325110580326
+- max_position_frac_peak: 0.06267207830890065
+- lower_quartile_fold_calmar: 1.8678545438607141
+- n_negative_folds: 1/13
+- risk.passed: True
+- risk.violations: []
+
+**Learning:** Sortino changed from 3.835 to 3.700 (-0.135). Aggregate DD was 10.9% versus previous kept 12.0%; negative folds were 1/13; trades=182. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 3.700 did not improve on prev 3.8348443215568286.
+
+---
