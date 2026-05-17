@@ -1,8 +1,8 @@
 # Robust Indian-equity strategy — roadmap & next-session brief
 
-Brainstorm output, 2026-05-17. A vetted *menu* + mission to bootstrap a
-fresh session. Read `PRODUCTION_STRATEGY.md` and
-`STRATEGY_DEVELOPMENT_PLAN.md` first.
+Brainstorm output, 2026-05-17. **Self-contained** — a vetted *menu* +
+mission to bootstrap a fresh session from the current committed strategy.
+Everything forward-relevant is here; no prior plan docs needed.
 
 ## 1. Mission
 
@@ -97,9 +97,9 @@ revert decisively; git log is the manual-dev ledger.
 
 ## 8. New-session prompt
 
-> Branch `production-strategy` (verify; never other branches). Read
-> `PRODUCTION_STRATEGY.md`, `STRATEGY_DEVELOPMENT_PLAN.md`, and this roadmap
-> in full. Goal: optimal robust long-only Indian-equity strategy good in
+> Branch `production-strategy` (verify; never other branches). Read this
+> roadmap in full (self-contained — no other plan docs needed). Goal:
+> optimal robust long-only Indian-equity strategy good in
 > bull/bear/neutral, judged on the worst regime sub-period + forward
 > robustness, never backtest Sortino (windows burned). From committed
 > `e745434`, take **A (conditional vol scaling)** into a full design (then
