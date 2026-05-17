@@ -6343,3 +6343,32 @@ structural learnings are codified in `program.md`. Explore freely.
 **Learning:** Sortino changed from 3.828 to 2.594 (-1.234). Aggregate DD was 19.6% versus previous kept 12.0%; negative folds were 5/13; trades=195. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 2.594 did not improve on prev 3.8279484160617105 | anti-overfit FAILED: sub_period_stationarity(signed min/max Sortino ratio across 2 sub-periods = -0.1539 (need ≥ 0.20); sub-periods = [+4.021, -0.619]).
 
 ---
+
+## Iteration 2026-05-17-ea8accf — REVERTED
+
+**Hypothesis:** Increasing fixed risk slots from 16 to 18 will improve validation Sortino by reducing single-name downside tails while preserving the kept ranking, PIT universe gate, sector cap, biweekly cadence, and fixed-slot cash behavior.
+
+**Change:** I changed only n_positions from 16 to 18, making the book modestly more diversified without adding a new signal or sizing off selected count.
+
+**Decision:** REVERTED — sortino 3.744 did not improve on prev 3.8279484160617105
+
+**Result:**
+- evaluator_version: 2026-05-16-univfloor
+- validation_sortino_mean: 3.743970588162724
+- validation_folds: 13
+- per_fold_sortinos: [4.9314, 1.2957, 0.0398, 5.3505, 9.1681, 6.8035, 5.9095, 5.5485, 2.7912, 0.8782, 1.7607, 1.8899, 2.3046]
+- calmar_mean: 6.9429316475139355
+- hit_rate_mean: 0.5628109070416764
+- profit_factor_mean: 6.336631074197533
+- trade_count_total: 187
+- aggregate_max_dd: 0.10949446838664588
+- worst_fold_max_dd: 0.09494005877295701
+- max_position_frac_peak: 0.05582722953935304
+- lower_quartile_fold_calmar: 1.7999675530254275
+- n_negative_folds: 1/13
+- risk.passed: True
+- risk.violations: []
+
+**Learning:** Sortino changed from 3.828 to 3.744 (-0.084). Aggregate DD was 10.9% versus previous kept 12.0%; negative folds were 1/13; trades=187. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 3.744 did not improve on prev 3.8279484160617105.
+
+---
