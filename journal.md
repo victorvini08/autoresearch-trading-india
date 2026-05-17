@@ -5676,3 +5676,32 @@ structural learnings are codified in `program.md`. Explore freely.
 **Learning:** Sortino changed from 3.646 to 3.194 (-0.451). Aggregate DD was 14.3% versus previous kept 15.1%; negative folds were 2/13; trades=241. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 3.194 did not improve on prev 3.645505465789117.
 
 ---
+
+## Iteration 2026-05-17-e613e56 — REVERTED
+
+**Hypothesis:** Adding a PIT-safe broad-market stress overlay will improve validation Sortino by keeping the proven accumulation/momentum stock ranking intact while cutting gross exposure only when continuous India VIX and Nifty trend signals indicate elevated index-level downside risk.
+
+**Change:** I imported continuous macro feature accessors and added a defensive gross-exposure scaler in next(), so selected names and fixed-slot sizing remain unchanged but each slot is proportionally de-risked during macro stress.
+
+**Decision:** REVERTED — sortino 3.565 did not improve on prev 3.645505465789117
+
+**Result:**
+- evaluator_version: 2026-05-16-univfloor
+- validation_sortino_mean: 3.5648330112272104
+- validation_folds: 13
+- per_fold_sortinos: [5.1666, 0.3327, -1.0081, 5.2429, 9.3243, 6.6544, 5.9474, 5.8284, 3.0308, 0.3661, 1.7162, 1.3754, 2.3659]
+- calmar_mean: 7.23544879838324
+- hit_rate_mean: 0.5274542199881566
+- profit_factor_mean: 5.880715696025072
+- trade_count_total: 183
+- aggregate_max_dd: 0.11966301817637877
+- worst_fold_max_dd: 0.10305753002746726
+- max_position_frac_peak: 0.061644523373131845
+- lower_quartile_fold_calmar: 1.9043203458730007
+- n_negative_folds: 1/13
+- risk.passed: True
+- risk.violations: []
+
+**Learning:** Sortino changed from 3.646 to 3.565 (-0.081). Aggregate DD was 12.0% versus previous kept 15.1%; negative folds were 1/13; trades=183. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 3.565 did not improve on prev 3.645505465789117.
+
+---
