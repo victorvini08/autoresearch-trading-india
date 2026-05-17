@@ -72,6 +72,23 @@ reason about*, not steps to execute:
 These are leads, not a mandate. If the evidence points elsewhere, follow the
 evidence.
 
+## HOW TO VALIDATE (repo mechanics — this is the test harness, not a method choice)
+
+- **`uv run python prepare.py research`** is the only in-session validation:
+  the immutable, cost-aware walk-forward evaluator that also runs the
+  anti-overfit gates. Run it after any change.
+- Read from its output: `validation_sortino_mean` (the mean — a reference,
+  NOT the thing to maximise), **`sub_period_sortinos` and `per_fold_sortinos`
+  — the worst / most-negative of these IS the "worst regime" the goal is
+  judged on**, plus `aggregate_dd` and `risk`. A change is acceptable only if
+  the worst sub-period does not degrade/sign-flip AND the anti-overfit gates
+  pass.
+- **Never run `prepare.py promotion`.** It reveals the burned 2025-01→2026-05
+  sealed set; it is off-limits and is not proof of anything.
+- No historical backtest certifies the strategy. The real arbiter is forward
+  `dhan-paper` validation (operational, later) — design for that, not for the
+  `research` numbers.
+
 ## DEFERRED — per-ticker news (out of scope for now)
 
 Raw news exists (72k ticker-tagged articles 2021→2026) but the
@@ -94,6 +111,12 @@ Safe to add later as a pure data/ops task — ignore news for now.
 > starting point — one that **generalizes across bear, bull, and neutral
 > regimes**, judged on its **worst** regime sub-period and on forward
 > robustness, never average/backtest Sortino (the sealed window is burned).
+>
+> Validate every change with `uv run python prepare.py research` (the
+> immutable cost-aware walk-forward + anti-overfit harness); judge on the
+> worst of `sub_period_sortinos`/`per_fold_sortinos`, not the mean. Never run
+> `prepare.py promotion` (burned sealed set). No backtest is proof — design
+> for forward robustness.
 >
 > Use your own judgment on approach — the considerations in the plan are
 > leads to weigh, not a sequence to follow. Respect the guardrails and
