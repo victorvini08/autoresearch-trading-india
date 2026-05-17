@@ -6459,3 +6459,32 @@ structural learnings are codified in `program.md`. Explore freely.
 **Learning:** Sortino changed from 3.835 to 3.503 (-0.331). Aggregate DD was 11.8% versus previous kept 12.0%; negative folds were 1/13; trades=183. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 3.503 did not improve on prev 3.8348443215568286.
 
 ---
+
+## Iteration 2026-05-17-9cc7af0 — REVERTED
+
+**Hypothesis:** Adding PIT-safe soft retention for still-qualified existing holdings will improve validation Sortino by reducing unnecessary biweekly churn and Dhan DP sell costs while preserving the proven ranking, fixed-slot sizing, universe gate, and sector cap.
+
+**Change:** I changed selection so current holdings that still pass the score filters and remain in the top 1.5x slot depth are retained before filling remaining slots from the ranked list, keeping blocked slots as cash and using order_target_percent only.
+
+**Decision:** REVERTED — sortino 3.455 did not improve on prev 3.8348443215568286
+
+**Result:**
+- evaluator_version: 2026-05-16-univfloor
+- validation_sortino_mean: 3.4553355071144725
+- validation_folds: 13
+- per_fold_sortinos: [2.1882, -0.9565, -1.9263, 6.5575, 14.0635, 4.7861, 4.7525, 7.0436, 3.2934, 0.0155, 1.166, 2.2593, 1.6765]
+- calmar_mean: 6.826619532588849
+- hit_rate_mean: 0.5382117882117883
+- profit_factor_mean: 8.4179470543655
+- trade_count_total: 114
+- aggregate_max_dd: 0.17507472778002006
+- worst_fold_max_dd: 0.13729316467900732
+- max_position_frac_peak: 0.0625872573856738
+- lower_quartile_fold_calmar: 2.0243593526255754
+- n_negative_folds: 3/13
+- risk.passed: True
+- risk.violations: []
+
+**Learning:** Sortino changed from 3.835 to 3.455 (-0.380). Aggregate DD was 17.5% versus previous kept 12.0%; negative folds were 3/13; trades=114. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 3.455 did not improve on prev 3.8348443215568286.
+
+---
