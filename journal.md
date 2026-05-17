@@ -5792,3 +5792,32 @@ structural learnings are codified in `program.md`. Explore freely.
 **Learning:** Sortino changed from 3.646 to 3.516 (-0.129). Aggregate DD was 12.4% versus previous kept 15.1%; negative folds were 1/13; trades=149. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 3.516 did not improve on prev 3.645505465789117.
 
 ---
+
+## Iteration 2026-05-17-7e714c5 — REVERTED
+
+**Hypothesis:** Adding a two-pass sector diversification fill will improve validation Sortino by reducing hot-sector cluster risk while preserving the kept stock-level momentum/accumulation ranking, fixed-slot sizing, PIT universe gate, biweekly cadence, and the hard 25% sector cap.
+
+**Change:** I changed only sector-cap selection so the book first takes a softer cross-sector pass before filling remaining slots up to the existing hard sector cap, keeping weaker duplicate sector exposure as cash only when breadth is insufficient.
+
+**Decision:** REVERTED — sortino 3.646 did not improve on prev 3.645505465789117
+
+**Result:**
+- evaluator_version: 2026-05-16-univfloor
+- validation_sortino_mean: 3.645505465789117
+- validation_folds: 13
+- per_fold_sortinos: [5.1923, 0.3537, -0.9762, 5.6907, 9.8402, 6.8286, 5.9485, 5.4646, 2.3561, 0.557, 1.9529, 1.5828, 2.6003]
+- calmar_mean: 7.485932309318195
+- hit_rate_mean: 0.5324614299727422
+- profit_factor_mean: 5.883363948825357
+- trade_count_total: 189
+- aggregate_max_dd: 0.15130025262259741
+- worst_fold_max_dd: 0.12598967743333822
+- max_position_frac_peak: 0.06432321564169123
+- lower_quartile_fold_calmar: 2.0192331288161514
+- n_negative_folds: 1/13
+- risk.passed: True
+- risk.violations: []
+
+**Learning:** Sortino changed from 3.646 to 3.646 (+0.000). Aggregate DD was 15.1% versus previous kept 15.1%; negative folds were 1/13; trades=189. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 3.646 did not improve on prev 3.645505465789117.
+
+---
