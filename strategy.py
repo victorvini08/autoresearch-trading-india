@@ -7,8 +7,8 @@ strength on weak market days, persistent multi-leg trend quality, fresh
 intermediate trend confirmation, modest short-term pullback quality, avoids
 one-week and one-day upside exhaustion, rewards efficient intermediate trends,
 favors constructive recent range location, requires basic accumulation support,
-adds close-location accumulation confirmation, applies a 25% sector cap, and
-sizes by fixed risk slots so blocked slots remain cash.
+adds intermediate and recent close-location accumulation confirmation, applies
+a 25% sector cap, and sizes by fixed risk slots so blocked slots remain cash.
 
 Trade contract: every position change goes through order_target_percent only.
 '''
@@ -420,6 +420,7 @@ class IndiaMomentumQualityRegime(bt.Strategy):
         range_location = self._range_location(d, self.p.vol_days)
         accumulation = self._volume_accumulation(d, self.p.vol_days)
         close_accumulation = self._close_location_accumulation(d, self.p.vol_days)
+        recent_close_accumulation = self._close_location_accumulation(d, self.p.recent_days)
         if (
             vol is None
             or drawdown is None
@@ -429,6 +430,7 @@ class IndiaMomentumQualityRegime(bt.Strategy):
             or range_location is None
             or accumulation is None
             or close_accumulation is None
+            or recent_close_accumulation is None
         ):
             return None
         if (
@@ -440,6 +442,7 @@ class IndiaMomentumQualityRegime(bt.Strategy):
             or range_location < 0.32
             or accumulation < -0.12
             or close_accumulation < -0.18
+            or recent_close_accumulation < -0.24
         ):
             return None
 
@@ -457,6 +460,7 @@ class IndiaMomentumQualityRegime(bt.Strategy):
             + (0.18 * pullback_quality)
             + (0.06 * accumulation)
             + (0.045 * close_accumulation)
+            + (0.025 * recent_close_accumulation)
             + (2.25 * defensive)
             - (0.45 * vol)
             - (0.35 * drawdown)

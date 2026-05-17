@@ -5995,3 +5995,32 @@ structural learnings are codified in `program.md`. Explore freely.
 **Learning:** Sortino changed from 3.652 to 3.630 (-0.022). Aggregate DD was 15.1% versus previous kept 15.1%; negative folds were 1/13; trades=189. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 3.630 did not improve on prev 3.652368255577813.
 
 ---
+
+## Iteration 2026-05-17-87db1e3 — KEPT
+
+**Hypothesis:** Adding a PIT-safe recent close-location confirmation term will improve validation Sortino by ensuring the kept 63-day accumulation signal is still active over the most recent month rather than stale.
+
+**Change:** I added a 21-day close-location accumulation check and small score contribution using the existing recent_days parameter, vetoing only clear recent distribution while preserving PIT universe gating, fixed-slot sizing, biweekly cadence, sector cap, and order_target_percent-only execution.
+
+**Decision:** KEPT — sortino 3.797 > prev 3.652368255577813, agg_dd 15.1%, catastrophe gate clear, anti-overfit gates passed
+
+**Result:**
+- evaluator_version: 2026-05-16-univfloor
+- validation_sortino_mean: 3.7968885204229252
+- validation_folds: 13
+- per_fold_sortinos: [5.0982, 1.3612, -0.0402, 5.6859, 9.8423, 6.7587, 5.891, 5.4589, 2.3402, 0.6886, 2.0917, 1.8128, 2.3703]
+- calmar_mean: 7.671338363091986
+- hit_rate_mean: 0.5485885908962831
+- profit_factor_mean: 5.91729534269724
+- trade_count_total: 189
+- aggregate_max_dd: 0.15098963858874526
+- worst_fold_max_dd: 0.1257994904233093
+- max_position_frac_peak: 0.06421688065510837
+- lower_quartile_fold_calmar: 1.859015131292372
+- n_negative_folds: 1/13
+- risk.passed: True
+- risk.violations: []
+
+**Learning:** Sortino changed from 3.652 to 3.797 (+0.145). Aggregate DD was 15.1% versus previous kept 15.1%; negative folds were 1/13; trades=189. Keep compounding on this change, but future iterations should still explain whether the gain came from better return, lower downside, or fewer fragile folds. Decision reason: sortino 3.797 > prev 3.652368255577813, agg_dd 15.1%, catastrophe gate clear, anti-overfit gates passed.
+
+---
