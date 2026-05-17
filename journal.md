@@ -5328,3 +5328,32 @@ structural learnings are codified in `program.md`. Explore freely.
 **Learning:** Sortino changed from 3.628 to 3.329 (-0.299). Aggregate DD was 11.8% versus previous kept 15.1%; negative folds were 1/13; trades=178. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 3.329 did not improve on prev 3.6277126896862444.
 
 ---
+
+## Iteration 2026-05-17-7474ccd — REVERTED
+
+**Hypothesis:** Adding a PIT-safe recent close-strength term will improve validation Sortino by preferring momentum candidates that repeatedly finish near the upper part of their daily ranges, capturing persistent demand without adding a new parameter or changing sizing, cadence, gross exposure, or sector caps.
+
+**Change:** I added a recent daily close-location helper using existing OHLC bars, vetoed weak close-strength candidates, and blended a modest close-strength quality reward into the existing momentum-quality score.
+
+**Decision:** REVERTED — sortino 1.270 did not improve on prev 3.6277126896862444 | anti-overfit FAILED: bonferroni(p=0.0565 >= alpha/N=0.0100) · sub_period_stationarity(signed min/max Sortino ratio across 2 sub-periods = -0.0405 (need ≥ 0.20); sub-periods = [+1.868, -0.076])
+
+**Result:**
+- evaluator_version: 2026-05-16-univfloor
+- validation_sortino_mean: 1.2700836928718184
+- validation_folds: 13
+- per_fold_sortinos: [0.6405, -0.5969, -2.8569, 1.1016, 4.0274, 2.0547, 4.6137, 5.9024, 1.9274, -0.6402, 0.0749, 0.44, -0.1774]
+- calmar_mean: 2.59117464071012
+- hit_rate_mean: 0.4593915888033535
+- profit_factor_mean: 2.982272408669907
+- trade_count_total: 213
+- aggregate_max_dd: 0.17630234634604955
+- worst_fold_max_dd: 0.12277806752863928
+- max_position_frac_peak: 0.06434878162475309
+- lower_quartile_fold_calmar: -0.13009090503686593
+- n_negative_folds: 5/13
+- risk.passed: True
+- risk.violations: []
+
+**Learning:** Sortino changed from 3.628 to 1.270 (-2.358). Aggregate DD was 17.6% versus previous kept 15.1%; negative folds were 5/13; trades=213. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 1.270 did not improve on prev 3.6277126896862444 | anti-overfit FAILED: bonferroni(p=0.0565 >= alpha/N=0.0100) · sub_period_stationarity(signed min/max Sortino ratio across 2 sub-periods = -0.0405 (need ≥ 0.20); sub-periods = [+1.868, -0.076]).
+
+---
