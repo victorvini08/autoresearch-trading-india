@@ -1544,3 +1544,59 @@ generalized. The B-vs-baseline risk-adjusted-return question is genuinely
 unresolved and can only be settled by forward dhan-paper (the roadmap's
 sole stated arbiter), not by this one burned datapoint. Reported honestly
 to the user for their judgment.
+
+## Iteration 2026-05-17-C-residual-momentum-primary — REVERTED (manual dev)
+
+**Hypothesis:** Replacing the total-return 12-1 core of
+momentum_quality_scores with residual (idiosyncratic) momentum
+(Blitz-Huij-Martens: ~2x risk-adjusted, crash-robust OOS) on the kept B
+inverse-vol book will fix the sealed-diagnosed structural weakness
+(total-return momentum crashes in factor reversals) and improve
+regime-robustness. 0 new hyperparameters; PIT-safe factors.
+
+**Change:** Added `residual_momentum` (OLS of name returns on market+SMB
+built only from PIT returns; cumulative residual over the skip-adjusted
+formation window — same machinery as reversion_scores, no sign flip).
+momentum_quality_scores PRIMARY signal swapped total-return long_mom/
+mid_mom -> resid_mom (filter resid_mom>0 and now>=structural_MA; score =
+resid_rank + quality ranks + 0.25 adv). B sizing/structural-exit/sector-
+cap/PIT/order_target_percent unchanged. count_hyperparameters stays 6.
+
+**Decision:** REVERTED — fails the atomic `sub_period_stationarity`
+anti-overfit gate: sub_period_sortinos [2.258, **-0.246**] — a regime
+SIGN-FLIP (strongly positive early, negative in the 2024 bucket), signed
+ratio -0.109 < 0.20. Per CLAUDE.md §8 / robustness rule an atomic gate
+failure is a hard reject regardless of framework. Also worse than B on
+every robustness axis: validation 1.487 (B 2.604), aggregate_dd 6.14% (B
+3.41%), 4/13 negative folds (B 2), worst fold -2.49 (B -0.85), turnover
+0.368 (B 0.108). Bonferroni p=0.036 / RW-MC 0.9645 (weakest of all, still
+nominally pass) — but the sign-flip gate is the decisive hard fail.
+
+**Result:**
+- evaluator_version: 2026-05-16-univfloor
+- validation_sortino_mean: 1.4874648983936356 (B 2.6040939804723893)
+- per_fold_sortinos: [3.1468, -0.261, -0.7741, 2.2747, 3.0695, 1.0683, 2.4238, 6.2553, 3.118, 0.9529, 1.2336, -0.6805, -2.4903]
+- sub_period_sortinos: [2.2579, -0.2461]  (B [3.0270, 1.6527])
+- aggregate_dd: 0.06143 ; n_negative_folds: 4/13 ; n_trades: 154
+- n_hyperparameters: 6 ; universe_respected: True ; risk.passed: True
+
+**Learning (meta — important):** Residual momentum's crash-robustness
+(documented on US/global data) did NOT transfer to the Indian top-200 PIT
+universe over 2022-2024: it is regime-FRAGILE here (sign-flips across
+sub-periods), the opposite of the theoretical prior. Combined with A
+(gross vol-scaling clips the right tail) and A+B (same), the empirical
+pattern across the roadmap's high-EV structural levers is consistent and
+decisive: on THIS universe/window every structural SIGNAL or GROSS change
+degrades regime-robustness or clips the right tail; only B (inverse-vol
+risk-parity WITHIN fixed gross — a pure sizing transform, no signal/gross
+change, 0 new params) is a clean robustness win. The roadmap's remaining
+levers are exhausted or counter-indicated: D (low-vol/quality tilt) is
+redundant with the existing downvol/drawdown/consistency ranks + B's
+inverse-vol sizing and would be the §6-burned "more rank factors" path;
+E (cost/turnover) — B is already low-turnover (0.108). Continuing to throw
+structural changes at a backtest now known to be heavily overfit, with the
+sealed window burned, would itself be overfitting. B is the robust
+endpoint of this research loop. The genuine next steps are NOT more
+in-sample iteration: forward dhan-paper validation (roadmap §1: the only
+true arbiter) and the deferred news/data-engineering levers (out of this
+loop's scope). B remains the committed strategy.
