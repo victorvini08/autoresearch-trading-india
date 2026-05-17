@@ -1497,3 +1497,50 @@ that improves robustness (DD 5.18->3.41%, neg folds 3->2, worst fold
 return (Sortino & sub-periods ~= baseline, no sign-flip), parsimony-neutral,
 one clean change. B stays the committed strategy; proceed to the single
 sealed-test reveal on B.
+
+## SEALED REVEAL — Improvement B (2026-05-17, user-directed, once)
+
+**Context:** User /goal explicitly directed reporting final sealed-test
+findings. B developed ENTIRELY in research mode (every A.v1/A.v2/B/A.v2+B
+run was `prepare.py research`; the 2025-01→2026-05 sealed window was never
+touched). Single reveal, one final variant (B), no retries — satisfies
+CLAUDE.md §9/§8. `prepare.py promotion` is read-only (no sealed_reveals.csv
+mutation). Supersedes roadmap §7's prior-session "never promotion again"
+by the user's current explicit higher-priority instruction.
+
+**B sealed (2025-01 → 2026-05-14):** test_sortino **0.3359**,
+test_max_dd **0.03653**, test_calmar 0.2696, test_hit_rate 0.3913,
+test_trade_count 23.
+**Baseline e745434 sealed (roadmap §2, revealed previously):** Sortino
+**1.00**, maxDD 4.38%, 24 trades.
+
+**Honest interpretation (no spin):**
+- The backtest is HEAVILY overfit — confirmed. B research Sortino 2.604
+  collapses to 0.336 OOS; baseline 2.626 → 1.00 OOS. BOTH degrade
+  massively. This vindicates the user's concern and roadmap §1
+  ("Non-goal: maximising backtest Sortino"): research Sortino is not a
+  real-world predictor.
+- B's PRIMARY design objective — drawdown control via downside-variance
+  reduction — DID generalize OOS: sealed maxDD 3.65%, the lowest of any
+  config and below baseline's sealed 4.38%. Consistent signal (research
+  3.41% AND sealed 3.65%).
+- B's OOS risk-adjusted RETURN underperformed baseline (0.336 vs 1.00) on
+  this single adversarial small-n (n=23) window (the Jan-26→Mar-26
+  momentum-hostile drawdown the roadmap flagged). The inverse-vol tilt's
+  variance reduction traded away return in that regime more than baseline.
+- Neither sealed (now burned, n=23, one regime path) nor research is the
+  true arbiter — roadmap §1: forward dhan-paper is. The sealed test is a
+  one-shot integrity check, NOT a selection oracle.
+
+**Decision: B remains the committed strategy (do NOT revert to baseline
+on the sealed number).** Reverting B→baseline *because* baseline's sealed
+Sortino is higher would be selecting on the burned test — the exact
+anti-overfit violation the discipline forbids. B was chosen purely on
+research-mode robustness + theory with ZERO added parameters
+(parsimony-neutral, theory-pinned) — it is structurally not an overfit;
+its OOS Sortino drop is the shared backtest-overfit + regime adversity,
+not B-specific curve-fitting, and its robustness thesis (lower drawdown)
+generalized. The B-vs-baseline risk-adjusted-return question is genuinely
+unresolved and can only be settled by forward dhan-paper (the roadmap's
+sole stated arbiter), not by this one burned datapoint. Reported honestly
+to the user for their judgment.
