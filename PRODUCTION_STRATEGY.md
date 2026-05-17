@@ -141,3 +141,27 @@ that #2's defence is non-destructive, gate-clean and theory-sound. The real
 arbiter remains forward `dhan-paper` validation (roadmap #4). Recommend:
 promote `e745434` to forward paper; do **not** chase further `research`
 gains.
+
+### 6.1 Sealed reveal — 2026-05-17 (explicit human authorization)
+
+The user (the designated promotion authority), after being shown the full
+irreversibility/contamination warning and the safe alternative, **explicitly
+authorized one `prepare.py promotion` run on `e745434`**. Recorded here for
+provenance; `iterations/sealed_reveals.csv` was NOT written (prepare.py's
+promotion path does not call `record_sealed_reveal` — only the loop's
+`sealed_test_gate` does).
+
+Sealed 2025-01→2026-05 result (`e745434`): **Sortino 1.000**, Calmar 0.913,
+**maxDD 4.38%**, hit-rate 0.458, **24 trades**. Documented #2 foundation on
+the same window (§3): Sortino 0.746, maxDD 4.66%, 22 trades. So the symmetric
+structural exit improved the (already-burned) OOS Sortino 0.75→1.00 and cut
+OOS maxDD 4.66%→4.38% while validation moved only 2.48→2.63 — the **opposite
+of the #4 over-fit signature**, mild positive triangulation that the change
+is directionally real.
+
+**This does not certify anything.** The number is upward-biased (window
+peeked 24+×, foundation selected on it), n=24 is thin, and it changes no
+recommendation. **The 2025-01→2026-05 window's contamination is now total
+and final** — it must NEVER again be run or used as a signal for any
+derivative of this strategy. Forward `dhan-paper` remains the only arbiter;
+no future change will be tuned against this number.
