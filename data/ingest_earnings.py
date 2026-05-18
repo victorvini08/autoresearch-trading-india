@@ -311,10 +311,102 @@ def ingest_earnings(news_db: Path | None = None, earnings_db: Path | None = None
     return extract_from_news(news_db=news_db, earnings_db=earnings_db)
 
 
+def compute_sue_from_fundamentals(
+    fundamentals_db: Path, earnings_db: Path
+) -> int:
+    """SUE via seasonal random walk on as-reported EPS (point-in-time).
+
+    E[EPS_q] = EPS_{q-4} (same quarter prior year, as-reported, known
+    as-of). unexpected = EPS_q - E[EPS_q]. Standardized by the population
+    std of up to the last 8 *strictly prior* seasonal forecast errors;
+    needs >= 3 such errors else sue is left None. announcement_date is the
+    fundamentals as_of_date (the broadcast date), so the surprise carries
+    the same PIT guarantee as the underlying EPS.
+    """
+    import statistics
+
+    fc = duckdb.connect(str(fundamentals_db), read_only=True)
+    try:
+        rows = fc.execute(
+            "SELECT ticker, period_end_date, as_of_date, eps_basic "
+            "FROM fundamentals_quarterly "
+            "WHERE eps_basic IS NOT NULL "
+            "ORDER BY ticker, period_end_date"
+        ).fetchall()
+    finally:
+        fc.close()
+
+    by_t: dict[str, list[tuple]] = {}
+    for t, pe, ao, eps in rows:
+        by_t.setdefault(t, []).append((pe, ao, float(eps)))
+
+    out: list[tuple] = []
+    for t, series in by_t.items():
+        for i in range(4, len(series)):
+            _pe, ao, eps = series[i]
+            exp = series[i - 4][2]
+            unexpected = eps - exp
+            errs = [
+                series[j][2] - series[j - 4][2] for j in range(4, i)
+            ][-8:]
+            if len(errs) < 3:
+                continue
+            sd = statistics.pstdev(errs)
+            sue = unexpected / sd if sd > 0 else None
+            out.append((t, ao, unexpected, sue, "seasonal_rw"))
+
+    if not out:
+        return 0
+    conn = duckdb.connect(str(earnings_db))
+    try:
+        _ensure_schema(conn)
+        existing = {
+            r[0]
+            for r in conn.execute(
+                "SELECT column_name FROM information_schema.columns "
+                "WHERE table_name='earnings_calendar'"
+            ).fetchall()
+        }
+        for col, typ in (
+            ("surprise_eps", "DOUBLE"),
+            ("sue", "DOUBLE"),
+            ("expectation_basis", "VARCHAR"),
+        ):
+            if col not in existing:
+                conn.execute(
+                    f"ALTER TABLE earnings_calendar ADD COLUMN {col} {typ}"
+                )
+        conn.execute("BEGIN TRANSACTION")
+        try:
+            for t, ao, ue, sue, basis in out:
+                conn.execute(
+                    """
+                    INSERT INTO earnings_calendar
+                        (ticker, announcement_date, title, source,
+                         surprise_eps, sue, expectation_basis)
+                    VALUES (?, ?, 'SUE (computed)', 'fundamentals_sue',
+                            ?, ?, ?)
+                    ON CONFLICT (ticker, announcement_date) DO UPDATE SET
+                        surprise_eps = excluded.surprise_eps,
+                        sue = excluded.sue,
+                        expectation_basis = excluded.expectation_basis
+                    """,
+                    (t, ao, ue, sue, basis),
+                )
+            conn.execute("COMMIT")
+        except Exception:
+            conn.execute("ROLLBACK")
+            raise
+    finally:
+        conn.close()
+    return len(out)
+
+
 __all__ = [
     "EarningsEvent",
     "extract_from_news",
     "load_calendar",
     "ingest_earnings",
     "ingest_yfinance_earnings",
+    "compute_sue_from_fundamentals",
 ]
