@@ -250,3 +250,28 @@ another; no drawdown benefit; worst sub-period worse). Durable lessons:
    research-failing, under-powered variant would waste the irreversible
    resource and is itself the overfitting impulse the gate exists to
    stop. Lock the variant on research first; reveal once, last.
+
+### 7.7 Earnings overlay: closed out on a properly-powered sealed test
+
+The data-sufficiency wall (7.6) was a real ingestion bug (NSE
+Integrated-Filing migration), not destiny — fixed, re-backfilled to
+2026-03, SUE now dense across a 16-month sealed window. With the wall
+gone, the locked parameter-free Phase B was revealed ONCE on that
+properly-powered sealed set and still failed: Sortino +0.06 but Calmar,
+max-drawdown and hit-rate all worse, hit-rate 41%→23%. Durable lessons:
+
+1. **A single-metric (Sortino) improvement with worse drawdown +
+   collapsed hit-rate is the lumpy-luck/overfit signature, not an edge.**
+   Always read Calmar/maxDD/hit-rate alongside Sortino; a higher Sortino
+   from fewer winning days is concentration risk, not skill.
+2. **Fix the data, then let the one-shot sealed test give a definitive
+   answer — once.** The disciplined sequence (root-cause the data gap →
+   fix ingestion → re-backfill → lock ONE theory-chosen variant → reveal
+   sealed once → accept verdict) produced a trustworthy NEGATIVE with
+   zero overfitting. Two principled earnings-overlay forms now both fail
+   out-of-sample → the orthogonal earnings/PEAD signal does not
+   generically improve this already-defended momentum book. Closed, not
+   paused; do not keep generating variants.
+3. **Infra earned along the way is kept regardless of the strategy
+   verdict** (robust-SUE estimator; Integrated-Filing fetch fix). A
+   correct, current PIT pipeline has standalone value.

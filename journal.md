@@ -2117,3 +2117,54 @@ now-much-longer walk-forward (many independent folds, sealed 2025-26
 live) → only if it robustly passes the atomic gates + worst sub-period +
 scale, ONE sealed reveal. Suite: all fundamentals/pead tests green; the
 6 pre-existing baseline failures unchanged.
+
+---
+
+## 2026-05-18 — Phase B re-test on the FIXED/CURRENT data — **REVERTED (definitive, sealed-validated)**
+
+**Setup.** After the Integrated-Filing fetch fix (commit 2f65451) the
+user re-ran the real-network backfill: `storage/fundamentals.duckdb` now
+2022-06 → **2026-03-31**, 6197 rows, look-ahead tripwire PASS, textbook
+lag. SUE re-materialised fresh: **2815 rows, announcements 2024-04 →
+2026-05-18** (2025:1446, 2026:619), robust distribution (±8 clip,
+median 0.19, σ 1.98). The locked, theory-chosen, parameter-free Phase B
+(categorical SUE-sign stable reorder, count=6) was re-applied UNCHANGED
+and the **one-shot sealed reveal** spent on it (`prepare.py promotion`,
+ON vs identical OFF baseline).
+
+**Result.** Research (unchanged — its window ends 2025-01, blind to the
+new data, as predicted): valSortino −0.10, worst sub-period
+2.32→2.00. **SEALED 2025-01 → 2026-05 (now densely SUE-live — the
+genuinely powered test):**
+
+| metric | OFF | ON | Δ |
+|---|---|---|---|
+| Sortino | 0.717 | 0.776 | +0.059 (only gain) |
+| Calmar | 0.793 | 0.497 | **−0.296 WORSE** |
+| max_dd | 11.26% | 11.83% | **+0.57pp WORSE** |
+| hit_rate | 41.4% | 22.6% | **−18.8pp WORSE** |
+| trades | 29 | 31 | +2 |
+
+**Decision: REVERT — DEFINITIVE.** Exactly one metric (Sortino) nudges
+up while Calmar, drawdown and hit-rate all materially worsen. The
+hit-rate collapse (41%→23%) is the tell: the marginal Sortino comes from
+a few concentrated lucky moves, not a consistent edge — lumpier, deeper
+drawdown, *less* generic. Fails the robustness-over-Sortino gate, now
+**out-of-sample on 16 months, not 3 folds**. This is no longer a
+data-starved "can't tell" — it is a properly-powered NEGATIVE.
+
+**Conclusion (closed, not paused).** Both principled forms of the
+orthogonal earnings/PEAD overlay — Phase A *suppression* and Phase B
+*concentration* — conclusively do NOT robustly/generically improve the
+momentum-quality + vol-targeted book. The committed book (research
+Sortino 2.90, worst sub-period 2.32; sealed Sortino 0.717, Calmar 0.79,
+max_dd 11.3%, hit 41%) stands. The one-shot sealed reveal for this
+variant is spent; per discipline we do NOT iterate further earnings
+overlays against it.
+
+**KEPT (strictly-better, reusable infra, strategy-independent):** (1) the
+robust-SUE estimator (Hampel/MAD + clip); (2) the NSE Integrated-Filing
+fetch fix — the fundamentals pipeline is now correct and current
+(2026-03), valuable regardless of the strategy verdict. `strategy.py`
+restored to committed; `tests/test_strategy_earn_tilt.py` kept as a
+SKIPPED contract; suite green (6 pre-existing baseline failures only).

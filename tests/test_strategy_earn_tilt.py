@@ -1,34 +1,37 @@
 """Phase B earnings-confirmed concentration tilt — executable contract,
-SKIPPED.
+SKIPPED (DEFINITIVE negative; not data-starved).
 
-Phase B (categorical, parameter-free reorder of momentum's own selection
-by PIT-SUE sign) was implemented and evaluated on `prepare.py research`
-vs an identical tilt-off control (journal 2026-05-18). REVERTED: it is
-fold-dependent on the only testable data — the 4 active 2024 folds were
-+0.41 / −0.09 / −2.94 / +1.32 (one catastrophic), validation Sortino
-−0.10, worst sub-period 2.32→1.995, ZERO drawdown benefit. With both the
-*suppression* (Phase A) and *concentration* (Phase B) forms now failing
-the same way, the binding constraint is data sufficiency: only ~3
-independent testable PIT-earnings folds exist (2022+ NSE horizon +
-8-quarter SUE burn-in, data ending 2025-02). No earnings overlay can be
-shown *generic / non-overfit* on 3 folds; iterating more forms on them
-would BE the overfit.
+After the NSE Integrated-Filing fetch fix (commit 2f65451) the
+fundamentals were re-backfilled to 2026-03 and SUE re-materialised
+densely across the SEALED window (2025-01..2026-05, 1446+619 rows). The
+locked, parameter-free Phase B was then revealed ONCE on that
+now-properly-powered sealed set (journal 2026-05-18):
 
-Skipped (not deleted — CLAUDE.md "don't pre-emptively delete"): this is
-the contract to re-enable once a materially LONGER PIT fundamentals
-history exists (forward + backward backfill → enough independent
-earnings cycles for a real walk-forward + one sealed reveal). The
-robust-SUE estimator + pipeline remain KEPT as infra.
+  SEALED OFF→ON: Sortino 0.717→0.776 (+0.06, the only gain) but
+  Calmar 0.793→0.497, max_dd 11.26%→11.83%, hit-rate 41.4%→22.6%
+  (all WORSE). Research worst sub-period 2.32→2.00.
+
+One metric up while drawdown, Calmar and consistency all degrade, with a
+hit-rate collapse — the lumpy-luck / overfit signature, NOT a generic
+edge. Both principled earnings overlays (Phase A suppression + Phase B
+concentration) are now CONCLUSIVELY shown not to robustly improve the
+momentum-quality + vol-targeted book — confirmed out-of-sample on 16
+months, not 3 folds. The one-shot sealed reveal for this variant is
+spent; do NOT iterate further earnings-overlay variants against it.
+
+Skipped, not deleted (CLAUDE.md): contract retained only as historical
+record. KEPT infra (strictly-better, reusable): the robust-SUE estimator
+and the Integrated-Filing fetch fix (pipeline is now correct & current).
 """
 from __future__ import annotations
 
 import pytest
 
 pytestmark = pytest.mark.skip(
-    reason="Phase B tilt REVERTED (fold-dependent, fails robustness gate, "
-    "no drawdown benefit) — see journal 2026-05-18. Root cause = only ~3 "
-    "testable PIT-earnings folds; needs longer history before any earnings "
-    "overlay can be validated as generic. Pipeline + robust SUE kept."
+    reason="Phase B tilt REVERTED — DEFINITIVE: one-shot sealed reveal on "
+    "the now-SUE-live 2025-01..2026-05 window showed worse Calmar / "
+    "drawdown / hit-rate for a marginal Sortino bump (overfit/lumpy "
+    "signature). Earnings overlay closed out. See journal 2026-05-18."
 )
 
 from prepare import count_hyperparameters  # noqa: E402
@@ -36,8 +39,6 @@ from strategy import IndiaMomentumQualityCarry  # noqa: E402
 
 
 def test_parsimony_count_unchanged() -> None:
-    # When re-enabled, the categorical tilt must add only bool/str
-    # plumbing → tunable count stays 6 (no fitted knob — by design).
     assert count_hyperparameters(IndiaMomentumQualityCarry) == 6
 
 
