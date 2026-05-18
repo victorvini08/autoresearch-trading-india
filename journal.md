@@ -1902,3 +1902,21 @@ skipped until then. No KEEP/REVERT — no signal change to evaluate yet.
 (`test_precompute_macro` ×4, `test_strategy_reversion`,
 `test_warmup_scoring`) were verified present at baseline `d509866` —
 unchanged by this infra, not introduced here.
+
+**CORRECTION (same day, post-real-network gate):** the "test-green"
+above was mock-only — every pipeline unit test monkeypatched the
+network. Running the real backfill exposed that the chosen source was
+wrong: BSE announcement attachments are PDFs, not XBRL → `wrote 0 rows
+for 486 names`. Root-caused and fixed: source re-pointed to NSE
+`corporates-financial-results` (carries `broadCastDate` + `toDate` +
+`isin` + a direct `xbrl` URL); `parse_xbrl_facts` made XBRL-context-aware
+(reads the standalone quarter context, never the cumulative YTD / segment
+contexts). Tests rebuilt around a committed REAL NSE XBRL fixture
+(`tests/fixtures/nse_result_tcs.xml`), not synthetic. Verified live: 3
+symbols → 30 PIT-correct rows, tripwire PASS, EPS populated (SUE works).
+Documented limitation: quarterly XBRL lacks net worth/borrowings →
+roe/op_margin None, D-E thin; quality-conditioner soft-degrades (by
+design). Lesson: real-data fixture tests are mandatory for any external
+data source — mock-only tests gave false confidence here. Spec §2
+amended with the corrected source + limitations. Strategy still untouched
+(Task 8 deferred).

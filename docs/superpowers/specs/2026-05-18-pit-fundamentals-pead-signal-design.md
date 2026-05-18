@@ -44,6 +44,29 @@ This design closes both gaps with a **point-in-time-clean** pipeline and a
 
 ---
 
+> **Source correction (2026-05-18, post-implementation, verified live).**
+> The original design named BSE result-XBRL as the backfill source. At the
+> real-network gate this produced **0 rows**: BSE's announcement
+> attachment is the human-readable **PDF**, not XBRL. Corrected source =
+> **NSE `corporates-financial-results` API** (`?index=equities&symbol=
+> <SYM>&period=Quarterly`), which returns per-symbol rows carrying
+> `broadCastDate` (the PIT timestamp, as a field — no parsing), `toDate`
+> (period end), `isin`, `consolidated`, and a **direct `xbrl` URL** to the
+> real XBRL on `nsearchives.nseindia.com`. All PIT/derivation/SUE/
+> accessor/firewall design below is source-agnostic and unchanged; only
+> the fetch+parse layer was re-pointed (and made XBRL-context-aware so the
+> standalone quarter, not the cumulative YTD or a segment, is read).
+>
+> **Data limitation (verified):** NSE quarterly-results XBRL is
+> P&L-centric — EPS / revenue / PBT / PAT are present (so **SUE works**),
+> but net worth & borrowings are not, so `roe_ttm` / `op_margin_ttm` are
+> usually `None` and `debt_to_equity` falls back to the filing's own
+> reported `DebtEquityRatio` (thin/0.0 for some names). The
+> quality-conditioner therefore mostly soft-degrades to the base SUE cut
+> on quarterly-only data; this is acceptable (the design's soft-degrade
+> path handles it) but means "quality-conditioned" is weak until annual /
+> balance-sheet filings are added (future work, out of scope here).
+
 ## 2. Scope & decomposition
 
 Two subsystems, **built and validated pipeline-first**:

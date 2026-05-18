@@ -1,9 +1,16 @@
 """PIT-clean fundamentals pipeline → storage/fundamentals.duckdb.
 
-as_of_date is ALWAYS the filing broadcast date (when the market learned
-the number), never the period-end. See
+Source: NSE ``corporates-financial-results`` (see data.fundamentals_xbrl).
+``as_of_date`` is ALWAYS the NSE ``broadCastDate`` (when the market
+learned the number), never the period-end. Spec
 docs/superpowers/specs/2026-05-18-pit-fundamentals-pead-signal-design.md
 §3, §4.
+
+Quarterly results XBRL is P&L-centric: EPS/revenue/PBT/PAT are present
+(SUE works); net worth & borrowings usually are not, so roe_ttm /
+op_margin_ttm are often None and debt_to_equity falls back to the
+filing's own reported DebtEquityRatio when available. The PEAD gate
+soft-degrades on missing conditioner fields by design.
 """
 from __future__ import annotations
 
@@ -14,10 +21,10 @@ from pathlib import Path
 
 import duckdb
 
-from data.bse import build_scrip_map, fetch_bse_announcements, resolve_scrip_code
 from data.fundamentals_xbrl import (
     XbrlFacts,
-    download_attachment,
+    download_xbrl,
+    fetch_nse_results,
     parse_xbrl_facts,
 )
 from data.sectors import assign_sectors
@@ -26,7 +33,6 @@ from data.universe import load_universe, snapshot_dates
 logger = logging.getLogger(__name__)
 
 DEFAULT_FUNDAMENTALS_DB = Path("storage/fundamentals.duckdb")
-_RESULT_SUBJECT = "financial result"
 _PIT_BAND_DAYS = 75
 
 
@@ -68,7 +74,12 @@ def _sum(vals: list[float | None]) -> float | None:
 
 
 def derive_ttm(quarters: list[QuarterFacts]) -> DerivedRatios:
-    """quarters ascending by period_end, length 1..4 (trailing window)."""
+    """quarters ascending by period_end, length 1..4 (trailing window).
+
+    op_margin / roe need EBIT / net-worth which quarterly results XBRL
+    usually lacks → None then. debt_to_equity prefers a real
+    debt/equity, else the filing's own reported DebtEquityRatio.
+    """
     qs = sorted(quarters, key=lambda q: q.period_end)[-4:]
     latest = qs[-1].facts
     rev = _sum([q.facts.revenue for q in qs])
@@ -82,14 +93,13 @@ def derive_ttm(quarters: list[QuarterFacts]) -> DerivedRatios:
     )
     roe = (
         pat / eq
-        if (pat is not None and eq not in (None, 0) and eq > 0)
+        if (pat is not None and eq not in (None, 0) and eq and eq > 0)
         else None
     )
-    de = (
-        debt / eq
-        if (debt is not None and eq not in (None, 0) and eq > 0)
-        else None
-    )
+    if debt is not None and eq not in (None, 0) and eq and eq > 0:
+        de: float | None = debt / eq
+    else:
+        de = latest.debt_equity_ratio  # filing's own reported ratio
     return DerivedRatios(roe_ttm=roe, debt_to_equity=de, op_margin_ttm=op_margin)
 
 
@@ -99,7 +109,6 @@ def derive_ttm(quarters: list[QuarterFacts]) -> DerivedRatios:
 
 
 def _sebi_fallback(period_end: date) -> date:
-    # Q4 (FY end = Mar 31): +60d; else +45d.
     days = 60 if (period_end.month == 3 and period_end.day == 31) else 45
     return period_end + timedelta(days=days)
 
@@ -117,10 +126,6 @@ def _pit_universe(
     return out
 
 
-def _scrip_for_isin(scrip_map: dict, isin: str, sym: str) -> str | None:
-    return resolve_scrip_code(scrip_map, isin=isin, nse_symbol=sym)
-
-
 def _is_financial(ticker: str, industry: str) -> bool:
     row = type("R", (), {"ticker": ticker, "industry": industry})()
     sa = assign_sectors([row])
@@ -128,20 +133,23 @@ def _is_financial(ticker: str, industry: str) -> bool:
 
 
 def _fetch_result_filings(
-    scrip: str, sym: str, start: date, end: date
+    ticker: str, start: date, end: date, *, session=None
 ) -> list[RawFiling]:
-    anns = fetch_bse_announcements(scrip, start, end, nse_symbol=sym)
+    """Quarterly result filings for `ticker` whose broadcast date is in
+    [start, end], via NSE's structured results API + its XBRL URL."""
     out: list[RawFiling] = []
-    for a in anns:
-        if _RESULT_SUBJECT not in (a.subject or "").lower():
+    for nr in fetch_nse_results(ticker, session=session):
+        if nr.broadcast_date < start or nr.broadcast_date > end:
             continue
-        blob = download_attachment(a.attachment)
+        blob = download_xbrl(nr.xbrl_url, session=session)
         if not blob:
             continue
-        facts = parse_xbrl_facts(blob)
-        if facts is None or facts.period_end_date is None:
+        facts = parse_xbrl_facts(blob, nr.period_end)
+        if facts is None:
             continue
-        out.append(RawFiling(sym, a.dt, facts.period_end_date, facts))
+        out.append(
+            RawFiling(ticker, nr.broadcast_date, nr.period_end, facts)
+        )
     return out
 
 
@@ -170,7 +178,7 @@ def _ensure_schema(conn: duckdb.DuckDBPyConnection) -> None:
             eps_basic DOUBLE, eps_diluted DOUBLE,
             revenue DOUBLE, ebit DOUBLE, pat DOUBLE,
             equity DOUBLE, debt DOUBLE,
-            is_consolidated BOOLEAN, source VARCHAR DEFAULT 'bse_xbrl',
+            is_consolidated BOOLEAN, source VARCHAR DEFAULT 'nse_xbrl',
             PRIMARY KEY (ticker, period_end_date)
         )
         """
@@ -208,25 +216,19 @@ def ingest_fundamentals(
     start: date,
     end: date,
 ) -> int:
-    """Backfill fundamentals_quarterly over the PIT universe.
+    """Backfill fundamentals_quarterly over the PIT universe (NSE source).
 
-    Returns the number of rows written (quarantined look-ahead rows
-    excluded).
+    Returns rows written (quarantined look-ahead rows excluded).
     """
     uni = _pit_universe(universe_db, start, end)
-    scrip_map = build_scrip_map()
     written = 0
     fundamentals_db.parent.mkdir(parents=True, exist_ok=True)
     conn = duckdb.connect(str(fundamentals_db))
     try:
         _ensure_schema(conn)
-        for sym, isin in uni.items():
-            scrip = _scrip_for_isin(scrip_map, isin, sym)
-            if not scrip:
-                logger.warning("no BSE scrip for %s/%s", sym, isin)
-                continue
+        for sym in sorted(uni):
             filings = sorted(
-                _fetch_result_filings(scrip, sym, start, end),
+                _fetch_result_filings(sym, start, end),
                 key=lambda f: f.period_end,
             )
             history: list[QuarterFacts] = []
@@ -250,9 +252,8 @@ def ingest_fundamentals(
                 ratios = derive_ttm(history)
                 conn.execute(
                     f"INSERT OR REPLACE INTO fundamentals_quarterly "
-                    f"({_COLS}) VALUES "
-                    f"({','.join('?' * 17)})",
-                    _row(sym, f, aod, ratios, "bse_xbrl"),
+                    f"({_COLS}) VALUES ({','.join('?' * 17)})",
+                    _row(sym, f, aod, ratios, "nse_xbrl"),
                 )
                 written += 1
     finally:
@@ -269,15 +270,12 @@ def snapshot_live(
     *,
     on_date: date,
 ) -> int:
-    """Live capture: stamp as_of_date = on_date for filings broadcast today.
-
-    PIT-clean by construction (we record the value the day we see it), so
-    the live path does not depend on a reliable historical broadcast
-    timestamp.
+    """Live capture: stamp as_of_date = on_date for filings broadcast
+    today. PIT-clean by construction (value recorded the day we see it),
+    so the live path does not depend on a reliable historical timestamp.
     """
     written = 0
     fundamentals_db.parent.mkdir(parents=True, exist_ok=True)
-    scrip_map = build_scrip_map()
     conn = duckdb.connect(str(fundamentals_db))
     try:
         _ensure_schema(conn)
@@ -295,11 +293,8 @@ def snapshot_live(
                     r.ticker: r.isin
                     for r in load_universe(universe_db, snaps[-1])
                 }
-        for sym, isin in uni.items():
-            scrip = _scrip_for_isin(scrip_map, isin, sym)
-            if not scrip:
-                continue
-            for f in _fetch_result_filings(scrip, sym, on_date, on_date):
+        for sym in sorted(uni):
+            for f in _fetch_result_filings(sym, on_date, on_date):
                 if (sym, f.period_end) in existing:
                     continue
                 ratios = derive_ttm(
@@ -308,7 +303,7 @@ def snapshot_live(
                 conn.execute(
                     f"INSERT OR REPLACE INTO fundamentals_quarterly "
                     f"({_COLS}) VALUES ({','.join('?' * 17)})",
-                    _row(sym, f, on_date, ratios, "bse_live"),
+                    _row(sym, f, on_date, ratios, "nse_live"),
                 )
                 written += 1
     finally:
@@ -336,9 +331,7 @@ def assert_no_lookahead(fundamentals_db: Path) -> None:
     finally:
         conn.close()
     if bad:
-        raise LookaheadError(
-            f"{len(bad)} look-ahead rows, e.g. {bad[:3]}"
-        )
+        raise LookaheadError(f"{len(bad)} look-ahead rows, e.g. {bad[:3]}")
 
 
 def coverage_report(fundamentals_db: Path) -> dict:

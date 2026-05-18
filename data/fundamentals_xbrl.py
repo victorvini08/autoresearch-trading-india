@@ -1,39 +1,61 @@
-"""Parse a BSE result-filing XBRL document into raw financial facts.
+"""Fetch + parse NSE quarterly-results XBRL into raw financial facts.
 
-Matching is by XML *local-name* (namespace-stripped) so the Mar-2025
-"Integrated Filing" taxonomy change (new namespace, same element local
-names) does not silently zero a field. Each logical field maps to an
-ordered list of acceptable local-names; first present wins.
+SOURCE (verified 2026-05-18 against live data): NSE's
+``corporates-financial-results`` API returns, per symbol, a list of result
+filings each carrying ``broadCastDate`` (the point-in-time availability
+timestamp — a field, no parsing), ``toDate`` (period end), ``isin``,
+``consolidated``, and a direct ``xbrl`` URL to the real XBRL document on
+``nsearchives.nseindia.com``. We download that XBRL and extract the
+*quarter* facts.
 
-Also handles fetching the attachment bytes from BSE's public corp-filing
-store, reusing the Referer/retry discipline from ``data.bse``.
+Earlier design fetched BSE announcement attachments — those are PDFs, not
+XBRL (the pipeline produced 0 rows). This module is the corrected source.
+
+XBRL context discipline (correctness-critical): a results XBRL contains
+the standalone quarter (duration ~92d ending on period_end), the
+cumulative YTD (duration ending on the same date but starting at FY
+start), an instant context at period_end (balance items), and many
+segment contexts. We read P&L facts ONLY from the non-segment duration
+context whose endDate == period_end and whose length is ~one quarter, so
+cumulative / prior-period / segment values can never leak in.
+
+Real data limitation: NSE quarterly-results XBRL is P&L-centric. It
+carries EPS / revenue / PBT / PAT (so SUE works), but NOT net worth or
+borrowings — so roe_ttm / debt_to_equity / op_margin are usually None
+from quarterly filings. ``debt_equity_ratio`` is read straight from the
+filing's own pre-computed ``DebtEquityRatio`` element when present.
 """
 from __future__ import annotations
 
 import logging
-import time
 from dataclasses import dataclass
 from datetime import date, datetime
 
 import requests
 from lxml import etree
-from tenacity import (
-    retry,
-    retry_if_exception_type,
-    stop_after_attempt,
-    wait_exponential,
-)
-
-from data.bse import _HEADERS as _BSE_HEADERS
 
 logger = logging.getLogger(__name__)
 
-# Ordered local-name candidates per logical field (era-union).
+_NSE_HOME = "https://www.nseindia.com/"
+_NSE_RESULTS_PAGE = (
+    "https://www.nseindia.com/companies-listing/"
+    "corporate-filings-financial-results"
+)
+_NSE_RESULTS_API = (
+    "https://www.nseindia.com/api/corporates-financial-results"
+    "?index=equities&symbol={symbol}&period=Quarterly"
+)
+_BROWSER_UA = (
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_5) "
+    "AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Safari/605.1.15"
+)
+
+# Ordered local-name candidates per logical field (verified against real
+# NSE IND-AS results XBRL, 2026-05-18).
 _TAGS: dict[str, tuple[str, ...]] = {
-    "revenue": ("RevenueFromOperations", "Revenue", "TotalIncome"),
+    "revenue": ("RevenueFromOperations", "Revenue", "Income"),
     "ebit": (
         "ProfitBeforeInterestAndTax",
-        "OperatingProfit",
         "ProfitBeforeFinanceCostsAndTax",
     ),
     "pbt": ("ProfitBeforeTax", "ProfitLossBeforeTax"),
@@ -42,20 +64,35 @@ _TAGS: dict[str, tuple[str, ...]] = {
         "ProfitLossForThePeriod",
         "NetProfitLossForThePeriod",
     ),
-    "eps_basic": ("BasicEarningsPerShare", "BasicEarningsLossPerShare"),
-    "eps_diluted": ("DilutedEarningsPerShare", "DilutedEarningsLossPerShare"),
+    "eps_basic": (
+        "BasicEarningsLossPerShareFromContinuingAndDiscontinuedOperations",
+        "BasicEarningsLossPerShareFromContinuingOperations",
+        "BasicEarningsPerShare",
+    ),
+    "eps_diluted": (
+        "DilutedEarningsLossPerShareFromContinuingAndDiscontinuedOperations",
+        "DilutedEarningsLossPerShareFromContinuingOperations",
+        "DilutedEarningsPerShare",
+    ),
+    "net_worth": (
+        "EquityAttributableToOwnersOfParent",
+        "TotalEquity",
+        "Equity",
+    ),
     "share_capital": (
-        "EquityShareCapital",
         "PaidUpValueOfEquityShareCapital",
+        "EquityShareCapital",
     ),
     "other_equity": ("OtherEquity", "ReservesAndSurplus"),
-    "debt": ("Borrowings", "TotalBorrowings", "DebtSecurities"),
-    "period_end": ("DateOfEndOfReportingPeriod", "DateOfEndOfFinancialYear"),
-    "nature": (
-        "NatureOfReportStandaloneConsolidated",
-        "TypeOfResultStandaloneConsolidated",
-    ),
+    "debt": ("Borrowings", "TotalBorrowings"),
+    "debt_equity_ratio": ("DebtEquityRatio",),
+    "period_end": ("DateOfEndOfReportingPeriod",),
+    "period_start": ("DateOfStartOfReportingPeriod",),
+    "nature": ("NatureOfReportStandaloneConsolidated",),
 }
+
+_QUARTER_MIN_DAYS = 80
+_QUARTER_MAX_DAYS = 100
 
 
 @dataclass(frozen=True)
@@ -68,124 +105,268 @@ class XbrlFacts:
     eps_diluted: float | None
     equity: float | None
     debt: float | None
+    debt_equity_ratio: float | None
     period_end_date: date | None
     is_consolidated: bool | None
 
 
-def _local(tag: str) -> str:
+@dataclass(frozen=True)
+class NseResultRow:
+    symbol: str
+    isin: str
+    period_end: date
+    broadcast_date: date
+    is_consolidated: bool | None
+    xbrl_url: str
+
+
+def _local(tag) -> str:
+    if not isinstance(tag, str):
+        return ""
     return tag.rsplit("}", 1)[-1] if "}" in tag else tag
 
 
-def _index(root) -> dict[str, list[str]]:
-    idx: dict[str, list[str]] = {}
-    for el in root.iter():
-        if not isinstance(el.tag, str):
+def _to_date(s: str) -> date | None:
+    s = (s or "").strip()
+    for fmt in ("%Y-%m-%d", "%d-%m-%Y", "%d-%b-%Y", "%d-%b-%Y %H:%M:%S"):
+        try:
+            return datetime.strptime(s[: len(fmt) + 4], fmt).date()
+        except ValueError:
             continue
-        idx.setdefault(_local(el.tag), []).append((el.text or "").strip())
-    return idx
+    try:
+        return datetime.fromisoformat(s[:19]).date()
+    except ValueError:
+        return None
 
 
-def _num(idx: dict[str, list[str]], field: str) -> float | None:
-    for name in _TAGS[field]:
-        for raw in idx.get(name, []):
-            if raw in ("", "-"):
-                continue
-            try:
-                return float(raw.replace(",", ""))
-            except ValueError:
-                continue
+def _num(v: str) -> float | None:
+    v = (v or "").strip()
+    if v in ("", "-"):
+        return None
+    try:
+        return float(v.replace(",", ""))
+    except ValueError:
+        return None
+
+
+def _context_map(root) -> dict[str, tuple]:
+    """contextRef -> (start, end, instant, has_segment)."""
+    ctx: dict[str, tuple] = {}
+    for el in root.iter():
+        if _local(el.tag) != "context":
+            continue
+        cid = el.get("id")
+        start = end = inst = None
+        seg = False
+        for c in el.iter():
+            lc = _local(c.tag)
+            if lc == "startDate":
+                start = _to_date(c.text or "")
+            elif lc == "endDate":
+                end = _to_date(c.text or "")
+            elif lc == "instant":
+                inst = _to_date(c.text or "")
+            elif lc in ("segment", "explicitMember", "scenario"):
+                seg = True
+        ctx[cid] = (start, end, inst, seg)
+    return ctx
+
+
+def _pick_quarter_ctx(ctx: dict[str, tuple], period_end: date) -> str | None:
+    """Non-segment duration context, endDate == period_end, ~1 quarter long."""
+    best: tuple[int, str] | None = None
+    for cid, (s, e, _i, seg) in ctx.items():
+        if seg or s is None or e is None or e != period_end:
+            continue
+        days = (e - s).days
+        if _QUARTER_MIN_DAYS <= days <= _QUARTER_MAX_DAYS:
+            return cid
+        if best is None or days < best[0]:
+            best = (days, cid)
+    return best[1] if best else None
+
+
+def _pick_instant_ctx(ctx: dict[str, tuple], period_end: date) -> str | None:
+    for cid, (_s, _e, i, seg) in ctx.items():
+        if not seg and i == period_end:
+            return cid
     return None
 
 
-def parse_xbrl_facts(xml_bytes: bytes) -> XbrlFacts | None:
+def _facts_for_ctx(root, ctxref: str) -> dict[str, list[str]]:
+    out: dict[str, list[str]] = {}
+    for el in root.iter():
+        if not isinstance(el.tag, str):
+            continue
+        if el.get("contextRef") != ctxref:
+            continue
+        out.setdefault(_local(el.tag), []).append((el.text or "").strip())
+    return out
+
+
+def _first(idx: dict[str, list[str]], field: str) -> str | None:
+    for name in _TAGS[field]:
+        for raw in idx.get(name, []):
+            if raw not in ("", "-"):
+                return raw
+    return None
+
+
+def parse_xbrl_facts(
+    xml_bytes: bytes, period_end: date | None = None
+) -> XbrlFacts | None:
+    """Parse the *quarter* facts. ``period_end`` (from the NSE row's
+    ``toDate``) selects the correct context; if omitted it is read from
+    the document and the shortest non-segment duration is used."""
     try:
-        root = etree.fromstring(xml_bytes)  # noqa: S320 — trusted exchange feed
+        root = etree.fromstring(xml_bytes)  # noqa: S320 — trusted NSE feed
     except etree.XMLSyntaxError:
         return None
-    idx = _index(root)
-    revenue = _num(idx, "revenue")
-    pat = _num(idx, "pat")
-    if revenue is None and pat is None:
-        return None  # not a financial-results document
 
-    sc = _num(idx, "share_capital")
-    oe = _num(idx, "other_equity")
-    equity = None if sc is None and oe is None else (sc or 0.0) + (oe or 0.0)
+    ctx = _context_map(root)
+    if not ctx:
+        return None
 
-    pe: date | None = None
-    pe_candidates: list[str] = []
-    for name in _TAGS["period_end"]:
-        pe_candidates.extend(idx.get(name, []))
-    for raw in pe_candidates:
-        for fmt in ("%Y-%m-%d", "%d-%m-%Y", "%d/%m/%Y"):
-            try:
-                pe = datetime.strptime(raw, fmt).date()
-                break
-            except ValueError:
-                continue
-        if pe:
-            break
+    if period_end is None:
+        # Discover period_end from any non-segment duration's endDate.
+        ends = sorted(
+            {e for (_s, e, _i, seg) in ctx.values() if e and not seg}
+        )
+        period_end = ends[-1] if ends else None
+    if period_end is None:
+        return None
 
-    nature_vals: list[str] = []
-    for name in _TAGS["nature"]:
-        nature_vals.extend(idx.get(name, []))
-    nature = " ".join(nature_vals).lower()
+    qctx = _pick_quarter_ctx(ctx, period_end)
+    if qctx is None:
+        return None
+    q = _facts_for_ctx(root, qctx)
+
+    rev = _num(_first(q, "revenue") or "")
+    pat = _num(_first(q, "pat") or "")
+    if rev is None and pat is None:
+        return None  # not a results document / wrong context
+
+    ictx = _pick_instant_ctx(ctx, period_end)
+    inst = _facts_for_ctx(root, ictx) if ictx else {}
+
+    nw = _num(_first(inst, "net_worth") or _first(q, "net_worth") or "")
+    if nw is not None:
+        equity = nw
+    else:
+        sc = _num(_first(inst, "share_capital") or _first(q, "share_capital") or "")
+        oe = _num(_first(inst, "other_equity") or _first(q, "other_equity") or "")
+        equity = None if sc is None and oe is None else (sc or 0.0) + (oe or 0.0)
+
+    pe_raw = _first(q, "period_end")
+    pe = _to_date(pe_raw) if pe_raw else period_end
+    nature = (_first(q, "nature") or "").lower()
     is_cons = "consolidated" in nature if nature else None
 
     return XbrlFacts(
-        revenue=revenue,
-        ebit=_num(idx, "ebit"),
-        pbt=_num(idx, "pbt"),
+        revenue=rev,
+        ebit=_num(_first(q, "ebit") or ""),
+        pbt=_num(_first(q, "pbt") or ""),
         pat=pat,
-        eps_basic=_num(idx, "eps_basic"),
-        eps_diluted=_num(idx, "eps_diluted"),
+        eps_basic=_num(_first(q, "eps_basic") or ""),
+        eps_diluted=_num(_first(q, "eps_diluted") or ""),
         equity=equity,
-        debt=_num(idx, "debt"),
+        debt=_num(_first(inst, "debt") or _first(q, "debt") or ""),
+        debt_equity_ratio=_num(_first(q, "debt_equity_ratio") or ""),
         period_end_date=pe,
         is_consolidated=is_cons,
     )
 
 
 # ──────────────────────────────────────────────────────────────────────
-# Attachment download (BSE corp-filing store)
+# NSE fetch
 # ──────────────────────────────────────────────────────────────────────
 
-_ATTACH_LIVE = "https://www.bseindia.com/xml-data/corpfiling/AttachLive/{}"
-_ATTACH_HIST = "https://www.bseindia.com/xml-data/corpfiling/AttachHis/{}"
+
+def _nse_session() -> requests.Session:
+    s = requests.Session()
+    s.headers.update(
+        {
+            "User-Agent": _BROWSER_UA,
+            "Accept": "application/json, text/plain, */*",
+            "Referer": _NSE_RESULTS_PAGE,
+        }
+    )
+    try:
+        s.get(_NSE_HOME, timeout=15)
+        s.get(_NSE_RESULTS_PAGE, timeout=15)
+    except requests.RequestException as e:  # noqa: BLE001
+        logger.warning("NSE cookie bootstrap failed: %s", e)
+    return s
 
 
-@retry(
-    retry=retry_if_exception_type(requests.RequestException),
-    stop=stop_after_attempt(3),
-    wait=wait_exponential(multiplier=1.0, min=1, max=20),
-    reraise=True,
-)
-def _get(url: str) -> bytes | None:
-    resp = requests.get(url, headers=_BSE_HEADERS, timeout=45)
-    if resp.status_code == 404:
-        return None
-    resp.raise_for_status()
-    return resp.content
+def fetch_nse_results(
+    symbol: str, *, session: requests.Session | None = None
+) -> list[NseResultRow]:
+    """All quarterly result filings for `symbol` (point-in-time rows)."""
+    s = session or _nse_session()
+    try:
+        r = s.get(_NSE_RESULTS_API.format(symbol=symbol), timeout=30)
+        r.raise_for_status()
+        rows = r.json()
+    except (requests.RequestException, ValueError) as e:
+        logger.warning("NSE results fetch %s failed: %s", symbol, e)
+        return []
+    if not isinstance(rows, list):
+        rows = rows.get("data", []) if isinstance(rows, dict) else []
+    out: list[NseResultRow] = []
+    for row in rows:
+        xurl = (row.get("xbrl") or "").strip()
+        if not xurl.lower().endswith(".xml"):
+            continue
+        pe = _to_date(row.get("toDate") or "")
+        bd = _to_date(row.get("broadCastDate") or row.get("filingDate") or "")
+        if pe is None or bd is None:
+            continue
+        cons = (row.get("consolidated") or "").strip().lower()
+        out.append(
+            NseResultRow(
+                symbol=symbol.upper(),
+                isin=(row.get("isin") or "").strip().upper(),
+                period_end=pe,
+                broadcast_date=bd,
+                is_consolidated=(
+                    True
+                    if cons == "consolidated"
+                    else False
+                    if cons in ("non-consolidated", "standalone")
+                    else None
+                ),
+                xbrl_url=xurl,
+            )
+        )
+    return out
 
 
-def download_attachment(
-    attachment_name: str, *, polite_delay_sec: float = 0.6
+def download_xbrl(
+    url: str, *, session: requests.Session | None = None
 ) -> bytes | None:
-    """Live path first (recent filings), historical path as fallback."""
-    name = (attachment_name or "").strip()
-    if not name:
+    if not (url or "").strip():
         return None
-    for tmpl in (_ATTACH_LIVE, _ATTACH_HIST):
-        try:
-            data = _get(tmpl.format(name))
-        except requests.RequestException as e:  # noqa: BLE001
-            logger.warning("attachment %s failed: %s", name, e)
-            data = None
-        if data:
-            return data
-        if polite_delay_sec:
-            time.sleep(polite_delay_sec)
-    return None
+    s = session or _nse_session()
+    try:
+        r = s.get(
+            url,
+            timeout=45,
+            headers={"User-Agent": _BROWSER_UA, "Referer": _NSE_HOME},
+        )
+        if r.status_code == 404:
+            return None
+        r.raise_for_status()
+        return r.content
+    except requests.RequestException as e:  # noqa: BLE001
+        logger.warning("xbrl download %s failed: %s", url, e)
+        return None
 
 
-__all__ = ["XbrlFacts", "parse_xbrl_facts", "download_attachment"]
+__all__ = [
+    "XbrlFacts",
+    "NseResultRow",
+    "parse_xbrl_facts",
+    "fetch_nse_results",
+    "download_xbrl",
+]
