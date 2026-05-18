@@ -1940,3 +1940,83 @@ re-run instruction); single reused NSE session + throttle-aware retry
 (faster, fewer drops). Idempotent PK ⇒ re-run on a stable connection
 fills the O–Z gap safely. 31 pipeline tests green. Strategy still
 untouched (Task 8 deferred).
+
+---
+
+## 2026-05-18 — Improvement: Phase A quality-conditioned PEAD suppression — **REVERTED** (SUE-robustification infra **KEPT**)
+
+**Hypothesis.** An orthogonal, point-in-time earnings-surprise signal
+should robustify the momentum-quality book by *defensively* avoiding
+names whose fundamentals just deteriorated — the spec's Phase A:
+asymmetric, never-add suppression (block a NEW entry on a
+quality-conditioned negative SUE inside the ~60-TD drift window; sever an
+ALREADY-HELD name only on a SEVERE miss), soft-degrading to the exact
+pre-PEAD baseline wherever the PIT signal is absent. Theory-backed (PEAD
+significant on NSE 2002–2017, robust to sub-periods/controls; quality-
+conditioned bivariate sorts strongest) and mirrors this codebase's
+repeatedly-robust asymmetric pattern (FII gate, structural exit).
+
+**Pre-req fix (KEPT — pure infra).** Materialising SUE exposed a
+pathological estimator: raw seasonal-RW SUE reached ±1300σ on one-off
+exceptional-item / discontinued-ops EPS (e.g. ASTERDM ~₹1 EPS with a
+single 120.67 quarter) and on denominator collapse — exactly where the
+defensive gate fires hardest (would false-sever real holdings on
+non-recurring items). Added a PIT-clean, non-tuned robustification in
+`data/ingest_earnings.compute_sue_from_fundamentals`: conservative
+Hampel/MAD rejection of non-recurring EPS in the expectation *and* the
+innovation + denominator de-contamination + symmetric ±8 clip
+(robust-stat constants in the ingest layer, never on strategy.params →
+`count_hyperparameters` unchanged at 6). Real-data effect: σ 11.8→2.3,
+range [−19.5,+238]→[−8,+8], IQR/median/sign of genuine misses preserved,
+98 artifact quarters now correctly emit no signal. TDD: real-fixture
+tests in `tests/test_pead_signal.py` (exceptional-item rejection +
+genuine-large-surprise preservation). **This is strictly better
+infrastructure regardless of the strategy outcome — retained.**
+
+**Change (REVERTED).** Wired Phase A into the *current* gross-targeting
+`strategy.py` (adapted from the spec's stale `entry_priority` text to
+`priority`/`construct_gross_targets`): bool/str plumbing params only
+(parsimony unchanged, count=6), `_init_pead` gated on the earnings DB
+existing (fundamentals optional — quality cut soft-degrades, per the
+documented thin-quarterly-XBRL limitation), per-name accessor confined to
+the SUE coverage window. Unit-verified the two robustness invariants:
+soft-degrade ≡ disabled (byte-identical returns/trades) and active gate
+only ever removes / never adds.
+
+**Result (`prepare.py research`, PEAD-ON vs identical PEAD-OFF control,
+same engine/data/13 folds).** Folds 1–10 (pre-2024 — SUE provably
+inert): Δ within ±0.0005 = the engine's float/ProcessPool
+nondeterminism noise floor (i.e. genuinely a no-op, as designed). The
+**3 active folds** (2024-04→2025-02, the *only* span with computable
+SUE — 2022+ NSE horizon + 8-quarter burn-in): per-fold Sortino
+**−0.174, −0.910, −0.075 — every active fold worse, none better**, far
+outside the noise floor. Aggregate: validation Sortino 2.896→2.807
+(−0.089); worst sub-period **2.32→2.031 (−0.289)**; aggregate
+drawdown **0.1284→0.1284 (±0.000)** — *zero* downside benefit, the
+gate's entire raison d'être; n_trades +3 (mild added churn);
+parsimony/universe/MC gates unchanged.
+
+**Decision: REVERT (strategy).** Under the
+robustness-over-validation-Sortino standard (judge on worst sub-period +
+drawdown + atomic gates, not on beating Sortino): the change is strictly
+worse in every period where it acts, with no compensating drawdown
+reduction and a degraded worst sub-period — it fails the robustness gate
+decisively on the only evidence available. A KEEP here would be precisely
+the backtest-fitting failure the gate system exists to prevent. Likely
+why: the momentum book's structural-exit + vol-targeting already manage
+deterioration; on this thin ~1yr slice the quality-conditioned-negative
+subset clipped momentum's right tail (names that recovered) rather than
+avoiding crashes, and the thin quarterly XBRL left the "quality"
+conditioner soft-degraded to near-raw-SUE. Not "burned forever": revisit
+only with a materially LONGER PIT fundamentals history (more than ~1yr of
+computable SUE) or via Phase B's categorical positive tilt — not naive
+suppression on this data. `strategy.py` restored to committed
+`d509866`; `tests/test_strategy_pead_gate.py` kept as a SKIPPED
+executable contract (not deleted); pipeline + SUE robustification
+retained.
+
+**Suite:** infra tests green (pead_signal incl. 2 new robustification
+tests, ingest_fundamentals, fundamentals_xbrl); gate test skips with the
+revert reason; the 6 pre-existing baseline failures
+(`test_precompute_macro`×4, `test_strategy_reversion`,
+`test_warmup_scoring`) unchanged, none introduced.

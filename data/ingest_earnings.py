@@ -311,19 +311,71 @@ def ingest_earnings(news_db: Path | None = None, earnings_db: Path | None = None
     return extract_from_news(news_db=news_db, earnings_db=earnings_db)
 
 
+# --- Robust-statistics constants (NOT tunable trading hyperparameters;
+# standard robust-stat values, kept here in the ingest layer, never on
+# strategy.params, so prepare.count_hyperparameters is unaffected — same
+# status as the existing ">=3 errors / <=8-quarter window" choices in this
+# function). They make the seasonal-RW SUE production-honest rather than
+# fitted to a backtest. -------------------------------------------------
+#
+# Quarterly headline EPS ("...ContinuingAndDiscontinuedOperations" in the
+# NSE XBRL) periodically carries a NON-recurring item — exceptional gain,
+# discontinued-ops, demerger or an unadjusted split/bonus — that shows up
+# as an order-of-magnitude one-off (observed: ASTERDM ~₹1 EPS with a
+# single 120.67 quarter). A naive seasonal-RW SUE divides that ~119
+# innovation by the firm's tiny normal forecast-error scale and emits a
+# ~1300σ "surprise": pure artifact, and exactly where the defensive PEAD
+# gate fires hardest. Hampel identifier with a deliberately CONSERVATIVE
+# K removes only egregious non-recurring spikes (typically ≫10σ vs the
+# firm's robust trailing EPS level) while preserving genuine large
+# earnings surprises (<~5σ standardized — the PEAD signal we WANT). The
+# final symmetric clip is defence-in-depth against residual
+# denominator-collapse on near-constant-EPS firms.
+_HAMPEL_K = 8.0          # conservative Hampel outlier identifier
+_SUE_CLIP = 8.0          # symmetric SUE magnitude cap (≫ any PEAD decile)
+_MAD_TO_SIGMA = 1.4826   # MAD → robust σ (Gaussian consistency constant)
+
+
 def compute_sue_from_fundamentals(
     fundamentals_db: Path, earnings_db: Path
 ) -> int:
-    """SUE via seasonal random walk on as-reported EPS (point-in-time).
+    """SUE via seasonal random walk on as-reported EPS (point-in-time),
+    robustified against non-recurring exceptional items.
 
     E[EPS_q] = EPS_{q-4} (same quarter prior year, as-reported, known
     as-of). unexpected = EPS_q - E[EPS_q]. Standardized by the population
     std of up to the last 8 *strictly prior* seasonal forecast errors;
-    needs >= 3 such errors else sue is left None. announcement_date is the
-    fundamentals as_of_date (the broadcast date), so the surprise carries
-    the same PIT guarantee as the underlying EPS.
+    needs >= 3 such errors else sue is left None.
+
+    Robustification (PIT-clean — every input is strictly prior to the
+    quarter being scored, the same guarantee the raw errs window already
+    relied on): the current EPS and its seasonal comparator are each
+    Hampel-tested against the firm's robust trailing EPS level (median /
+    MAD over strictly-prior quarters). If either is an egregious
+    non-recurring outlier the quarter emits NO SUE (soft-degrade — the
+    gate's safe default — never a ±1000σ artifact). Outlier-contaminated
+    quarters are likewise excluded from the denominator's error window so
+    a one-off cannot inflate/deflate the scale. The final SUE is clipped
+    to ±_SUE_CLIP. announcement_date is the fundamentals as_of_date (the
+    broadcast date), so the surprise carries the same PIT guarantee as the
+    underlying EPS.
     """
     import statistics
+
+    def _robust_level(prior: list[float]) -> tuple[float, float]:
+        """(median, robust σ) of strictly-prior EPS. σ via MAD, falling
+        back to pstdev; 0.0 when EPS is (near-)constant — then no value
+        can be an outlier, which is correct (a flat series has no
+        non-recurring spike)."""
+        med = statistics.median(prior)
+        mad = statistics.median([abs(x - med) for x in prior])
+        scale = _MAD_TO_SIGMA * mad
+        if scale <= 1e-9 and len(prior) > 1:
+            scale = statistics.pstdev(prior)
+        return med, scale
+
+    def _is_exceptional(x: float, med: float, scale: float) -> bool:
+        return scale > 1e-9 and abs(x - med) > _HAMPEL_K * scale
 
     fc = duckdb.connect(str(fundamentals_db), read_only=True)
     try:
@@ -342,17 +394,35 @@ def compute_sue_from_fundamentals(
 
     out: list[tuple] = []
     for t, series in by_t.items():
+        eps_seq = [v[2] for v in series]
         for i in range(4, len(series)):
             _pe, ao, eps = series[i]
-            exp = series[i - 4][2]
-            unexpected = eps - exp
+            comparator = eps_seq[i - 4]
+            prior = eps_seq[:i]  # strictly prior → PIT-safe
+            med, scale = _robust_level(prior)
+            # Exceptional-item guard: a non-recurring spike in the current
+            # EPS or its seasonal comparator makes the innovation
+            # meaningless → emit no signal rather than a monster SUE.
+            if _is_exceptional(eps, med, scale) or _is_exceptional(
+                comparator, med, scale
+            ):
+                continue
+            unexpected = eps - comparator
+            # Clean seasonal forecast errors: drop any quarter whose own
+            # value or its comparator is a non-recurring outlier so the
+            # denominator is not contaminated by an exceptional item.
             errs = [
-                series[j][2] - series[j - 4][2] for j in range(4, i)
+                eps_seq[j] - eps_seq[j - 4]
+                for j in range(4, i)
+                if not _is_exceptional(eps_seq[j], med, scale)
+                and not _is_exceptional(eps_seq[j - 4], med, scale)
             ][-8:]
             if len(errs) < 3:
                 continue
             sd = statistics.pstdev(errs)
-            sue = unexpected / sd if sd > 0 else None
+            if sd <= 1e-9:
+                continue
+            sue = max(-_SUE_CLIP, min(_SUE_CLIP, unexpected / sd))
             out.append((t, ao, unexpected, sue, "seasonal_rw"))
 
     if not out:

@@ -49,6 +49,61 @@ def test_sue_seasonal_random_walk(tmp_path) -> None:
     assert sue is not None and sue > 0  # 14 vs prior-year 7 → positive
 
 
+def test_sue_rejects_exceptional_item_and_clips(tmp_path) -> None:
+    """A one-off exceptional-item EPS spike (e.g. discontinued-ops /
+    split artifact: ~1.0 normal, one quarter at 120) must NOT produce a
+    monster SUE. The spike quarter emits no SUE (soft-degrade), the
+    seasonal-RW denominator is not contaminated by it, and every emitted
+    |SUE| is within the robust clip band."""
+    from data.ingest_earnings import _SUE_CLIP
+
+    fdb = tmp_path / "f.duckdb"
+    edb = tmp_path / "e.duckdb"
+    eps = [1.4, 1.2, 0.7, 1.0, 1.1, 1.2, 1.1, 1.0, 120.7, 1.9, 1.0, 1.1]
+    rows = []
+    for i, v in enumerate(eps):
+        y = 2022 + (i // 4)
+        m = [3, 6, 9, 12][i % 4]
+        rows.append((f"{y}-{m:02d}-28", f"{y}-{m:02d}-28", float(v)))
+    _seed_fundamentals(fdb, rows)
+    compute_sue_from_fundamentals(fdb, edb)
+    c = duckdb.connect(str(edb), read_only=True)
+    got = c.execute(
+        "SELECT announcement_date, sue FROM earnings_calendar "
+        "WHERE ticker='Z' AND sue IS NOT NULL ORDER BY announcement_date"
+    ).fetchall()
+    c.close()
+    # No artifact: nothing anywhere near the ~1300σ the naive estimator
+    # produced for this series; everything inside the robust clip.
+    assert got, "expected at least one clean SUE row"
+    for _ad, s in got:
+        assert abs(s) <= _SUE_CLIP + 1e-9
+    assert max(abs(s) for _a, s in got) < _SUE_CLIP  # no row even hit clip
+
+
+def test_sue_preserves_genuine_large_surprise(tmp_path) -> None:
+    """A real, non-pathological doubling of EPS vs the prior-year quarter
+    stays a positive signal (the PEAD signal we WANT) — the exceptional-
+    item guard must not nuke genuine large beats."""
+    fdb = tmp_path / "f.duckdb"
+    edb = tmp_path / "e.duckdb"
+    rows = []
+    for i, v in enumerate([5, 6, 4, 7, 6, 7, 5, 9, 14]):
+        y = 2023 + (i // 4)
+        m = [3, 6, 9, 12][i % 4]
+        rows.append((f"{y}-{m:02d}-28", f"{y}-{m:02d}-28", float(v)))
+    _seed_fundamentals(fdb, rows)
+    n = compute_sue_from_fundamentals(fdb, edb)
+    assert n >= 1
+    c = duckdb.connect(str(edb), read_only=True)
+    sue = c.execute(
+        "SELECT sue FROM earnings_calendar WHERE ticker='Z' "
+        "AND sue IS NOT NULL ORDER BY announcement_date DESC LIMIT 1"
+    ).fetchone()[0]
+    c.close()
+    assert sue is not None and sue > 0
+
+
 def _seed_earn(p: Path, ticker: str, ad: date, sue: float) -> None:
     c = duckdb.connect(str(p))
     c.execute(

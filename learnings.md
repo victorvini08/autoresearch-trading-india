@@ -195,3 +195,32 @@ momentum-quality selection gate is not the binding real-world weakness on
 the corrected engine; vol-targeted H is the robust optimum. Adding further
 structural levers past a rigorous negative is overfitting, not
 improvement.**
+
+### 7.5 Orthogonal PEAD suppression did not survive the honest engine (on ~1yr of testable signal)
+
+The long-deferred "add an orthogonal fundamentals/earnings signal" edge
+was finally built end-to-end (PIT-clean NSE XBRL → seasonal-RW SUE →
+quality-conditioned asymmetric Phase A suppression). Two durable lessons:
+
+1. **A new signal's *estimator* must be made production-honest before it
+   can be judged.** Raw seasonal-RW SUE emitted ±1300σ artifacts from
+   one-off exceptional-item / discontinued-ops EPS and denominator
+   collapse — precisely where a defensive gate fires hardest. Mock-only
+   tests never showed it; only materialising real data did. A
+   conservative Hampel/MAD + clip robustification (PIT-clean, non-tuned,
+   in the ingest layer so parsimony is untouched) is mandatory, and is
+   strictly-better infra worth keeping *independent of the strategy
+   verdict*.
+2. **Theory-backed + asymmetric + soft-degrading is still not a KEEP if
+   it is strictly worse wherever it acts.** On the corrected engine the
+   gate gave −0.09 validation Sortino, a *worse* worst sub-period
+   (2.32→2.03), and **zero** drawdown benefit — every one of the 3 folds
+   where it was active was worse, none better. The pre-2024 folds moving
+   ±5e-4 were the engine's nondeterminism noise floor, not behaviour:
+   always establish that floor (via inert-period folds) before believing
+   small active-period deltas. The momentum book's structural-exit +
+   vol-targeting already manage deterioration; bolting a defensive
+   earnings gate on top mostly clipped momentum's right tail. Verdict:
+   REVERT the strategy lever, KEEP the pipeline+estimator infra; only
+   revisit with a materially longer PIT fundamentals history or as a
+   positive tilt (Phase B) — never as naive suppression on ~1yr of data.
