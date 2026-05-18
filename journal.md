@@ -2080,3 +2080,40 @@ search is PAUSED on purpose.
 ingest_fundamentals, fundamentals_xbrl); both strategy-overlay gate
 tests skip with their revert reasons; the 6 pre-existing baseline
 failures unchanged, none introduced.
+
+---
+
+## 2026-05-18 — INFRA FIX: NSE Integrated-Filing migration (unblocks the data wall)
+
+**Issue (user-reported "ingestion till 2026 added nothing").** Root-caused
+NOT to user error: NSE migrated quarterly results for periods ending
+Mar-2025+ to the "Integrated Filing" single-filing system. The legacy
+`corporates-financial-results` endpoint our `fetch_nse_results` used is
+FROZEN at period_end 2024-12-31 / broadcast Jan-2025 for EVERY symbol
+(verified live: RELIANCE/TCS return 0 rows ≥2025). This — not the idea —
+is the true cause of the "only ~3 testable folds" earnings-overlay wall.
+
+**Fix (fetch layer only; parser untouched).** Added
+`_fetch_integrated_results` against `/api/integrated-filing-results`
+(rows with type "Integrated Filing- Financials"; "...- Governance"
+skipped), merged with the legacy endpoint in `fetch_nse_results`
+(era-split: legacy ≤2024-12-31, integrated ≥2025-03-31; exact-dup
+de-dup; raises NseFetchError only if BOTH endpoints are down so the
+completeness guard still works). The Integrated-Filing XBRL is the SAME
+IND-AS taxonomy → `parse_xbrl_facts` handles it unchanged (verified:
+TCS Q3 FY26 standalone → revenue ₹555.67B, EPS 28.16, period_end
+2025-12-31). Real committed fixtures
+(`tests/fixtures/nse_integrated_results_tcs.json`,
+`nse_integrated_indas_tcs.xml`) + 5 new tests incl. a schema-era parse
+regression and a one-endpoint-down resilience test (real-data-fixture
+discipline — mock-only hid the original BSE defect). Live end-to-end:
+RELIANCE/TCS/INFY now return a continuous 2018→2026-03-31 series.
+
+**Status.** This is the genuine unblock for the earnings signal. NOT a
+strategy change (no KEEP/REVERT). Next: user re-runs the real-network
+backfill (`uv run python -m data.ingest_fundamentals`) → fundamentals
+extends through 2026-Q1 → re-materialise SUE → re-test Phase B on the
+now-much-longer walk-forward (many independent folds, sealed 2025-26
+live) → only if it robustly passes the atomic gates + worst sub-period +
+scale, ONE sealed reveal. Suite: all fundamentals/pead tests green; the
+6 pre-existing baseline failures unchanged.

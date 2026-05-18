@@ -8,6 +8,7 @@ the real document parses to the right *quarter* numbers.
 """
 from __future__ import annotations
 
+import json
 from datetime import date
 from pathlib import Path
 
@@ -114,3 +115,101 @@ def test_fetch_nse_results_raises_when_unreachable(monkeypatch) -> None:
     monkeypatch.setattr(fx, "_nse_session", lambda: _S())
     with pytest.raises(NseFetchError):
         fx.fetch_nse_results("ANYSYM")
+
+
+# ── Integrated-Filing migration (NSE moved Mar-2025+ quarters here) ──────
+
+_INTEG_JSON = Path(__file__).parent / "fixtures" / "nse_integrated_results_tcs.json"
+_INTEG_XBRL = Path(__file__).parent / "fixtures" / "nse_integrated_indas_tcs.xml"
+
+
+def test_parse_integrated_indas_real_fixture() -> None:
+    """The Integrated-Filing XBRL is the SAME IND-AS taxonomy — the
+    existing parser must read the standalone quarter unchanged (schema-era
+    regression guard; real committed fixture, TCS Q3 FY26 standalone)."""
+    f = parse_xbrl_facts(_INTEG_XBRL.read_bytes(), date(2025, 12, 31))
+    assert f is not None
+    assert f.period_end_date == date(2025, 12, 31)
+    assert f.is_consolidated is False
+    assert f.revenue == 555_670_000_000.0
+    assert f.eps_basic == 28.16
+
+
+def _fake_session(monkeypatch, *, legacy, integrated):
+    """A session whose .get dispatches by endpoint to the given JSON."""
+    class _Resp:
+        status_code = 200
+
+        def __init__(self, payload): self._p = payload
+
+        def raise_for_status(self) -> None: ...
+
+        def json(self): return self._p
+
+    class _S:
+        headers: dict = {}
+
+        def get(self, url, *a, **k):
+            if "integrated-filing-results" in url:
+                return _Resp(integrated)
+            return _Resp(legacy)
+
+    monkeypatch.setattr(fx, "_nse_session", lambda: _S())
+
+
+def test_fetch_integrated_results_filters_and_parses(monkeypatch) -> None:
+    payload = json.loads(_INTEG_JSON.read_text())
+    _fake_session(monkeypatch, legacy=[], integrated=payload)
+    rows = fx.fetch_nse_results("TCS")
+    # 3 Financials rows kept; the "Integrated Filing- Governance" row dropped.
+    assert len(rows) == 3
+    assert all(r.period_end.year == 2025 for r in rows)
+    assert {r.period_end for r in rows} == {date(2025, 6, 30), date(2025, 9, 30)}
+    assert all(r.xbrl_url.lower().endswith(".xml") for r in rows)
+    assert {r.is_consolidated for r in rows} == {True, False}
+    # broadcast_Date parsed from the upper/mixed-case integrated field.
+    assert any(r.broadcast_date == date(2025, 7, 10) for r in rows)
+
+
+def test_fetch_merges_legacy_and_integrated_and_dedups(monkeypatch) -> None:
+    legacy = [
+        {"symbol": "TCS", "isin": "INE467B01029", "toDate": "31-Dec-2024",
+         "broadCastDate": "16-Jan-2025 20:20:21", "consolidated":
+         "Consolidated", "xbrl": "https://x/legacy.xml"},
+    ]
+    integrated = json.loads(_INTEG_JSON.read_text())
+    _fake_session(monkeypatch, legacy=legacy, integrated=integrated)
+    rows = fx.fetch_nse_results("TCS")
+    pes = {r.period_end for r in rows}
+    assert date(2024, 12, 31) in pes          # legacy pre-migration
+    assert date(2025, 9, 30) in pes           # integrated post-migration
+    assert len(rows) == 4                      # 1 legacy + 3 financials
+    # Idempotent: exact-duplicate rows across a re-merge collapse.
+    seen = {(r.period_end, r.is_consolidated, r.xbrl_url) for r in rows}
+    assert len(seen) == len(rows)
+
+
+def test_fetch_survives_one_endpoint_down(monkeypatch) -> None:
+    """Legacy throttled but integrated OK ⇒ still returns integrated rows
+    (must NOT raise — only a BOTH-down outage is a real gap)."""
+    monkeypatch.setattr(fx.time, "sleep", lambda *_a, **_k: None)
+    payload = json.loads(_INTEG_JSON.read_text())
+
+    class _Resp:
+        def __init__(self, code, p): self.status_code = code; self._p = p
+
+        def raise_for_status(self) -> None: ...
+
+        def json(self): return self._p
+
+    class _S:
+        headers: dict = {}
+
+        def get(self, url, *a, **k):
+            if "integrated-filing-results" in url:
+                return _Resp(200, payload)
+            return _Resp(503, [])
+
+    monkeypatch.setattr(fx, "_nse_session", lambda: _S())
+    rows = fx.fetch_nse_results("TCS")
+    assert len(rows) == 3 and all(r.period_end.year == 2025 for r in rows)

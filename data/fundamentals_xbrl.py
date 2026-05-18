@@ -46,6 +46,20 @@ _NSE_RESULTS_API = (
     "https://www.nseindia.com/api/corporates-financial-results"
     "?index=equities&symbol={symbol}&period=Quarterly"
 )
+# NSE migrated quarterly results filed for periods ending Mar-2025 and
+# later to the "Integrated Filing" single-filing system (verified live
+# 2026-05-18: the legacy endpoint above is frozen at period_end
+# 2024-12-31 / broadcast Jan-2025 for every symbol, incl. RELIANCE/TCS).
+# Post-migration quarters live ONLY under this endpoint, as rows with
+# type == "Integrated Filing- Financials" (a sibling "...- Governance"
+# row must be ignored). The XBRL it points at is the SAME IND-AS
+# taxonomy, so parse_xbrl_facts handles it unchanged (verified). size is
+# generous so a single request returns the whole per-symbol history.
+_NSE_INTEGRATED_API = (
+    "https://www.nseindia.com/api/integrated-filing-results"
+    "?index=equities&symbol={symbol}&period=Quarterly&size=500"
+)
+_INTEGRATED_FINANCIALS_TYPE = "integrated filing- financials"
 _BROWSER_UA = (
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_5) "
     "AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Safari/605.1.15"
@@ -344,24 +358,30 @@ def _robust_get(
     return last
 
 
-def fetch_nse_results(
-    symbol: str, *, session: requests.Session | None = None
+def _cons_flag(raw: str) -> bool | None:
+    c = (raw or "").strip().lower()
+    if c == "consolidated":
+        return True
+    if c in ("non-consolidated", "standalone"):
+        return False
+    return None
+
+
+def _fetch_legacy_results(
+    symbol: str, s: requests.Session
 ) -> list[NseResultRow]:
-    """All quarterly result filings for `symbol` (point-in-time rows)."""
-    s = session or _nse_session()
+    """Pre-2025 quarters: legacy corporates-financial-results endpoint
+    (frozen at period_end 2024-12-31 since the Integrated-Filing
+    migration). Raises NseFetchError if the endpoint is unreachable."""
     r = _robust_get(s, _NSE_RESULTS_API.format(symbol=symbol), timeout=30)
     if r is None or r.status_code != 200:
-        # Could not actually reach NSE (network/DNS/throttle) — this is
-        # NOT "no data". Raise so the backfill counts it as incomplete
-        # rather than silently treating the symbol as empty.
         raise NseFetchError(
-            f"{symbol}: status="
-            f"{None if r is None else r.status_code}"
+            f"{symbol}: legacy status={None if r is None else r.status_code}"
         )
     try:
         rows = r.json()
     except ValueError as e:
-        logger.warning("NSE results %s bad json: %s", symbol, e)
+        logger.warning("NSE legacy %s bad json: %s", symbol, e)
         return []
     if not isinstance(rows, list):
         rows = rows.get("data", []) if isinstance(rows, dict) else []
@@ -374,24 +394,115 @@ def fetch_nse_results(
         bd = _to_date(row.get("broadCastDate") or row.get("filingDate") or "")
         if pe is None or bd is None:
             continue
-        cons = (row.get("consolidated") or "").strip().lower()
         out.append(
             NseResultRow(
                 symbol=symbol.upper(),
                 isin=(row.get("isin") or "").strip().upper(),
                 period_end=pe,
                 broadcast_date=bd,
-                is_consolidated=(
-                    True
-                    if cons == "consolidated"
-                    else False
-                    if cons in ("non-consolidated", "standalone")
-                    else None
-                ),
+                is_consolidated=_cons_flag(row.get("consolidated") or ""),
                 xbrl_url=xurl,
             )
         )
     return out
+
+
+def _fetch_integrated_results(
+    symbol: str, s: requests.Session
+) -> list[NseResultRow]:
+    """Mar-2025-and-later quarters: the Integrated-Filing endpoint. Only
+    rows whose ``type`` is "Integrated Filing- Financials" carry P&L XBRL
+    (the sibling "...- Governance" row is skipped). Raises NseFetchError
+    if unreachable so a transient outage is not mistaken for 'no data'."""
+    r = _robust_get(
+        s, _NSE_INTEGRATED_API.format(symbol=symbol), timeout=30
+    )
+    if r is None or r.status_code != 200:
+        raise NseFetchError(
+            f"{symbol}: integrated "
+            f"status={None if r is None else r.status_code}"
+        )
+    try:
+        j = r.json()
+    except ValueError as e:
+        logger.warning("NSE integrated %s bad json: %s", symbol, e)
+        return []
+    data = j.get("data", []) if isinstance(j, dict) else (
+        j if isinstance(j, list) else []
+    )
+    total = j.get("totalCount") if isinstance(j, dict) else None
+    if total is not None and len(data) < int(total):
+        logger.warning(
+            "NSE integrated %s: got %d of %s rows (size cap?) — "
+            "older integrated quarters may be missing",
+            symbol, len(data), total,
+        )
+    out: list[NseResultRow] = []
+    for row in data:
+        if (row.get("type") or "").strip().lower() != (
+            _INTEGRATED_FINANCIALS_TYPE
+        ):
+            continue
+        xurl = (row.get("xbrl") or "").strip()
+        if not xurl.lower().endswith(".xml"):
+            continue
+        # qe_Date is upper-cased ("31-MAR-2026"); title-case so the
+        # shared _to_date "%d-%b-%Y" parser matches.
+        pe = _to_date((row.get("qe_Date") or "").title())
+        bd = _to_date(
+            row.get("broadcast_Date") or row.get("creation_Date") or ""
+        )
+        if pe is None or bd is None:
+            continue
+        out.append(
+            NseResultRow(
+                symbol=symbol.upper(),
+                isin=(row.get("isin") or "").strip().upper(),
+                period_end=pe,
+                broadcast_date=bd,
+                is_consolidated=_cons_flag(row.get("consolidated") or ""),
+                xbrl_url=xurl,
+            )
+        )
+    return out
+
+
+def fetch_nse_results(
+    symbol: str, *, session: requests.Session | None = None
+) -> list[NseResultRow]:
+    """All quarterly result filings for `symbol` (point-in-time rows),
+    merged across the legacy endpoint (≤ 2024-12-31) and the
+    Integrated-Filing endpoint (≥ 2025-03-31). Raises NseFetchError only
+    if BOTH endpoints are unreachable — so a real outage still counts as
+    an incomplete backfill, but one endpoint being legitimately empty
+    (every symbol's legacy feed past the migration) does not zero out the
+    other. Exact-duplicate rows are de-duplicated."""
+    s = session or _nse_session()
+    rows: list[NseResultRow] = []
+    legacy_down = integrated_down = False
+    try:
+        rows += _fetch_legacy_results(symbol, s)
+    except NseFetchError as e:
+        legacy_down = True
+        logger.warning("legacy fetch failed %s: %s", symbol, e)
+    try:
+        rows += _fetch_integrated_results(symbol, s)
+    except NseFetchError as e:
+        integrated_down = True
+        logger.warning("integrated fetch failed %s: %s", symbol, e)
+    if legacy_down and integrated_down:
+        raise NseFetchError(
+            f"{symbol}: both legacy and integrated endpoints unreachable"
+        )
+    seen: set[tuple] = set()
+    deduped: list[NseResultRow] = []
+    for r in rows:
+        key = (r.period_end, r.is_consolidated, r.xbrl_url)
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(r)
+    return deduped
 
 
 def download_xbrl(
