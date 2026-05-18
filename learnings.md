@@ -224,3 +224,29 @@ quality-conditioned asymmetric Phase A suppression). Two durable lessons:
    REVERT the strategy lever, KEEP the pipeline+estimator infra; only
    revisit with a materially longer PIT fundamentals history or as a
    positive tilt (Phase B) — never as naive suppression on ~1yr of data.
+
+### 7.6 The earnings-overlay wall is DATA, not design — stop iterating variants on 3 folds
+
+Two principled, theory-backed, parameter-free earnings overlays were
+built and honestly tested on the corrected engine: Phase A defensive
+*suppression* and Phase B positive *concentration*. Both failed the
+robustness gate, and both failed the SAME way — fold-dependent on the
+only ~3 testable PIT-earnings folds (helps some 2024 windows, blows up
+another; no drawdown benefit; worst sub-period worse). Durable lessons:
+
+1. **A signal you can only test on ~3 independent folds cannot be shown
+   "generic / non-overfit", no matter how clean the construction.** The
+   anti-overfit gates correctly reject it; the right response is NOT to
+   keep trying new overlay forms against those same 3 folds (that search
+   IS the overfit) — it is to recognise the binding constraint is data
+   sufficiency and stop until the PIT history is materially longer.
+2. **Soft-degrade design pays off as a diagnostic.** Because both
+   variants were built to be byte-identical to baseline wherever the
+   signal is absent, the walk-forward cleanly isolated the effect to the
+   active folds (pre-2024 delta exactly 0.0), making the fold-dependence
+   — and thus the overfit risk — unmistakable rather than smeared.
+3. **Don't burn a one-shot sealed reveal to "see if it works."** With
+   current data the sealed window is ~70% inert; revealing it on a
+   research-failing, under-powered variant would waste the irreversible
+   resource and is itself the overfitting impulse the gate exists to
+   stop. Lock the variant on research first; reveal once, last.

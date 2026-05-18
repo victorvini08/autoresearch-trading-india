@@ -2020,3 +2020,63 @@ tests, ingest_fundamentals, fundamentals_xbrl); gate test skips with the
 revert reason; the 6 pre-existing baseline failures
 (`test_precompute_macro`×4, `test_strategy_reversion`,
 `test_warmup_scoring`) unchanged, none introduced.
+
+---
+
+## 2026-05-18 — Improvement: Phase B earnings-confirmed concentration tilt — **REVERTED** (data-sufficiency wall)
+
+**Hypothesis.** The Phase A failure (defensive negative-only suppression
+— redundant with the book's structural exit / vol-targeting) does not
+condemn the orthogonal earnings signal; the literature's robust gain is
+*concentrating* into names where price momentum AND earnings momentum
+agree (both = investor underreaction; combination limits downside, keeps
+upside — Lord Abbett; NSE conditional-bivariate). So: a parameter-free,
+categorical, STABLE reorder of momentum's own selected `priority` by the
+sign of the kept robust PIT SUE (confirm-up first, neutral, confirm-down
+last) — earnings-confirmed names funded first under constrained
+vol-targeted gross, deteriorating ones cut first. Never adds a name,
+never levers, soft-degrades to a byte-identical baseline, ZERO new
+tunables (count stays 6, enforced by the immutable parsimony gate). The
+deliberately overfit-resistant form.
+
+**Result (`prepare.py research`, tilt-ON vs identical tilt-OFF, same
+engine/data/13 folds).** Folds 1–9 (pre-2024, signal inert): delta
+**exactly 0.0** — soft-degrade no-op verified at full walk-forward
+scale. The 4 active 2024 folds: **+0.41, −0.09, −2.94, +1.32** (fold 12
+5.00→2.06 — catastrophic). Aggregate: validation Sortino 2.896→2.796
+(−0.100); **worst sub-period 2.32→1.995 (−0.325)**; aggregate
+drawdown 0.1284→0.1284 (**±0.000** — no downside benefit); n_trades
++5; parsimony/universe/MC gates unchanged.
+
+**Decision: REVERT (strategy); KEEP robust-SUE infra.** Fails the
+robustness-over-validation-Sortino gate (worse worst sub-period, no
+drawdown benefit) AND the failure mode is the overfit tell itself:
+**fold-dependent** (helps 2 of 4 testable windows, blows up 1) on a
+~3-fold sample. `strategy.py` restored to committed;
+`tests/test_strategy_earn_tilt.py` kept as a SKIPPED contract.
+
+**The real, durable finding (root cause, not another revert).** Both
+principal theory-backed forms of an earnings overlay — *suppression*
+(Phase A) and *concentration* (Phase B) — now fail the same way for the
+same reason: there are only **~3 independent testable folds** of
+computable PIT earnings data (2022+ NSE `corporates-financial-results`
+horizon + the 8-quarter seasonal-RW SUE burn-in; backfill ends
+broadcast 2025-02-27). **No earnings overlay can be shown
+generic / non-overfit on 3 folds, and trying further formulations
+against those same 3 folds (then peeking at the sealed set) would BE the
+overfitting loop.** The sealed window 2025-2026 is itself ~70% inert
+with current data (SUE drift dies ~2025-05), so spending the one-shot
+sealed reveal now would waste it on a variant that already fails
+research. The blocker is **data sufficiency**, not the idea — the
+scientifically valid path is to materially extend the PIT fundamentals
+history (forward backfill to current, and backward if any earlier NSE
+data is reachable) so enough independent earnings cycles exist for a
+genuine walk-forward, THEN exactly one sealed reveal of one locked
+variant. Until then the committed momentum-quality + vol-targeted book
+(worst sub-period 2.32, Sortino 2.90) stands; earnings-overlay variant
+search is PAUSED on purpose.
+
+**Suite:** infra tests green (pead_signal incl. robustification,
+ingest_fundamentals, fundamentals_xbrl); both strategy-overlay gate
+tests skip with their revert reasons; the 6 pre-existing baseline
+failures unchanged, none introduced.
