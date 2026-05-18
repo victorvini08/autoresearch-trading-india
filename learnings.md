@@ -180,3 +180,18 @@ E (+8.30%@₹50k→+1.43%@₹5L) and G (+1.74%→−9.87%) looked fine at ₹50k
 were small-capital lumpiness/over-concentration artefacts. H survives
 (+12.07%→+9.96%). Capital-scale robustness is now a mandatory gate before
 believing any ₹50k sealed result.
+
+### 7.4 Asymmetric re-entry re-tested on the corrected engine — still rejected
+Per §7.2 the D revert was void (bugged engine), so asymmetric trend gating
+(slow exit / fast recovery re-entry) was correctly re-tested on the
+corrected H engine (2026-05-18, variant I). It PASSED all 5 atomic
+research gates with the most regime-balanced sub-period Sortinos of the
+campaign ([1.90, 2.04]) — yet on the real-world arbiters it was decisively
+worse than H (sealed +1.67% vs +12.07%; ₹5L −8.94% vs +9.96% — fails the
+scale gate) and even made the target recovery quarter worse (2025Q2 −0.55%
+vs +5.17%). **Lesson: "void after engine fix" earns a RE-TEST, not a
+reinstatement — and the re-test verdict here is firmly negative. The
+momentum-quality selection gate is not the binding real-world weakness on
+the corrected engine; vol-targeted H is the robust optimum. Adding further
+structural levers past a rigorous negative is overfitting, not
+improvement.**

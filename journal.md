@@ -1822,3 +1822,54 @@ artifact and is not a valid comparator. Sortino 0.72 / DD 11% is an honest
 fully-deployed momentum book — exactly the upside/downside trade the user
 explicitly chose. Committed strategy = sector-fix + gross-targeting +
 vol-targeted gross.
+
+---
+
+## Iteration 2026-05-18-I-asymmetric-reentry-on-corrected-engine — REVERTED (manual dev, /goal-directed)
+
+**Goal:** find the single biggest improvement on the corrected engine (H =
+sector-fix + gross-targeting + vol-targeted gross). Hypothesis: the proven
+recurring residual weakness across EVERY window is the binary
+momentum-quality SELECTION gate (`long_mom>0 AND mid_mom>0 AND price≥190dma`)
+emptying after corrections → book sits out early recoveries (2023 H1;
+sealed 2025Q2 captured only +5.2%/+12.1%). Fix = asymmetric trend gating
+(slow protective exit / fast recovery re-entry on a shared
+`_trend_floor=min(fast_ma,slow_ma)`), theory-backed (Daniel-Moskowitz
+post-drawdown re-entry lag). D's prior REVERT was VOID (learnings §7.2 —
+measured on the bugged 25%-cap engine), so re-test on the corrected engine
+was warranted.
+
+**Change:** added `_fast_ma_window`/`_short_mom_window`/`_trend_floor`;
+entry gate → `now < _trend_floor or short_mom ≤ 0` (long_mom/mid_mom kept
+as rank factors); `_apply_structural_exit` → exit on `< _trend_floor`.
+Zero new hyperparameters (windows derived). 8 TDD tests GREEN; full suite
+429 passed (warmup_scoring now passes — strategy trades more).
+
+**Research — ALL 5 atomic gates PASS at N=3/5/10:** val_sortino 1.940,
+p=0.003, rw_mc 0.998, **sub_period [1.896, 2.040] (ratio 0.93 — the most
+regime-balanced split of the whole campaign)**, n_trades 109, agg_dd 0.146.
+
+**Real-world arbiters (held-out) — DECISIVELY WORSE than H:**
+```
+SEALED 2025-26   I: +1.67%  S0.15  DD16.6%  Rs5L -8.94% S-0.33 (NOT scale-robust)
+                 H: +12.07% S0.72  DD11.3%  Rs5L +9.96%
+  2025Q2 (recovery target): I -0.55%  vs  H +5.17%  (made the target WORSE)
+2023-2024        I: +23.28% S0.92  DD11.8%  |  H: +31.65% S1.17
+```
+Per-quarter I underperforms H almost everywhere; fails the mandatory ≥10×
+capital gate (CLAUDE.md #11 — ₹5L negative). 2023 H1 still 0% for BOTH
+(confirms that zero is the <3-eligible-feeds harness artifact, NOT the
+selection gate — asymmetric re-entry didn't change it).
+
+**Decision:** REVERTED. Strong research metrics (incl. best-ever
+sub-period balance) but textbook research-vs-reality overfit divergence:
+on real-world robustness (sealed + 2023-24 + ≥10× scale) I is clearly
+inferior and breaks scale-robustness. Per memory
+[[feedback-robustness-over-validation-sortino]] we judge on real-world
+robustness, not research Sortino. The asymmetric gate pulls in marginal
+recovery names that whipsaw and lump badly at scale. **H remains the
+optimal robust strategy** — now further confirmed by rigorously testing
+and rejecting the single highest-EV structural alternative. Forcing any
+"improvement" past this point would itself be overfitting (the /goal
+explicitly forbids overfit). H is the evidence-confirmed optimum given
+the current code.
