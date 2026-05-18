@@ -80,6 +80,10 @@ def main(argv: list[str] | None = None) -> int:
         "--skip-classify", action="store_true",
         help="Only refresh raw data; don't run classifiers.",
     )
+    p.add_argument(
+        "--skip-fundamentals", action="store_true",
+        help="Skip the live fundamentals snapshot step.",
+    )
     args = p.parse_args(argv)
 
     today_d = args.date
@@ -119,6 +123,25 @@ def main(argv: list[str] | None = None) -> int:
         today_d.isoformat(), earnings_end.isoformat(), tickers=tickers,
     )
     print(f"      → {n_earn} rows ({time.time()-t0:.1f}s)", flush=True)
+
+    # Step 4b: live fundamentals snapshot — PIT-clean by construction
+    # (capture date == as_of_date). Non-fatal: the cron must never abort on
+    # a fundamentals-source hiccup; the PEAD gate soft-degrades downstream.
+    if not args.skip_fundamentals:
+        try:
+            from pathlib import Path
+
+            from data.ingest_fundamentals import snapshot_live
+
+            n_fund = snapshot_live(
+                Path("storage/universe.duckdb"), on_date=today_d,
+            )
+            print(f"[4b] fundamentals snapshot: {n_fund} new", flush=True)
+        except Exception as e:  # noqa: BLE001 — cron must not abort
+            print(
+                f"[4b] fundamentals snapshot FAILED (non-fatal): {e}",
+                flush=True,
+            )
 
     if args.skip_classify:
         print("\n[skip-classify] not running classifiers.")
