@@ -15,13 +15,17 @@ Steps:
      short-circuit without an LLM call)
 
 Usage:
-    uv run python -m scripts.daily_update                           # uses today
+    uv run python -m scripts.daily_update                           # data only (classify SKIPPED by default)
     uv run python -m scripts.daily_update --date 2026-05-09         # backdated
-    uv run python -m scripts.daily_update --provider codex          # default claude
-    uv run python -m scripts.daily_update --skip-classify           # data only
+    uv run python -m scripts.daily_update --no-skip-classify        # also run classifiers
+    uv run python -m scripts.daily_update --no-skip-classify --provider codex
 
-Subscription quota: per market day, ~1 macro + ~200 sentiment/events calls
-(only tickers with non-empty news fire the classifier). Comfortable budget.
+Classification is SKIPPED BY DEFAULT (2026-05-18 decision): the committed
+momentum-quality strategy consumes only prices/universe/sectors — not
+macro_regime/sentiment/events — so daily LLM classify is wasted cost and
+adds noise to the paper-validation logs. Re-enable per-run with
+--no-skip-classify (then quota ≈ 1 macro + ~200 sentiment/events calls
+per market day; only non-empty-news tickers fire the classifier).
 """
 from __future__ import annotations
 
@@ -85,8 +89,13 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--model", default=None)
     p.add_argument("--chunk-size", type=int, default=50)
     p.add_argument(
-        "--skip-classify", action="store_true",
-        help="Only refresh raw data; don't run classifiers.",
+        "--skip-classify",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Skip the LLM classification steps. DEFAULT: skip — the "
+             "committed momentum strategy does not consume "
+             "macro_regime/sentiment/events, so daily classify is wasted "
+             "cost. Pass --no-skip-classify to run the classifiers.",
     )
     p.add_argument(
         "--skip-fundamentals", action="store_true",

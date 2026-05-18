@@ -6,12 +6,14 @@
   in parallel with the pre-market scan and finishes before the 10:00 IST
   execution window).
 
-  Extends prices/macro, pulls 24h news, refreshes the earnings calendar,
-  and classifies macro_regime + per-ticker sentiment/events. Idempotent
-  (upsert / LLM-cache short-circuit) — safe to re-run. Full run here (the
-  scheduled cadence) even though the committed momentum strategy does not
-  consume the classifications: keeps the cache warm for the dashboard and
-  any future strategy.
+  Extends prices/macro, pulls 24h news, refreshes the earnings calendar.
+  Idempotent (upsert / LLM-cache short-circuit) — safe to re-run.
+
+  LLM classification is SKIPPED here (--skip-classify; also the code
+  default as of 2026-05-18): the committed momentum-quality strategy
+  consumes only prices/universe/sectors, so daily classify is wasted
+  cost and would add noise to the 4-week paper-validation logs. To
+  re-enable, drop the flag / pass --no-skip-classify.
 
   Install:
     1. Confirm WorkingDirectory + the uv path below match this machine.
@@ -30,7 +32,7 @@
   <array>
     <string>/bin/sh</string>
     <string>-c</string>
-    <string>cd "/Users/aryanmehta/Desktop/My Work/autoresearch-trading-india" &amp;&amp; /opt/homebrew/bin/uv run python -m scripts.daily_update</string>
+    <string>cd "/Users/aryanmehta/Desktop/My Work/autoresearch-trading-india" &amp;&amp; /opt/homebrew/bin/uv run python -m scripts.daily_update --skip-classify</string>
   </array>
 
   <key>StartCalendarInterval</key>
