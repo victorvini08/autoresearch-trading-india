@@ -1873,3 +1873,32 @@ and rejecting the single highest-EV structural alternative. Forcing any
 "improvement" past this point would itself be overfitting (the /goal
 explicitly forbids overfit). H is the evidence-confirmed optimum given
 the current code.
+
+---
+
+## 2026-05-18 — INFRA (not a strategy iteration; no KEEP/REVERT)
+
+**What:** Built the point-in-time-clean fundamentals + earnings-surprise
+data pipeline (spec/plan: `docs/superpowers/{specs,plans}/2026-05-18-pit-fundamentals-pead-signal*`).
+Delivered & test-green: `data/fundamentals_xbrl.py` (BSE result-XBRL
+parse + attachment download, era-pinned local-name match),
+`data/ingest_fundamentals.py` (PIT-universe walk → `fundamentals_quarterly`
+with `as_of_date = broadcast date`, SEBI-Reg-33 fallback, ±75d PIT
+quarantine, look-ahead tripwire `assert_no_lookahead`, coverage/lag
+report, `snapshot_live` capture-date path), `data/ingest_earnings.py`
+`compute_sue_from_fundamentals` (seasonal-RW SUE on as-reported EPS),
+`data/pead.py` (`pead_signal` PIT accessor + quality-conditioned cut,
+theory-pinned constants `DRIFT_WINDOW_TD/SUE_BLOCK/SUE_SEVERE`),
+live source-split wired into `scripts/daily_update.py` (guarded,
+non-fatal).
+
+**Strategy untouched.** `strategy.py` deliberately NOT modified
+(user-deferred). Phase A asymmetric PEAD suppression (plan Task 8) and the
+`prepare.py research` arbiter run remain pending as a separate deliberate
+step; `tests/test_strategy_pead_gate.py` holds the executable contract,
+skipped until then. No KEEP/REVERT — no signal change to evaluate yet.
+
+**Suite:** all new pipeline tests green; the 6 pre-existing failures
+(`test_precompute_macro` ×4, `test_strategy_reversion`,
+`test_warmup_scoring`) were verified present at baseline `d509866` —
+unchanged by this infra, not introduced here.
