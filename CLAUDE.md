@@ -37,10 +37,11 @@ LLM-driven autoresearch swing-trading system for Indian equities, delivery (CNC)
 | Broker | **Dhan HQ Trading API** (free brokerage on delivery) | docs/superpowers/specs/2026-05-14-india-autoresearch-trading-design.md §3 |
 | Price data | **NSE bhav archive** (free public ZIPs) | Dhan Data API is paid ₹500/mo — we don't use it |
 | Universe | **Top 200 by 20-day ADV, point-in-time from the full NSE EQ bhav** (survivorship-free; the current Nifty 500 list is sector/ISIN enrichment only, NOT the membership gate) | 2026-05-15 audit: using today's Nifty 500 list historically censored 293 delisted names → inflated momentum backtest. PIT membership from price history fixes it with data we already have |
-| Strategy shape | Cross-sectional 12-1 momentum + retention + quality screen + sector cap + Indian regime gate (5 hyperparameters) | Theory-backed (Jegadeesh-Titman / Asness / Novy-Marx); avoids US repo's ATR-stop overfit |
+| Strategy shape | Cross-sectional 12-1 momentum-quality **selection** → **bounded gross-targeting** construction (deploy intended gross down the ranked list, per-name ≤ `_MAX_NAME_WEIGHT`=10% AND per-sector ≤25%) → **volatility-targeted gross** (`clip(0.12/realised_mkt_vol_ann, 0, 0.99)`). KEPT 2026-05-18 (Improvement GH). | Theory-backed (Jegadeesh-Titman / Asness / Novy-Marx selection; Barroso–Santa-Clara 2015 & Moreira–Muir 2017 vol-managed momentum). Replaces the old fixed-slot `gross/n_positions` + 4-step `breadth_scaled_gross`, which only ever deployed ~24% (see sector-wiring row). Held-out sealed +12.07% vs Nifty −1.94%, scale-robust at ₹5L. |
+| **Sector-wiring fix** (root cause) | `_load_sector_map` sources per-ticker industry from the **PIT universe DB** (point-in-time-safe enrichment), NOT the feed attribute. | The backtest/live `bt.feeds.PandasData` never carried an industry attr, so every name was 'OTHER' → the 25% sector cap was a hidden **25% whole-book net-exposure ceiling** in EVERY pre-2026-05-18 backtest AND live. **All pre-2026-05-18 results, gates, and A–F reverts are VOID** — re-test any "burned" idea on the corrected engine. |
 | Anti-overfit gates | Sealed 2024-26 test, Bonferroni p-correction, RW Monte Carlo, parsimony budget, sub-period stationarity, cost-aware Sortino | **NEW for India**; addresses US multi-strategy overfit failure |
 | Rebalance cadence | **Biweekly** (alternate Fridays) | User-specified |
-| Starting capital | ₹50,000 paper; 5-6 positions default | DP-charge optimization |
+| Starting capital | ₹50,000 paper. Position count is now an *outcome* of bounded gross-targeting (~10–15 names when fully invested at the 10% per-name cap), not a fixed 5–6. | DP-charge optimization, now subordinate to the 10% concentration limit |
 | LLM stack | Claude Code SDK: **Opus 4.7** for autoresearch loop, **Sonnet 4.6** for classifiers; Qwen3 fallback | Subscription-bounded cost; cache keyed by `(date, ticker, prompt_hash, model_id)` |
 | Live mode | Built but disabled (`halt.json` defaults to halted=true for `dhan-live`) | 4-week paper validation gate |
 | News sources | **5 trusted free**: MoneyControl, Pulse RSS, NSE filings, RBI press, SEBI press | No paid APIs |
@@ -58,6 +59,9 @@ LLM-driven autoresearch swing-trading system for Indian equities, delivery (CNC)
 7. **LLM cache rows are still WRITTEN keyed by `model_id`** (audit/ablation provenance preserved). But as of 2026-05-15 (explicit user decision) the precompute cache-SKIP lookup is **model-agnostic by default**: a cell already classified by ANY provider is reused, so a Codex-filled half-cache is *continued* by a later Claude run instead of recomputed. This matches `llm.features` reading the cache model-agnostically (these coarse 4-class/[-1,1]/7-flag outputs are treated as model-interchangeable). Set `LLM_STRICT_MODEL_CACHE=1` to restore strict per-model isolation for a clean single-model ablation. (Supersedes the original "swapping models invalidates the slice" rule.)
 8. **Anti-overfit gates are atomic.** A variant that fails ANY gate is REJECTED, not partially accepted.
 9. **Sealed test set (2024-01 → 2026-05) is revealed ONCE per promotion** — no retries on the same variant.
+10. **Concentration is bounded by `construct_gross_targets`, not by `len(selected)` sizing.** The §-old "never size from `len(selected)`" blow-up rule is now *enforced structurally*: deployment walks the ranked list bounded by per-name ≤ `_MAX_NAME_WEIGHT` (10%) AND per-sector ≤ 25%, so a 1-name regime puts ≤10% in that name (rest stays cash) — strictly safer than the old scheme. Do not reintroduce naive `gross/len(selected)` or unbounded per-name weight.
+11. **Validate every variant at ≥10× capital (₹5L), not just ₹50k.** ₹50k sealed wins are routinely small-capital whole-share/concentration lumpiness that collapse at scale (variants E, G). Capital-scale robustness is a mandatory check alongside the atomic gates and the sealed reveal.
+12. **Pre-2026-05-18 backtest numbers and KEEP/REVERT decisions are void** (produced by the sector-wiring bug = accidental 25% whole-book cap). Baseline e745434 / Improvement B are obsolete; their headline metrics were the bug. The "downside protection" of that era was ~75% forced cash, not strategy skill.
 
 ---
 
@@ -171,7 +175,7 @@ open state/reports/dashboard.html
 ```
 .
 ├── prepare.py            # IMMUTABLE walk-forward evaluator + anti-overfit gates
-├── strategy.py           # LOOP-EDITABLE: 12-1 momentum + quality + sector + regime
+├── strategy.py           # LOOP-EDITABLE: 12-1 momentum-quality selection → bounded gross-targeting → vol-targeted gross (sector-fixed)
 ├── program.md            # Goal + constraints (read by autoresearch loop)
 ├── journal.md            # Append-only memory of every iteration
 ├── learnings.md          # Compounding domain insights
