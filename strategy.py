@@ -12,8 +12,19 @@ returns early; every position change goes through ``order_target_percent``.
 Trade contract:
   - Long-only CNC delivery behavior.
   - Trade only the injected point-in-time universe.
-  - Size each selected name from fixed risk slots: gross / n_positions.
-  - Never size from len(selected); unused or blocked slots remain cash.
+  - Deploy the regime-scaled `gross` down the ranked list via
+    ``construct_gross_targets`` (Improvement G, 2026-05-18, user-authorised
+    locked-decision change): walk the ranking allocating capital until the
+    intended `gross` is actually invested, bounded by a per-name cap
+    (``_MAX_NAME_WEIGHT``) AND the per-sector cap, continuing into other
+    sectors rather than leaking the sector-capped remainder to cash.
+  - This is NOT the §4-banned naive ``gross / len(selected)`` sizing: the
+    hard per-name and per-sector caps bound single-name/single-sector
+    concentration (the blow-up risk §4 exists to prevent), while removing
+    the unintended deployment pin (old fixed-slot `gross/n_positions` +
+    cap-and-leak deployed only ~24% in ALL regimes — even when
+    breadth_scaled_gross asked for 0.99 — because the sector cap divided by
+    a tiny per-name target clamped the whole book to ~one sector).
 '''
 
 from __future__ import annotations
@@ -28,7 +39,6 @@ import numpy as np
 from data.sectors import (
     SectorAssignment,
     assign_sectors,
-    enforce_sector_cap,
 )
 
 logger = logging.getLogger(__name__)
@@ -326,79 +336,114 @@ def breadth_scaled_gross(
     return 0.99
 
 
-def inverse_vol_tilt(
-    selected: list[str],
-    vol_by_ticker: dict[str, float],
-) -> dict[str, float]:
-    '''Mean~1 inverse-vol risk-parity tilt within fixed slots.
+# Annualised portfolio volatility TARGET (a risk POLICY, not a fitted
+# knob): the vol-managed-momentum overlay scales gross so the book runs at
+# ~this realised volatility. 12% is a standard institutional moderate
+# target. This is the single most-replicated robust improvement to a
+# momentum book (Barroso & Santa-Clara 2015; Moreira & Muir 2017): it
+# deploys MORE in calm up-trends (captures upside — the user's core ask)
+# and LESS in turbulent / momentum-crash regimes (principled downside,
+# not the old 25%-cap bug artefact). Now meaningful only because the
+# sector-wiring bug is fixed and gross actually deploys.
+_ANNUAL_VOL_TARGET = 0.12
+_TRADING_DAYS = 252
 
-    raw_i = 1/vol_i (vol floored; missing/invalid -> neutral = mean raw).
-    tilt0_i = raw_i / mean(raw); clip to [0.5, 2.0] (the standard
-    risk-parity 0.5x-2x-equal concentration guardrail — pre-committed, not
-    searched, not a tunable param); renormalise so the clipped tilts sum
-    to len(selected); then a post-scale hard cap of 2.0 whose freed weight
-    becomes CASH (NOT redistributed) so the sum is NEVER above
-    len(selected). Gross can therefore only stay equal to or drop a hair
-    below equal-weight, never increase — it cannot trip the >100% gross
-    catastrophe gate and (unlike scaling GROSS, learnings.md 3.5) cannot
-    clip the long book's right tail. Identity (all tilt == 1.0) when vols
-    are uniform, so this is a strict generalisation of equal-weight.
+
+def vol_targeted_gross(
+    close_by_ticker: dict[str, list[float]], lookback_days: int
+) -> float:
+    '''Volatility-targeted gross exposure (replaces the crude breadth step).
+
+    gross = clip(_ANNUAL_VOL_TARGET / realised_market_vol_annualised,
+                 0.0, 0.99)
+
+    realised vol = std of the equal-weight cross-sectional daily return
+    (the market proxy) over a ~6-month window (Barroso-Santa-Clara horizon,
+    derived from the signal lookback — not a new tunable knob), annualised
+    by sqrt(252). Long-only, never levered (cap 0.99); fully de-risks as
+    realised vol explodes (momentum crashes happen in high-vol panics —
+    Daniel-Moskowitz), and runs ~fully invested in calm trends. Pure and
+    deterministic. Falls back to 0.75 (the old neutral default) when the
+    cross-section is too thin to estimate vol.
     '''
-    n = len(selected)
-    if n == 0:
-        return {}
-    if n == 1:
-        return {selected[0]: 1.0}
-    eps = 1e-9
-    raw: dict[str, float | None] = {}
-    present: list[float] = []
-    for t in selected:
-        v = vol_by_ticker.get(t)
-        if v is None or not np.isfinite(v) or v <= 0.0:
-            raw[t] = None
-        else:
-            rv = 1.0 / max(float(v), eps)
-            raw[t] = rv
-            present.append(rv)
-    if not present:
-        return {t: 1.0 for t in selected}     # no risk info -> equal-weight
-    neutral = float(np.mean(present))
-    raws = np.array(
-        [neutral if raw[t] is None else raw[t] for t in selected],
-        dtype=float,
-    )
-    t0 = raws / float(np.mean(raws))
-    clipped = np.clip(t0, 0.5, 2.0)
-    scale = n / float(np.sum(clipped))
-    tilt = np.minimum(clipped * scale, 2.0)   # post-scale cap; excess -> cash
-    return {t: float(tilt[i]) for i, t in enumerate(selected)}
+    vol_lb = min(126, max(63, int(lookback_days) // 2))  # ~6 months
+    rets = []
+    for raw in close_by_ticker.values():
+        if len(raw) < vol_lb + 1:
+            continue
+        c = np.asarray(raw[-(vol_lb + 1):], dtype=float)
+        if bool(np.any(~np.isfinite(c))) or bool(np.any(c <= 0.0)):
+            continue
+        rets.append(c[1:] / c[:-1] - 1.0)
+    if len(rets) < 20:
+        return 0.75
+    mkt = np.mean(np.asarray(rets, dtype=float), axis=0)
+    rv = float(np.std(mkt)) * float(np.sqrt(_TRADING_DAYS))
+    if not np.isfinite(rv) or rv <= 1e-9:
+        return 0.99
+    return float(np.clip(_ANNUAL_VOL_TARGET / rv, 0.0, 0.99))
 
 
-def apply_sector_cap(
-    selected: list[str],
-    targets: dict[str, float],
+# Pre-committed single-name concentration limit (NOT a searched/tunable
+# knob — a hard risk control, same status as the 0.5-2.0 risk-parity clip
+# the codebase already pre-commits). 10% ⇒ a fully-invested book is spread
+# over at least ~10 names. This is precisely what bounds the blow-up risk
+# CLAUDE.md §4 exists to prevent (the predecessor blew up sizing from
+# len(selected) with NO per-name bound and 1 name qualifying). With this
+# cap, even a 1-name regime puts ≤10% in that name and the rest stays cash
+# — strictly safer than the old fixed-slot scheme, never concentrated.
+_MAX_NAME_WEIGHT = 0.10
+
+
+def construct_gross_targets(
+    priority: list[str],
     sector_of: dict[str, str],
-    cap: float,
+    gross: float,
+    sector_cap: float,
+    name_cap: float = _MAX_NAME_WEIGHT,
 ) -> dict[str, float]:
-    '''Clamp per-name targets so no sector exceeds `cap` on ACTUAL
-    (tilted) weights — the §5 25% hard cap, enforced in strategy.py since
-    only this file is editable and `enforce_sector_cap` assumes equal
-    weight. Walk `selected` in priority order; each name gets
-    min(target, sector remaining room); a name into a full sector gets
-    0.0 (cash). Excess is NEVER redistributed (that is precisely the §4
-    banned concentration mode) — it stays cash. Pure, deterministic.
+    '''Deploy `gross` down the ranked `priority` list, bounded by per-name
+    `name_cap` and per-sector `sector_cap`, CONTINUING into lower-ranked
+    names in other sectors until the gross budget is met (instead of
+    leaking the sector-capped remainder to cash — the bug that pinned the
+    old book to ~24% deployed in every regime).
+
+    Greedy by rank: each name in turn gets
+    ``min(name_cap, remaining gross budget, remaining sector room)``; once
+    a sector is full the walk simply moves on to the next ranked name in a
+    sector with room. Pure and deterministic.
+
+    Invariants (long-only, no leverage, bounded concentration):
+      * Σ targets ≤ gross  (≤ 0.99 — the budget is never exceeded; it can
+        only fall short when the priority list / sector rooms are exhausted,
+        which is the correct defensive behaviour in a genuinely narrow
+        market, not a leak).
+      * targets[t] ≤ name_cap for every name.
+      * Σ_{t∈sector} targets[t] ≤ sector_cap for every sector.
     '''
-    out: dict[str, float] = {}
-    sec_sum: dict[str, float] = {}
-    for t in selected:
-        tgt = float(targets.get(t, 0.0))
+    budget = float(gross)
+    if budget <= 0.0 or not priority:
+        return {}
+    name_cap = float(name_cap)
+    sector_cap = float(sector_cap)
+    targets: dict[str, float] = {}
+    sec_used: dict[str, float] = {}
+    for t in priority:
+        if budget <= 1e-9:
+            break
+        if t in targets:
+            continue
         sec = sector_of.get(t, 'OTHER')
-        used = sec_sum.get(sec, 0.0)
-        room = cap - used
-        give = tgt if tgt <= room else max(0.0, room)
-        out[t] = give
-        sec_sum[sec] = used + give
-    return out
+        room = sector_cap - sec_used.get(sec, 0.0)
+        if room <= 1e-9:
+            continue
+        w = min(name_cap, budget, room)
+        if w <= 1e-9:
+            continue
+        targets[t] = w
+        sec_used[sec] = sec_used.get(sec, 0.0) + w
+        budget -= w
+    return targets
 
 
 class IndiaMomentumQualityCarry(bt.Strategy):
@@ -445,16 +490,50 @@ class IndiaMomentumQualityCarry(bt.Strategy):
         return name.upper()
 
     def _load_sector_map(self) -> dict[str, SectorAssignment]:
+        '''Per-ticker sector from the PIT universe enrichment.
+
+        ROOT-CAUSE FIX (Improvement G, 2026-05-18): the backtest/live feeds
+        (`bt.feeds.PandasData`) never carry an `_industry` attribute, so the
+        old `getattr(d,'_industry',...)` made EVERY name 'OTHER' — the 25%
+        per-sector cap silently became a hard 25% whole-book net-exposure
+        ceiling in every backtest ever run (and live). Industry is static
+        enrichment metadata (CLAUDE.md locked decision: the Nifty-500 list
+        is sector/ISIN enrichment, never a membership/return signal), so
+        sourcing it from the universe DB is point-in-time-safe — it is not
+        a tradable look-ahead. Feed attribute is kept as a fallback; if the
+        DB is unavailable the old (degenerate) behaviour is preserved so
+        nothing hard-fails.
+        '''
+        industry_by_ticker: dict[str, str] = {}
+        try:
+            import duckdb
+
+            conn = duckdb.connect(
+                str(self.p.universe_db_path), read_only=True
+            )
+            try:
+                for tkr, ind in conn.execute(
+                    "SELECT ticker, industry FROM universe_snapshot "
+                    "WHERE industry IS NOT NULL AND industry <> '' "
+                    "AND UPPER(industry) <> 'OTHER'"
+                ).fetchall():
+                    # last non-OTHER wins; sector classification is stable
+                    industry_by_ticker[str(tkr).upper()] = str(ind)
+            finally:
+                conn.close()
+        except Exception:  # noqa: BLE001 — DB absent in some unit tests
+            industry_by_ticker = {}
+
         rows = []
         for d in self.datas:
-            ind = getattr(d, '_industry', None) or getattr(d, 'industry', None)
             t = self._ticker_of(d)
-
-            class _Row:
-                ticker = t
-                industry = ind or ''
-
-            rows.append(_Row())
+            ind = (
+                industry_by_ticker.get(t)
+                or getattr(d, '_industry', None)
+                or getattr(d, 'industry', None)
+                or ''
+            )
+            rows.append(type('_Row', (), {'ticker': t, 'industry': ind})())
         return assign_sectors(rows)
 
     def _is_rebalance_today(self) -> bool:
@@ -610,79 +689,56 @@ class IndiaMomentumQualityCarry(bt.Strategy):
             return
 
         ranked = sorted(scores.items(), key=lambda kv: kv[1], reverse=True)
-        eligible_n = max(
-            int(self.p.n_positions), int(float(self.p.entry_pct) * len(ranked))
-        )
         retain_n = max(
             int(self.p.n_positions),
             int(float(self.p.retention_mult) * int(self.p.n_positions)),
         )
 
+        # Held winners still ranked within retain_n keep priority (low
+        # turnover ⇒ low DP drag); then ALL remaining ranked, quality-gated
+        # names by score as new-entry candidates. The pool is intentionally
+        # the full ranked list (not capped at an eligible_n) so the
+        # construction can walk DEEP across sectors to actually reach the
+        # intended gross — the old eligible_n/n_positions caps were part of
+        # the ~24% deployment pin. A held name ranked BELOW retain_n is not
+        # in priority ⇒ it is exited (momentum discipline preserved).
         retained_priority = [t for t, _ in ranked[:retain_n] if t in held]
-        entry_priority = [t for t, _ in ranked[:eligible_n] if t not in held]
-        priority = retained_priority + entry_priority
+        new_candidates = [t for t, _ in ranked if t not in held]
+        priority = retained_priority + new_candidates
 
-        gross = breadth_scaled_gross(close_by_ticker, int(self.p.beta_window))
-        target_each = gross / max(int(self.p.n_positions), 1)
-
-        if self.p.enforce_sector_cap and self._sector_map:
-            selected = enforce_sector_cap(
-                ranked_candidates=priority,
-                target_fraction_each=target_each,
-                sector_map=self._sector_map,
-                max_sector_fraction=float(self.p.sector_cap),
-                n_target=int(self.p.n_positions),
-            )
-        else:
-            selected = priority[: int(self.p.n_positions)]
-
-        # Improvement B: inverse-vol risk-parity tilt WITHIN the fixed
-        # slots. Gross (breadth_scaled_gross) is deliberately untouched —
-        # A's learning (learnings.md 3.5): scaling gross down clips this
-        # long book's right tail. Σ targets is never above the
-        # equal-weight total, so the §4 fixed-slot/unfilled-stays-cash
-        # invariant and the gross<=100% gate still hold; only the
-        # intra-book distribution tilts toward lower-realized-vol names
-        # (lowers downside deviation without truncating melt-ups).
-        fd = max(2, int(self.p.formation_days))
-        vol_by_ticker: dict[str, float] = {}
-        for t in selected:
-            c = close_by_ticker.get(t)
-            if not c or len(c) < fd + 1:
-                continue
-            arr = np.asarray(c[-(fd + 1):], dtype=float)
-            rr = arr[1:] / arr[:-1] - 1.0
-            vol_by_ticker[t] = float(rr.std())
-        tilt = inverse_vol_tilt(selected, vol_by_ticker)
+        gross = vol_targeted_gross(close_by_ticker, int(self.p.beta_window))
         sector_of = {
             t: (self._sector_map[t].sector
                 if self._sector_map.get(t) else 'OTHER')
-            for t in selected
+            for t in priority
         }
-        targets = apply_sector_cap(
-            selected,
-            {t: target_each * tilt.get(t, 1.0) for t in selected},
-            sector_of,
-            float(self.p.sector_cap),
+        targets = (
+            construct_gross_targets(
+                priority, sector_of, gross, float(self.p.sector_cap)
+            )
+            if self.p.enforce_sector_cap and self._sector_map
+            else construct_gross_targets(
+                priority, {}, gross, 1.0  # no sector cap → name_cap only
+            )
         )
 
-        selected_set = set(selected)
         for d in self.datas:
             t = self._ticker_of(d)
-            if t in selected_set:
-                self.order_target_percent(d, target=targets.get(t, 0.0))
+            if t in targets:
+                self.order_target_percent(d, target=targets[t])
             elif t in held:
                 self.order_target_percent(d, target=0.0)
 
         self._last_rebalance_date = today
         logger.debug(
-            'rebalance %s: scored=%d, selected=%d, held=%d, gross=%.2f, slot=%.4f',
+            'rebalance %s: scored=%d, deployed_names=%d, held=%d, '
+            'gross=%.2f, sum_w=%.3f',
             today,
             len(scores),
-            len(selected),
+            len(targets),
             len(held),
             gross,
-            target_each,
+            sum(targets.values()),
         )
 
 
@@ -694,7 +750,7 @@ __all__ = [
     'reversion_scores',
     'momentum_quality_scores',
     'breadth_scaled_gross',
-    'inverse_vol_tilt',
-    'apply_sector_cap',
+    'vol_targeted_gross',
+    'construct_gross_targets',
     'IndiaMomentumQualityCarry',
 ]

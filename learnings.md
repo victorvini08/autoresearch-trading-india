@@ -104,3 +104,79 @@ Bhav for date T is typically published by T+1 07:00 IST, but occasionally 30+ mi
 ---
 
 (append future Indian-market-specific learnings below; keep US-stocks-specific lessons in `docs/learnings-from-us-build.md`)
+
+## 6. Deployment is throttled by gross-sizing, not by the entry filter
+
+### 6.1 The cash-drag root cause is `breadth_scaled_gross` × fixed-slot sizing — NOT eligibility
+
+Sealed-window measurement (Improvement D, 2026-05-18): widening the
+per-name entry gate (asymmetric fast re-entry, research trade-count
+23→81, all 5 atomic gates passed) left average gross **unchanged**:
+D 14.6% vs B 15.5%, per-quarter virtually identical, max still ~25%. The
+book is ~85% cash because `breadth_scaled_gross` (step 0.35–0.99) ×
+fixed-slot sizing (`gross / n_positions`, unfilled slots → cash) caps
+total deployment; in a low-breadth post-correction regime gross is pinned
+at ~15% no matter how many names qualify. **Implication:** the
+upside-capture weakness (strategy badly trails the index in up-quarters)
+is a DEPLOYMENT problem owned by the gross/sizing mechanism, and cannot
+be moved by signal/eligibility changes. Every non-burned lever against it
+is now exhausted; the gross mechanism itself is the locus and is
+roadmap-§6 / A-family burned-adjacent. Forward dhan-paper validation and
+the deferred news/fundamentals levers (out of this loop's scope) are the
+genuine next steps, not more in-sample gross/eligibility iteration on a
+backtest known to be heavily overfit with the sealed window burned.
+
+### 6.2 The ~15% deployment ceiling is STRUCTURAL, not a small-capital artifact
+
+User-directed capital sweep (2026-05-18, sealed window): scaling ₹50k →
+₹5L (10×, which removes the whole-share execution floor) lifts average
+gross only ~+3–5pp (baseline 15.6%→20.1%; npos15 15.7%→18.4%) — the book
+is STILL ~80% cash at 10× capital. So the cash-drag / poor-upside-capture
+is overwhelmingly the `breadth_scaled_gross` step × slow-entry-gate
+structural throttle, NOT the small-₹50k whole-share lumpiness (that
+explains only a few points). Corollary: n_positions=15 on baseline added
++2.17pp sealed total at ₹50k but it was pure concentration AND a
+small-capital lumpiness artifact — it COLLAPSES at ₹5L (+8.30%→+1.43%,
+Sortino 0.834→0.213) while baseline n_positions=25 is scale-stable
+(+6.13%→+7.28%, Sortino ≈0.95–1.0). Always validate a candidate at ≥1
+larger capital before believing a ₹50k backtest gain. Net: every
+price/structure lever against the upside problem is now exhausted/
+disproven (A vol-scaled gross, B inverse-vol, C residual momentum, D
+asymmetric eligibility, E concentration). The binding locus is
+`breadth_scaled_gross` itself (roadmap-§6 "gross gate" burned). Honest
+forward paths only: (a) a DELIBERATE, user-authorized redesign of the
+gross/deployment mechanism with eyes open, or (b) forward dhan-paper
+validation + the deferred news/fundamentals data edge. Baseline e745434
+is the robust, scale-stable committed endpoint.
+
+## 7. The 25% "sector cap" was a whole-book exposure bug; vol-targeting is the real edge
+
+### 7.1 Sector-wiring bug invalidated the entire prior research history
+`backtest/engine.py` and live `scripts/signal_today.py` build
+`bt.feeds.PandasData` WITHOUT an industry attribute, and the old
+`_load_sector_map` read that absent attr → all names 'OTHER' → the 25%
+per-sector cap acted as a hard 25% whole-book net-exposure ceiling in
+EVERY backtest and live. Every pre-2026-05-18 result (baseline, A–F,
+sealed +6.13%, "~5% maxDD", all anti-overfit gates) was an artefact of
+this: a ~75%-cash book by accident. Fix: source industry from the PIT
+universe DB enrichment in `_load_sector_map`. **Lesson: when a strategy's
+risk profile seems "too clean," instrument the actual per-rebalance
+deployment before trusting ANY backtest metric — a metadata-wiring bug can
+silently dominate every result for weeks.**
+
+### 7.2 Prior reverts measured on a bugged engine are VOID
+A-family (conditional vol-scaled gross) and B (inverse-vol) were reverted
+based on a 25%-capped book — those conclusions did not transfer. On the
+corrected engine, volatility targeting (Barroso–Santa-Clara 2015;
+Moreira–Muir 2017) is the single most robust improvement: it raised
+held-out sealed return to +12.07% (vs index −1.94%), cut aggregate DD
+20.9%→12.8%, made sub-period Sortinos the most stable ever ([3.15, 2.32]),
+and is SCALE-ROBUST at ₹5L (+9.96%) where naive variants collapsed.
+**Lesson: re-test "burned" ideas after any engine/data correction; a
+learning is only valid on a correct harness.**
+
+### 7.3 Always validate at ≥10× capital
+E (+8.30%@₹50k→+1.43%@₹5L) and G (+1.74%→−9.87%) looked fine at ₹50k and
+were small-capital lumpiness/over-concentration artefacts. H survives
+(+12.07%→+9.96%). Capital-scale robustness is now a mandatory gate before
+believing any ₹50k sealed result.

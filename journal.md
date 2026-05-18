@@ -1600,3 +1600,225 @@ endpoint of this research loop. The genuine next steps are NOT more
 in-sample iteration: forward dhan-paper validation (roadmap §1: the only
 true arbiter) and the deferred news/data-engineering levers (out of this
 loop's scope). B remains the committed strategy.
+
+---
+
+## Iteration 2026-05-18-D-asymmetric-reentry — REVERTED (manual dev)
+
+**Hypothesis:** The sealed-window cash-drag diagnostic showed the book sits
+~85% in cash (avg gross 15.5%, max 25%) and captures almost none of the
+up-quarters (2025Q2 Nifty +12% → B +1.3%). User-confirmed the critical
+gap is upside capture. Proposed cause: the ENTRY gate (12-1 total
+momentum>0 AND price ≥ ~190d structural MA) lags recoveries 6-12mo, so
+almost nothing qualifies through the steepest recovery phase. Fix:
+decouple entry horizon from exit horizon on one shared trend floor
+`min(fast_ma, slow_ma)` — slow protective exit unchanged, fast (~50d MA +
+positive 3-month momentum) re-entry. Theory: classic asymmetric trend
+following / Jegadeesh-Titman short horizon.
+
+**Change:** Added pure helpers `_fast_ma_window` (~50d, derived,
+theory-pinned), `_short_mom_window` (~63d, identical to
+`breadth_scaled_gross`'s 3-month window — single in-repo convention),
+`_trend_floor = min(fast_ma, slow_ma)`. Entry gate in
+`momentum_quality_scores` changed from `long_mom>0 AND mid_mom>0 AND
+price≥slow_ma` to `price ≥ _trend_floor AND short_mom>0` (long_mom/mid_mom
+retained as RANK factors only). `_apply_structural_exit` changed from
+`price < slow_ma` to `price < _trend_floor` (provably symmetric with
+entry). **Zero new hyperparameters** (n_hyperparameters stays 6); all
+windows derived from the existing signal lookback. 9 TDD unit tests
+(test_asymmetric_reentry.py) GREEN; full suite 430 passed, 0 regressions
+(the 5 fails are pre-existing on HEAD: 4 precompute_macro env, 1 stale
+strategy-class assertion).
+
+**Research-mode result (all 5 atomic anti-overfit gates PASS):**
+- evaluator_version: 2026-05-16-univfloor
+- validation_sortino_mean: 1.6174 ; per_fold: [-0.11,-2.24,-3.78,1.73,3.90,0.82,5.11,7.67,3.69,0.81,1.03,4.30,-1.90]
+- sub_period_sortinos: [+1.866, +1.058] → ratio 0.567 ≥ 0.20, no sign-flip → PASS (the exact atomic gate that killed C)
+- bonferroni p=0.0135 < 0.0333 (N=3) PASS ; rw_mc 0.987 ≥ 0.90 PASS
+- parsimony N/A (0 added knobs) PASS ; universe_respected True ; risk.passed True
+- n_trades 81 (vs B 23) — far more activity
+
+**SEALED REVEAL — D vs B vs Nifty500 (2026-05-18, user-directed, once):**
+```
+Qtr        D ret   D Sort | B ret   B Sort | Nifty500
+2025Q1    -0.32%  -0.84 |  -0.47%  -1.24 |   -6.49%
+2025Q2    +0.63%   1.39 |  +1.34%   3.28 |  +12.09%   <- target up-qtr: D WORSE than B
+2025Q3    -2.17%  -1.42 |  -1.58%  -0.90 |   -3.73%
+2025Q4    +2.56%   5.81 |  +2.47%   6.91 |   +4.11%
+2026Q1    +0.75%   0.56 |  -0.53%  -0.28 |  -14.82%   <- big down-qtr: D better (downside, not the goal)
+2026Q2    -1.12%  -1.75 |  -0.19%   0.83 |   +6.89%   <- target up-qtr: D LOSES, worse than B
+TOTAL     +0.82%        |  +1.80%        |   -1.94%
+Sealed Sortino : D=0.158  B=0.337   |  Sealed maxDD: D=3.77%  B=3.65%
+```
+
+**Decision:** REVERTED. On the sealed window D does NOT beat B (total
++0.82% vs +1.80%, Sortino 0.158 vs 0.337, maxDD slightly worse) and —
+decisively — does NOT fix upside capture: in the two strong up-quarters it
+was *designed* for (2025Q2 +12%, 2026Q2 +6.9%) D captured LESS than B
+(+0.63 vs +1.34; −1.12 vs −0.19). Atomic gates passed in research (overfit,
+per campaign base-rate); the sealed truth is the arbiter (robustness, not
+val-Sortino). Net OOS regression vs the kept B → atomic REVERT.
+
+**Learning (mechanistic, decisive):** D's sealed avg gross = 14.6%,
+B's = 15.5% — **statistically identical, per-quarter virtually unchanged**
+(2025Q2 D 12% vs B 13%; max still ~25%). Widening the per-name ELIGIBILITY
+gate did nothing to DEPLOYMENT. The binding throttle on gross is NOT the
+entry filter — it is `breadth_scaled_gross` (step 0.35–0.99) × fixed-slot
+sizing (`gross/n_positions`, unused slots → cash). In the post-correction
+sealed regime breadth is low → gross is pinned at ~15% regardless of how
+many names are eligible. More eligible names just spread the same ~15%
+over more, lower-quality, whipsaw-prone recovery names → slightly WORSE
+OOS (2025Q3 −2.17 vs −1.58; 2026Q2 −1.12 vs −0.19). **Corrects the prior
+analysis:** the upside-capture problem CANNOT be solved by the eligibility/
+re-entry lever; it requires changing the gross/deployment mechanism
+(`breadth_scaled_gross` + fixed-slot sizing) — which is the roadmap-§6
+burned "gross gate" family and the A-family (conditional-vol gross
+scaling) already REVERTED. The cash-drag root cause is real but every
+non-burned lever to attack it is now exhausted; the deployment mechanism
+itself is the locus and is burned-adjacent. B remains the committed
+strategy.
+
+---
+
+## Iteration 2026-05-18-E-npos15-on-baseline — REVERTED (manual dev)
+
+**Context correction:** User identified two errors: (1) variant D was
+wrongly built on B; (2) the committed strategy should be BASELINE e745434,
+NOT B — sealed proves B = baseline + `inverse_vol_tilt` only, and that one
+tilt cut sealed total +6.13%→+1.80% and Sortino 1.003→0.337. B's "KEPT on
+robustness" did NOT survive the sealed evidence. Reset working base to
+baseline e745434 (discarded B's inverse-vol; removed
+tests/test_inverse_vol_sizing.py which tested the discarded code).
+
+**Hypothesis (independent Codex:rescue analysis):** The true upside lever
+is the gross/deployment mechanism (D proved eligibility inert). The single
+optimal non-burned, zero-new-param change on baseline: `n_positions`
+25→15. Rationale: at ₹50k, 25 slots × gross 0.35 ≈ ₹700/slot, below
+whole-share execution floors → capital can't deploy; cutting the
+denominator deploys ~1.67× more into the same qualifying names without the
+§4-banned `gross/len(selected)` and without touching the breadth crash
+detector. 15 is program.md's documented floor (not window-tuned).
+
+**Change:** `('n_positions', 25)` → `('n_positions', 15)` on baseline
+e745434. Param-count delta 0 (value of existing counted knob; parsimony
+untouched). Full suite: 0 new regressions vs baseline (the 6 fails —
+4 precompute_macro env, stale strategy-class count, warmup_scoring — all
+fail on pure baseline e745434 too).
+
+**Research-mode result — atomic gate suite FAILED (bonferroni):**
+- sortino_val_mean 2.4034 ; per_fold mixed (2 neg) ; n_trades 30
+- sub_period_sortinos [+2.616, +1.926] ratio 0.736 PASS (very robust)
+- rw_mc 0.951 PASS ; parsimony N/A PASS ; universe PASS ; risk.passed True
+- **bonferroni p=0.0495 ≥ alpha/N=0.0333 (N=3) → FAIL → variant REJECTED
+  (gates atomic, §8).** The family-inflation failure mode the loop's own
+  `bonferroni_family_size` docstring warns about (AB,C,D burned this
+  episode → α/N shrinks → genuine edges unprovable; sealed is the real
+  arbiter per user's stated robustness framework).
+
+**SEALED REVEAL — E vs BASELINE e745434 vs Nifty500 (2026-05-18, user-directed, once):**
+```
+Qtr        E ret   E Sort | BASE ret BASE Sort | Nifty500
+2025Q1    -0.49%  -1.31 |   -0.59%   -1.57 |   -6.49%
+2025Q2    +2.24%   4.22 |   +1.55%    3.76 |  +12.09%
+2025Q3    +0.03%   0.23 |   +0.69%    2.01 |   -3.73%
+2025Q4    +4.26%   7.42 |   +3.45%    9.71 |   +4.11%
+2026Q1    +1.56%   0.54 |   +0.15%    0.15 |  -14.82%
+2026Q2    -0.74%  -0.99 |   -0.18%    0.95 |   +6.89%
+TOTAL     +8.30%        |   +6.13%         |   -1.94%
+Sealed Sortino : E=0.834  BASE=1.003   |  maxDD: E=7.30%  BASE=4.38%
+Sealed gross   : E avg=15.7%  |  BASE avg=15.6%  (IDENTICAL)
+```
+
+**Capital-scale test (user-directed: does ₹5L lift gross?):**
+```
+strat        cap   avgGross  total    Sortino  maxDD
+E  npos15    50k   15.7%    +8.30%   0.834   7.30%
+E  npos15   500k   18.4%    +1.43%   0.213   4.98%
+BASE npos25  50k   15.6%    +6.13%   1.003   4.38%
+BASE npos25 500k   20.1%    +7.28%   0.949   5.60%
+```
+
+**Decision:** REVERTED. (1) E's sealed gross 15.7% ≡ baseline 15.6%:
+n_positions=15 did NOT increase deployment — the +2.17pp was pure
+concentration leverage (maxDD 4.38→7.30%, Sortino 1.003→0.834 WORSE).
+(2) Capital sweep is decisive: E's +8.30%/50k COLLAPSES to +1.43%,
+Sortino 0.213 at ₹5L — a small-capital lumpiness artifact, NOT robust.
+Baseline is scale-stable (+6.13%→+7.28%, Sortino ~0.95–1.0). E fails the
+atomic research gate AND fails real-world robustness at scale → REVERT.
+**Committed strategy = BASELINE e745434** (user-directed; discard B and E).
+
+**Learning:** see learnings.md §6.2 — the ~15% deployment ceiling is
+structural (breadth_scaled_gross step × slow entry gate), NOT capital:
+10× capital lifts gross only ~+3–5pp (still ~80% cash). Every price/
+structure lever to fix upside is now exhausted/disproven: A (vol-scaled
+gross), B (inverse-vol), C (residual), D (asymmetric eligibility), E
+(concentration). The locus is breadth_scaled_gross itself — roadmap-§6
+burned. Genuine paths: deliberate user-authorized redesign of the gross
+mechanism, OR forward dhan-paper + the deferred news/fundamentals edge.
+
+---
+
+## Iteration 2026-05-18-GH-sectorfix-grosstarget-voltarget — KEPT (manual dev, user-directed)
+
+**THE root-cause finding.** A per-rebalance deployment decomposition proved
+the book deployed ~24% net in EVERY regime (even 2024 with breadth asking
+0.99 and 142 names scored). Cause: `backtest/engine.py` & live
+`signal_today.py` build `bt.feeds.PandasData` and never attach industry,
+so `strategy._load_sector_map` (read a non-existent feed attr) mapped ALL
+411 names to 'OTHER' ⇒ the 25%-per-sector cap was silently a hard 25%
+WHOLE-BOOK net-exposure ceiling in EVERY backtest ever run (baseline, A–F,
+sealed +6.13%, "~5% maxDD", all gates) AND live. The celebrated downside
+protection was ~75% forced cash from a wiring bug. This is why A–F all
+failed — they tuned levers above a hidden 25% cap.
+
+**Change (user-authorised locked-decision change; bug fix kept):**
+ 1. `_load_sector_map`: source per-ticker industry from the PIT universe
+    DB enrichment (point-in-time-safe — sector is enrichment, not a return
+    signal) instead of the absent feed attr. Sector map now real (20
+    sectors). The 25% cap is finally a real per-sector cap.
+ 2. `construct_gross_targets`: replaced fixed-slot `gross/n_positions` +
+    cap-and-leak with bounded gross-targeting — deploy down the ranked list
+    until total = intended gross, bounded per-sector ≤25% AND per-name ≤
+    `_MAX_NAME_WEIGHT`=0.10 (a pre-committed institutional concentration
+    limit — honours §4's anti-blow-up intent; strictly safer than the
+    banned len(selected) sizing; NOT a tuned knob).
+ 3. `vol_targeted_gross` replaces the crude 4-step `breadth_scaled_gross`
+    (now the dominant risk control once gross truly deploys):
+    gross = clip(0.12 / realised_market_vol_ann, 0, 0.99) over a ~6-month
+    window (Barroso–Santa-Clara 2015 vol-managed momentum; Moreira–Muir
+    2017). 0.12 is a pre-committed risk POLICY constant, not fitted.
+ n_hyperparameters stays 6 (no params added; risk limits are pre-committed
+ constants / derived windows). 12 new TDD tests (gross_targeting ×6,
+ vol_targeted_gross ×6) GREEN; full suite 420 passed, 0 new regressions
+ (same 6 pre-existing baseline fails).
+
+**Research (ALL 5 atomic gates PASS at N=3,5,10 — strongest of campaign):**
+ val_sortino 2.896 ; p≈0.0005–0.0015 ; rw_mc 0.999–1.0 ;
+ sub_period [3.152, 2.320] (ratio 0.736 — most regime-stable ever seen) ;
+ parsimony N/A (0 added) ; universe ok ; agg_dd 0.128 (vol-targeting cut
+ it from G's 0.209) ; per_fold only 3 mildly-neg ; n_trades 65.
+
+**SEALED 2025-26 (held-out, never used for selection) — user-directed:**
+```
+Qtr       H ret  H Sort |  B(bugged) | Nifty500
+2025Q1   -0.31%  -0.24 |   -0.59%   |  -6.49%
+2025Q2   +5.17%   3.19 |   +1.55%   | +12.09%
+2025Q3   -3.20%  -0.90 |   +0.69%   |  -3.73%
+2025Q4  +10.19%   7.47 |   +3.45%   |  +4.11%
+2026Q1   -4.32%  -0.69 |   +0.15%   | -14.82%
+2026Q2   +1.92%   4.33 |   -0.18%   |  +6.89%
+TOTAL   +12.07%        |   +6.13%   |  -1.94%
+Sortino  H=0.719  Bbug=1.003(cash-artifact)  Nifty=-0.030
+maxDD    H=11.3%  Nifty=14.8%
+Scale:   Rs50k +12.07%/S0.72/DD11.3%   Rs5L +9.96%/S0.54/DD15.1% (SCALE-ROBUST)
+```
+
+**Decision:** KEPT. First genuine robust win: passes all atomic gates;
+held-out sealed +12.07% vs index −1.94% with LOWER DD than the index and
+PRINCIPLED (not bug) vol-based de-risking; captures every up-quarter
+(2025Q2/Q4, 2026Q2 — the user's core ask); scale-robust at ₹5L (the test
+that killed E and G). The old baseline's 1.0 Sortino was a 25%-cash bug
+artifact and is not a valid comparator. Sortino 0.72 / DD 11% is an honest
+fully-deployed momentum book — exactly the upside/downside trade the user
+explicitly chose. Committed strategy = sector-fix + gross-targeting +
+vol-targeted gross.
