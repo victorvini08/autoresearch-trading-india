@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Daily data update + classify — 09:15 IST (NSE opens 09:15; ingest runs
+  in parallel with the pre-market scan and finishes before the 10:00 IST
+  execution window).
+
+  Extends prices/macro, pulls 24h news, refreshes the earnings calendar,
+  and classifies macro_regime + per-ticker sentiment/events. Idempotent
+  (upsert / LLM-cache short-circuit) — safe to re-run. Full run here (the
+  scheduled cadence) even though the committed momentum strategy does not
+  consume the classifications: keeps the cache warm for the dashboard and
+  any future strategy.
+
+  Install:
+    1. Confirm WorkingDirectory + the uv path below match this machine.
+    2. cp this file to ~/Library/LaunchAgents/
+    3. launchctl load ~/Library/LaunchAgents/com.autoresearch.daily_update.plist
+    4. Verify: launchctl list | grep daily_update
+
+  Logs to state/logs/daily_update.{out,err}.log. Machine clock is IST.
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.autoresearch.daily_update</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/sh</string>
+    <string>-c</string>
+    <string>cd "/Users/aryanmehta/Desktop/My Work/autoresearch-trading-india" &amp;&amp; /opt/homebrew/bin/uv run python -m scripts.daily_update</string>
+  </array>
+
+  <key>StartCalendarInterval</key>
+  <dict>
+    <key>Hour</key>
+    <integer>9</integer>
+    <key>Minute</key>
+    <integer>15</integer>
+  </dict>
+
+  <key>StandardOutPath</key>
+  <string>/Users/aryanmehta/Desktop/My Work/autoresearch-trading-india/state/logs/daily_update.out.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/aryanmehta/Desktop/My Work/autoresearch-trading-india/state/logs/daily_update.err.log</string>
+
+  <key>RunAtLoad</key>
+  <false/>
+</dict>
+</plist>

@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Pre-market scan — 09:00 IST (NSE pre-open 09:00-09:15).
+
+  Checks overnight gaps, India VIX spike, and trading halts before the
+  09:15 daily_update and the 10:00 execution window. Read-only; never
+  places orders.
+
+  Install:
+    1. Confirm WorkingDirectory + the uv path below match this machine.
+    2. cp this file to ~/Library/LaunchAgents/
+    3. launchctl load ~/Library/LaunchAgents/com.autoresearch.premarket_scan.plist
+    4. Verify: launchctl list | grep premarket_scan
+
+  Logs to state/logs/premarket_scan.{out,err}.log. Machine clock is IST.
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.autoresearch.premarket_scan</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/sh</string>
+    <string>-c</string>
+    <string>cd "/Users/aryanmehta/Desktop/My Work/autoresearch-trading-india" &amp;&amp; /opt/homebrew/bin/uv run python -m scripts.premarket_scan</string>
+  </array>
+
+  <key>StartCalendarInterval</key>
+  <dict>
+    <key>Hour</key>
+    <integer>9</integer>
+    <key>Minute</key>
+    <integer>0</integer>
+  </dict>
+
+  <key>StandardOutPath</key>
+  <string>/Users/aryanmehta/Desktop/My Work/autoresearch-trading-india/state/logs/premarket_scan.out.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/aryanmehta/Desktop/My Work/autoresearch-trading-india/state/logs/premarket_scan.err.log</string>
+
+  <key>RunAtLoad</key>
+  <false/>
+</dict>
+</plist>

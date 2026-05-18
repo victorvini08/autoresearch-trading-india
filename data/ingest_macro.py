@@ -460,12 +460,24 @@ def read_macro(series_id: str, start, end):
     return df
 
 
-def ingest_macro(start: date | None = None, end: date | None = None) -> dict[str, int]:
-    """One-call orchestrator: refresh FRED + yfinance indices + FII/DII recent."""
+def ingest_macro(
+    start: date | str | None = None, end: date | str | None = None
+) -> dict[str, int]:
+    """One-call orchestrator: refresh FRED + yfinance indices + FII/DII recent.
+
+    Carried-over orchestrators (daily_update) pass ISO-date *strings*;
+    downstream FRED/yfinance helpers do start.isoformat() / start+timedelta
+    and require `date` objects, so normalise both forms here (same shim
+    contract as data.ingest_prices.ingest_prices).
+    """
     if end is None:
         end = date.today()
+    elif isinstance(end, str):
+        end = date.fromisoformat(end)
     if start is None:
         start = end - timedelta(days=400)
+    elif isinstance(start, str):
+        start = date.fromisoformat(start)
     counts: dict[str, int] = {}
     counts.update(ingest_fred(DB_PATH, start, end))
     counts.update(ingest_yfinance_indices(DB_PATH, start, end))

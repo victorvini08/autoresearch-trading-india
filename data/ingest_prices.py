@@ -383,16 +383,28 @@ def read_prices(ticker: str, start, end):
     return df
 
 
-def ingest_prices(tickers: set[str] | None = None, start: date | None = None, end: date | None = None) -> int:
+def ingest_prices(
+    tickers: set[str] | None = None,
+    start: date | str | None = None,
+    end: date | str | None = None,
+) -> int:
     """Convenience wrapper: ingest the date range into the default `DB_PATH`.
 
     Mirrors the predecessor interface so carried-over orchestrators
-    (`daily_update`, `precompute_macro_cache`) work without per-call path wiring.
+    (`daily_update`, `precompute_macro_cache`) work without per-call path
+    wiring. Those orchestrators pass ISO-date *strings*; ingest_range
+    requires `date` objects, so normalise both forms here (the documented
+    entrypoint) rather than leak a str → `date.weekday()` AttributeError
+    into the day loop.
     """
     if end is None:
         end = date.today()
+    elif isinstance(end, str):
+        end = date.fromisoformat(end)
     if start is None:
         start = end - timedelta(days=2)
+    elif isinstance(start, str):
+        start = date.fromisoformat(start)
     result = ingest_range(DB_PATH, start, end, tickers=tickers)
     return result["rows_written"]
 

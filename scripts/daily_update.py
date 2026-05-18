@@ -29,6 +29,14 @@ import argparse
 import time
 from datetime import date, timedelta
 
+# Standalone orchestrator: source .env so FRED_API_KEY / DHAN_* are
+# present when invoked directly or by the launchd job (matches the same
+# pattern in scripts/backfill_5y.py, scripts/bootstrap_ingest.py,
+# llm/features.py — nothing else loads .env into the process).
+from dotenv import load_dotenv
+
+load_dotenv()
+
 # Phase 3 rewires the data.* package to Indian sources (NSE bhav, Pulse,
 # RBI, NSE filings). The function NAMES below — ingest_earnings,
 # ingest_macro, ingest_prices, get_live_universe — survive verbatim
@@ -116,12 +124,17 @@ def main(argv: list[str] | None = None) -> int:
     n_news = 0
     print(f"      → {n_news} rows ({time.time()-t0:.1f}s)  [Phase 6: news ingest TODO]", flush=True)
 
-    # Step 4: earnings calendar (forward-looking)
+    # Step 4: earnings — same-day news-extraction supplement (real India
+    # ingest_earnings signature is (news_db, earnings_db); it has no
+    # forward date-range / tickers params). The forward-looking NSE
+    # results *calendar* is not implemented for India yet (same
+    # documented-gap status as the Phase-6 news ingest above); the
+    # point-in-time fundamentals/earnings the system actually uses are
+    # refreshed by the NSE results pipeline + Step 4b snapshot_live.
     t0 = time.time()
-    print(f"[4/6] earnings: {today_d}..{earnings_end}", flush=True)
-    n_earn = ingest_earnings(
-        today_d.isoformat(), earnings_end.isoformat(), tickers=tickers,
-    )
+    print(f"[4/6] earnings: news-extraction supplement "
+          f"(forward NSE calendar: TODO India)", flush=True)
+    n_earn = ingest_earnings()
     print(f"      → {n_earn} rows ({time.time()-t0:.1f}s)", flush=True)
 
     # Step 4b: live fundamentals snapshot — PIT-clean by construction
