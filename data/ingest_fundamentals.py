@@ -15,6 +15,7 @@ soft-degrades on missing conditioner fields by design.
 from __future__ import annotations
 
 import logging
+import time
 from dataclasses import dataclass
 from datetime import date, timedelta
 from pathlib import Path
@@ -23,6 +24,7 @@ import duckdb
 
 from data.fundamentals_xbrl import (
     XbrlFacts,
+    _nse_session,
     download_xbrl,
     fetch_nse_results,
     parse_xbrl_facts,
@@ -132,16 +134,33 @@ def _is_financial(ticker: str, industry: str) -> bool:
     return ticker in sa and sa[ticker].sector == "FINANCIAL_SERVICES"
 
 
+# One NSE session reused across ALL symbols + XBRL downloads in a run
+# (the per-symbol fresh-session bootstrap was the dominant slowdown and a
+# throttle magnet). Created lazily on first real fetch; tests monkeypatch
+# _fetch_result_filings so no session/network is created under pytest.
+_SHARED: dict = {}
+_INTER_SYMBOL_DELAY = 0.4  # polite gap between symbols (real network only)
+
+
+def _shared_session():
+    s = _SHARED.get("s")
+    if s is None:
+        s = _SHARED["s"] = _nse_session()
+    return s
+
+
 def _fetch_result_filings(
     ticker: str, start: date, end: date, *, session=None
 ) -> list[RawFiling]:
     """Quarterly result filings for `ticker` whose broadcast date is in
-    [start, end], via NSE's structured results API + its XBRL URL."""
+    [start, end], via NSE's structured results API + its XBRL URL. Reuses
+    a single bootstrapped session across the whole run."""
+    s = session or _shared_session()
     out: list[RawFiling] = []
-    for nr in fetch_nse_results(ticker, session=session):
+    for nr in fetch_nse_results(ticker, session=s):
         if nr.broadcast_date < start or nr.broadcast_date > end:
             continue
-        blob = download_xbrl(nr.xbrl_url, session=session)
+        blob = download_xbrl(nr.xbrl_url, session=s)
         if not blob:
             continue
         facts = parse_xbrl_facts(blob, nr.period_end)
@@ -150,6 +169,7 @@ def _fetch_result_filings(
         out.append(
             RawFiling(ticker, nr.broadcast_date, nr.period_end, facts)
         )
+    time.sleep(_INTER_SYMBOL_DELAY)  # politeness; skipped under mocked tests
     return out
 
 

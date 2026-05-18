@@ -28,6 +28,7 @@ filing's own pre-computed ``DebtEquityRatio`` element when present.
 from __future__ import annotations
 
 import logging
+import time
 from dataclasses import dataclass
 from datetime import date, datetime
 
@@ -282,6 +283,18 @@ def parse_xbrl_facts(
 # ──────────────────────────────────────────────────────────────────────
 
 
+_THROTTLE_STATUSES = frozenset({401, 403, 429, 503})
+_MAX_TRIES = 4
+
+
+def _bootstrap(s: requests.Session) -> None:
+    try:
+        s.get(_NSE_HOME, timeout=15)
+        s.get(_NSE_RESULTS_PAGE, timeout=15)
+    except requests.RequestException as e:  # noqa: BLE001
+        logger.warning("NSE cookie bootstrap failed: %s", e)
+
+
 def _nse_session() -> requests.Session:
     s = requests.Session()
     s.headers.update(
@@ -291,12 +304,36 @@ def _nse_session() -> requests.Session:
             "Referer": _NSE_RESULTS_PAGE,
         }
     )
-    try:
-        s.get(_NSE_HOME, timeout=15)
-        s.get(_NSE_RESULTS_PAGE, timeout=15)
-    except requests.RequestException as e:  # noqa: BLE001
-        logger.warning("NSE cookie bootstrap failed: %s", e)
+    _bootstrap(s)
     return s
+
+
+def _robust_get(
+    s: requests.Session,
+    url: str,
+    *,
+    timeout: int,
+    extra_headers: dict | None = None,
+) -> requests.Response | None:
+    """GET with throttle-aware retry. On a throttle status (NSE rate-limit
+    via Akamai) re-bootstrap the SAME session and back off, instead of
+    silently dropping the symbol (which would thin coverage). Returns the
+    final response (caller checks status) or None on exhausted retries.
+    """
+    last: requests.Response | None = None
+    for attempt in range(_MAX_TRIES):
+        try:
+            last = s.get(url, timeout=timeout, headers=extra_headers)
+        except requests.RequestException as e:  # noqa: BLE001
+            logger.warning("GET %s attempt %d err: %s", url, attempt, e)
+            time.sleep(2 ** attempt)
+            continue
+        if last.status_code in _THROTTLE_STATUSES and attempt < _MAX_TRIES - 1:
+            time.sleep(2 ** attempt + 1)
+            _bootstrap(s)  # refresh cookies on the reused session
+            continue
+        return last
+    return last
 
 
 def fetch_nse_results(
@@ -304,12 +341,18 @@ def fetch_nse_results(
 ) -> list[NseResultRow]:
     """All quarterly result filings for `symbol` (point-in-time rows)."""
     s = session or _nse_session()
+    r = _robust_get(s, _NSE_RESULTS_API.format(symbol=symbol), timeout=30)
+    if r is None or r.status_code != 200:
+        logger.warning(
+            "NSE results fetch %s failed: status=%s",
+            symbol,
+            None if r is None else r.status_code,
+        )
+        return []
     try:
-        r = s.get(_NSE_RESULTS_API.format(symbol=symbol), timeout=30)
-        r.raise_for_status()
         rows = r.json()
-    except (requests.RequestException, ValueError) as e:
-        logger.warning("NSE results fetch %s failed: %s", symbol, e)
+    except ValueError as e:
+        logger.warning("NSE results %s bad json: %s", symbol, e)
         return []
     if not isinstance(rows, list):
         rows = rows.get("data", []) if isinstance(rows, dict) else []
@@ -348,19 +391,18 @@ def download_xbrl(
     if not (url or "").strip():
         return None
     s = session or _nse_session()
-    try:
-        r = s.get(
-            url,
-            timeout=45,
-            headers={"User-Agent": _BROWSER_UA, "Referer": _NSE_HOME},
-        )
-        if r.status_code == 404:
-            return None
-        r.raise_for_status()
-        return r.content
-    except requests.RequestException as e:  # noqa: BLE001
-        logger.warning("xbrl download %s failed: %s", url, e)
+    r = _robust_get(
+        s,
+        url,
+        timeout=45,
+        extra_headers={"User-Agent": _BROWSER_UA, "Referer": _NSE_HOME},
+    )
+    if r is None or r.status_code == 404:
         return None
+    if r.status_code != 200:
+        logger.warning("xbrl download %s status %s", url, r.status_code)
+        return None
+    return r.content
 
 
 __all__ = [
