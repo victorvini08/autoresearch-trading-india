@@ -111,6 +111,14 @@ class XbrlFacts:
     is_consolidated: bool | None
 
 
+class NseFetchError(RuntimeError):
+    """Raised when the NSE results API could not be reached after retries
+    (network/DNS down or hard throttle) — distinct from a successful call
+    that genuinely returned no filings. Lets the backfill tell
+    'this symbol has no data' apart from 'we never actually asked', so a
+    transient outage cannot masquerade as a complete dataset."""
+
+
 @dataclass(frozen=True)
 class NseResultRow:
     symbol: str
@@ -343,12 +351,13 @@ def fetch_nse_results(
     s = session or _nse_session()
     r = _robust_get(s, _NSE_RESULTS_API.format(symbol=symbol), timeout=30)
     if r is None or r.status_code != 200:
-        logger.warning(
-            "NSE results fetch %s failed: status=%s",
-            symbol,
-            None if r is None else r.status_code,
+        # Could not actually reach NSE (network/DNS/throttle) — this is
+        # NOT "no data". Raise so the backfill counts it as incomplete
+        # rather than silently treating the symbol as empty.
+        raise NseFetchError(
+            f"{symbol}: status="
+            f"{None if r is None else r.status_code}"
         )
-        return []
     try:
         rows = r.json()
     except ValueError as e:
@@ -408,6 +417,7 @@ def download_xbrl(
 __all__ = [
     "XbrlFacts",
     "NseResultRow",
+    "NseFetchError",
     "parse_xbrl_facts",
     "fetch_nse_results",
     "download_xbrl",

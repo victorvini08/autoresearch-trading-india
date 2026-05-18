@@ -8,7 +8,7 @@ import duckdb
 import pytest
 
 import data.ingest_fundamentals as ingf
-from data.fundamentals_xbrl import XbrlFacts
+from data.fundamentals_xbrl import NseFetchError, XbrlFacts
 from data.ingest_fundamentals import (
     LookaheadError,
     QuarterFacts,
@@ -74,15 +74,44 @@ def test_ingest_writes_pit_rows_and_quarantines(tmp_path, monkeypatch) -> None:
                            date(2024, 12, 31), good),
         ],
     )
-    n = ingf.ingest_fundamentals(
+    res = ingf.ingest_fundamentals(
         universe_db=Path("ignored"), fundamentals_db=fdb,
         start=date(2024, 1, 1), end=date(2025, 6, 30),
     )
-    assert n == 1  # look-ahead row quarantined
+    assert res["rows"] == 1  # look-ahead row quarantined
+    assert res["ok"] == 1 and res["net_fail"] == 0
     rows = load_fundamentals(fdb, ["ACME"], date(2025, 3, 1))
     assert "ACME" in rows
     assert rows["ACME"].as_of_date == date(2025, 2, 12)  # broadcast, not Q-end
     assert load_fundamentals(fdb, ["ACME"], date(2025, 1, 1)) == {}
+
+
+def test_netfail_counted_and_does_not_abort(tmp_path, monkeypatch) -> None:
+    """A network outage on one symbol must be counted (not silently
+    treated as 'no data') and must not abort the rest of the backfill."""
+    fdb = tmp_path / "f.duckdb"
+    monkeypatch.setattr(
+        ingf, "_pit_universe",
+        lambda *_: {"AAA": "i1", "BBB": "i2"},
+    )
+    monkeypatch.setattr(ingf, "_is_financial", lambda *_: False)
+    good = _facts(100, 20, 18, 600, 300)
+
+    def fake_fetch(ticker, s, e, **k):
+        if ticker == "AAA":
+            raise NseFetchError("AAA: status=None (DNS down)")
+        return [ingf.RawFiling("BBB", date(2025, 2, 12),
+                               date(2024, 12, 31), good)]
+
+    monkeypatch.setattr(ingf, "_fetch_result_filings", fake_fetch)
+    res = ingf.ingest_fundamentals(
+        universe_db=Path("x"), fundamentals_db=fdb,
+        start=date(2024, 1, 1), end=date(2025, 6, 30),
+    )
+    assert res["net_fail"] == 1   # AAA counted as a gap, not no_data
+    assert res["ok"] == 1         # BBB still processed after AAA failed
+    assert res["rows"] == 1
+    assert "BBB" in load_fundamentals(fdb, ["BBB"], date(2025, 3, 1))
 
 
 def test_lookahead_tripwire(tmp_path) -> None:

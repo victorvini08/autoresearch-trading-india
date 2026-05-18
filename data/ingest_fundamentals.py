@@ -23,6 +23,7 @@ from pathlib import Path
 import duckdb
 
 from data.fundamentals_xbrl import (
+    NseFetchError,
     XbrlFacts,
     _nse_session,
     download_xbrl,
@@ -242,15 +243,31 @@ def ingest_fundamentals(
     """
     uni = _pit_universe(universe_db, start, end)
     written = 0
+    ok = no_data = net_fail = other_fail = 0
     fundamentals_db.parent.mkdir(parents=True, exist_ok=True)
     conn = duckdb.connect(str(fundamentals_db))
     try:
         _ensure_schema(conn)
         for sym in sorted(uni):
-            filings = sorted(
-                _fetch_result_filings(sym, start, end),
-                key=lambda f: f.period_end,
-            )
+            try:
+                filings = sorted(
+                    _fetch_result_filings(sym, start, end),
+                    key=lambda f: f.period_end,
+                )
+            except NseFetchError as e:
+                # Network/DNS/throttle — NOT "no data". Count as a gap so
+                # a transient outage cannot masquerade as completeness.
+                net_fail += 1
+                logger.warning("NETFAIL %s: %s", sym, e)
+                continue
+            except Exception as e:  # noqa: BLE001 — one bad symbol must
+                other_fail += 1     # not abort the whole backfill
+                logger.warning("SYMBOL-ERROR %s: %s", sym, e)
+                continue
+            if not filings:
+                no_data += 1
+            else:
+                ok += 1
             history: list[QuarterFacts] = []
             for f in filings:
                 aod = f.broadcast_date or _sebi_fallback(f.period_end)
@@ -278,10 +295,20 @@ def ingest_fundamentals(
                 written += 1
     finally:
         conn.close()
+    result = {
+        "rows": written,
+        "symbols": len(uni),
+        "ok": ok,
+        "no_data": no_data,
+        "net_fail": net_fail,
+        "other_fail": other_fail,
+    }
     logger.info(
-        "fundamentals: wrote %d rows for %d names", written, len(uni)
+        "fundamentals: wrote %d rows | ok=%d no_data=%d net_fail=%d "
+        "other_fail=%d of %d symbols",
+        written, ok, no_data, net_fail, other_fail, len(uni),
     )
-    return written
+    return result
 
 
 def snapshot_live(
@@ -314,7 +341,15 @@ def snapshot_live(
                     for r in load_universe(universe_db, snaps[-1])
                 }
         for sym in sorted(uni):
-            for f in _fetch_result_filings(sym, on_date, on_date):
+            try:
+                filings = _fetch_result_filings(sym, on_date, on_date)
+            except NseFetchError as e:
+                logger.warning("NETFAIL (live) %s: %s", sym, e)
+                continue
+            except Exception as e:  # noqa: BLE001 — resilient live step
+                logger.warning("SYMBOL-ERROR (live) %s: %s", sym, e)
+                continue
+            for f in filings:
                 if (sym, f.period_end) in existing:
                     continue
                 ratios = derive_ttm(
@@ -415,7 +450,7 @@ if __name__ == "__main__":
     a = ap.parse_args()
     logging.basicConfig(level=logging.INFO)
     fdb = Path(a.fundamentals_db)
-    ingest_fundamentals(
+    res = ingest_fundamentals(
         Path(a.universe_db),
         fdb,
         start=date.fromisoformat(a.start),
@@ -426,4 +461,21 @@ if __name__ == "__main__":
     except LookaheadError as e:
         print(f"LOOK-AHEAD TRIPWIRE FIRED: {e}", file=sys.stderr)
         sys.exit(1)
-    print(coverage_report(fdb))
+    print(f"summary: {res}")
+    print(f"coverage: {coverage_report(fdb)}")
+
+    # Completeness guard: a transient network/DNS outage during a long
+    # backfill must NOT pass silently as a complete dataset (it would
+    # poison the backtest). If a meaningful fraction of symbols could not
+    # be reached, exit non-zero — the PK is idempotent so a re-run on a
+    # stable connection safely fills the gaps.
+    gap = res["net_fail"] + res["other_fail"]
+    if res["symbols"] and gap / res["symbols"] > 0.02:
+        print(
+            f"INCOMPLETE: {gap}/{res['symbols']} symbols unreachable "
+            f"(net_fail={res['net_fail']}, other={res['other_fail']}). "
+            f"Re-run on a stable connection — PK is idempotent, the "
+            f"good rows are kept and gaps fill in.",
+            file=sys.stderr,
+        )
+        sys.exit(2)

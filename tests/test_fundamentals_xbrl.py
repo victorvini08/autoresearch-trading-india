@@ -11,8 +11,14 @@ from __future__ import annotations
 from datetime import date
 from pathlib import Path
 
+import pytest
+
 import data.fundamentals_xbrl as fx
-from data.fundamentals_xbrl import NseResultRow, parse_xbrl_facts
+from data.fundamentals_xbrl import (
+    NseFetchError,
+    NseResultRow,
+    parse_xbrl_facts,
+)
 
 _FIX = Path(__file__).parent / "fixtures" / "nse_result_tcs.xml"
 _PERIOD_END = date(2024, 12, 31)
@@ -85,3 +91,26 @@ def test_fetch_nse_results_parses_rows(monkeypatch) -> None:
     assert r.broadcast_date == date(2025, 1, 16)
     assert r.is_consolidated is True
     assert r.xbrl_url.endswith(".xml")
+
+
+def test_fetch_nse_results_raises_when_unreachable(monkeypatch) -> None:
+    """A persistent throttle/network failure must raise NseFetchError
+    (so the backfill counts it as a gap), NOT return [] (which would look
+    like the symbol genuinely has no filings)."""
+    monkeypatch.setattr(fx.time, "sleep", lambda *_a, **_k: None)
+
+    class _Resp:
+        status_code = 503
+
+        def raise_for_status(self) -> None: ...
+
+        def json(self): return []
+
+    class _S:
+        headers: dict = {}
+
+        def get(self, *a, **k): return _Resp()
+
+    monkeypatch.setattr(fx, "_nse_session", lambda: _S())
+    with pytest.raises(NseFetchError):
+        fx.fetch_nse_results("ANYSYM")

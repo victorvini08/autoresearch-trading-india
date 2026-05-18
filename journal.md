@@ -1920,3 +1920,23 @@ design). Lesson: real-data fixture tests are mandatory for any external
 data source — mock-only tests gave false confidence here. Spec §2
 amended with the corrected source + limitations. Strategy still untouched
 (Task 8 deferred).
+
+**Backfill run #1 (real, 2026-05-18): NOT a crash — silent network gap.**
+Run completed all 486 names but the laptop's DNS/network dropped ~midway
+(`Failed to resolve www.nseindia.com [Errno 8]`); every symbol after the
+drop (O→Z) soft-degraded to no-data. Result: 2605 distinct PIT rows /
+271 symbols (~A–N), tripwire PASS, lag distribution textbook (2267/2605
+at 20–50d). The "4977" the run printed = insert-*attempts* (NSE returns
+standalone+consolidated/revised rows per quarter that collapse on the
+(ticker,period_end) PK — expected). Two real findings: (1) NSE
+corporates-financial-results horizon ≈ 2022+ → **no pre-2022
+fundamentals** (early backtest window PEAD soft-degrades); (2) a
+transient network outage produced a silently-incomplete dataset that
+still printed "success" — dangerous for a backtest input. Fix shipped:
+`NseFetchError` distinguishes "unreachable" from "genuinely no filings";
+per-symbol fault isolation (one bad symbol can't abort the run); a
+completeness guard (`>2%` symbols unreachable → non-zero exit with a
+re-run instruction); single reused NSE session + throttle-aware retry
+(faster, fewer drops). Idempotent PK ⇒ re-run on a stable connection
+fills the O–Z gap safely. 31 pipeline tests green. Strategy still
+untouched (Task 8 deferred).
