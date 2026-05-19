@@ -2362,3 +2362,32 @@ working, not failure.
 **Learning:** Sortino changed from 3.202 to 2.659 (-0.543). Aggregate DD was 8.2% versus previous kept 9.9%; negative folds were 3/13; trades=89. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 2.659 did not improve on prev 3.202108207368932 | anti-overfit FAILED: sub_period_stationarity(signed min/max Sortino ratio across 2 sub-periods = 0.1891 (need ≥ 0.20); sub-periods = [+3.543, +0.670]).
 
 ---
+
+## Iteration 2026-05-19-fed1931 — REVERTED
+
+**Hypothesis:** Changing the re-selection cadence from biweekly to monthly (existing wired param `rebalance_period_weeks` 2→4, no new knob), while leaving the daily structural-MA exit untouched, will improve real-world robustness — lower DP-cost turnover at realistic scale and less choppy-market re-entry whipsaw in the weak/bear sub-periods — without sacrificing downside protection, because the dominant cost (₹14.75/scrip/sell DP) and the reversal-prone book churn both scale with rebalance frequency, whereas risk-off responsiveness is owned by the daily structural exit (which runs on every non-rebalance bar and is therefore unaffected).
+
+**Change:** Set the existing, already-wired `rebalance_period_weeks` parameter default from 2 (biweekly) to 4 (monthly) — a thesis-level cadence change (not a composite/construction knob perturbation, the saturated/exhausted family) that halves the costly, reversal-prone full re-selection turnover while the daily structural-MA exit preserves all downside de-risking responsiveness; module/comment docstrings updated to reflect the monthly rationale, no other logic touched.
+
+**Decision:** REVERTED — sortino 2.707 did not improve on prev 3.202108207368932
+
+**Result:**
+- evaluator_version: 2026-05-16-univfloor
+- validation_sortino_mean: 2.7071117736882497
+- validation_folds: 13
+- per_fold_sortinos: [3.083, -0.8532, 0.776, 3.2573, 9.7841, 1.5067, 2.2925, 4.751, 3.2805, 1.2406, 1.5754, 3.5208, 0.9779]
+- calmar_mean: 4.335741630850761
+- hit_rate_mean: 0.41730769230769227
+- profit_factor_mean: 13.378129425152423
+- trade_count_total: 53
+- aggregate_max_dd: 0.1127710801411854
+- worst_fold_max_dd: 0.11277108014118539
+- max_position_frac_peak: 0.10222678367657065
+- lower_quartile_fold_calmar: 2.251389431255973
+- n_negative_folds: 1/13
+- risk.passed: True
+- risk.violations: []
+
+**Learning:** Sortino changed from 3.202 to 2.707 (-0.495). Aggregate DD was 11.3% versus previous kept 9.9%; negative folds were 1/13; trades=53. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 2.707 did not improve on prev 3.202108207368932.
+
+---
