@@ -2565,3 +2565,32 @@ working, not failure.
 **Learning:** Sortino changed from 3.308 to 3.138 (-0.170). Aggregate DD was 16.0% versus previous kept 12.9%; negative folds were 2/13; trades=60. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 3.138 did not improve on prev 3.3082196634381384.
 
 ---
+
+## Iteration 2026-05-19-defaa42 — REVERTED
+
+**Hypothesis:** Multiplying the committed dual-horizon vol-targeted gross by a parameter-free, one-sided (≤1) absolute-momentum trend dampener — the clipped ratio of the active-universe equal-weight return index to its own structural-MA — will raise the worst disjoint sub-period Sortino and not regress aggregate drawdown, because the kept vol-target is explicitly blind to a slow LOW-volatility directional bleed (low realised vol keeps gross high while price grinds down), the one residual weakness the last KEEP itself named, and a price-vs-trend gate (Faber 2007; Moskowitz-Ooi-Pedersen 2012; Hurst-Ooi-Pedersen 2017) fires cleanly there while being byte-inert (factor clipped to 1.0) in healthy up-trends so the strong folds and upside are untouched.
+
+**Change:** Added a pure, deterministic `_market_trend_dampener` (equal-weight cumulative-return index of the active-universe cross-section vs its own `_structural_ma_window` MA, clipped to [0,1] so it can only reduce gross, never lever, and is exactly 1.0 — inert — whenever the index is at/above its trend or the sample is thin), and multiplied the existing vol-targeted gross by it in `next()`; no new strategy param or tunable literal (MA window is the shared structural definition, the 20-series floor reuses the existing convention), so it is parsimony-neutral, turnover-neutral, and strictly one-sided downside/worst-sub-period protection orthogonal to the realised-vol and structural-exit channels.
+
+**Decision:** REVERTED — sortino 3.297 did not improve on prev 3.3082196634381384
+
+**Result:**
+- evaluator_version: 2026-05-16-univfloor
+- validation_sortino_mean: 3.2971798905960137
+- validation_folds: 13
+- per_fold_sortinos: [0.3151, -0.6389, -1.1215, 10.173, 8.4704, 3.1183, 3.5343, 6.1885, 3.2613, 1.0461, 2.188, 4.6584, 1.6704]
+- calmar_mean: 6.030611733052793
+- hit_rate_mean: 0.44187479187479184
+- profit_factor_mean: 3.73470815981989
+- trade_count_total: 56
+- aggregate_max_dd: 0.12857412569792595
+- worst_fold_max_dd: 0.09721917782447476
+- max_position_frac_peak: 0.10623395813071627
+- lower_quartile_fold_calmar: 1.449220470856095
+- n_negative_folds: 2/13
+- risk.passed: True
+- risk.violations: []
+
+**Learning:** Sortino changed from 3.308 to 3.297 (-0.011). Aggregate DD was 12.9% versus previous kept 12.9%; negative folds were 2/13; trades=56. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 3.297 did not improve on prev 3.3082196634381384.
+
+---
