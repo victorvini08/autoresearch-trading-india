@@ -2275,3 +2275,32 @@ working, not failure.
 **Learning:** Sortino changed from 2.604 to 2.615 (+0.011). Aggregate DD was 12.3% versus previous kept 6.3%; negative folds were 4/13; trades=129. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: anti-overfit FAILED: universe_respect(variant traded tickers outside the point-in-time universe — survivorship/look-ahead reintroduced (hard reject)) · bonferroni(p=1.0000 >= alpha/N=0.1000) · random_walk_mc(only 0.00% percentile vs RW null).
 
 ---
+
+## Iteration 2026-05-19-9dc8304 — KEPT
+
+**Hypothesis:** Scaling the already-committed volatility target by the realised volatility of the *qualified momentum book actually held* (with a robust fall-back to the broad active-universe proxy when the qualified pool is thin) instead of by the broad market cross-section will improve worst disjoint sub-period Sortino and reduce aggregate drawdown, because momentum-specific volatility — not market volatility — is the documented precursor of momentum crashes (Daniel-Moskowitz), so a strategy-referenced vol-target de-risks earlier in exactly the bear/turbulent regimes that drive the worst sub-period.
+
+**Change:** Refined `vol_targeted_gross` to measure realised volatility from the equal-weight return of the ranked momentum-quality priority names (the book we actually deploy) when ≥20 of them are available, falling back to the existing broad active-universe cross-section (then 0.75) so thin-bear estimation never regresses — a parameter-free Barroso-Santa-Clara/Daniel-Moskowitz refinement (same `_ANNUAL_VOL_TARGET`, same window, same 20-name floor, no new knob, no extra turnover, strictly PIT since `priority` ⊂ active universe).
+
+**Decision:** KEPT — sortino 3.202 > prev 2.6040939804723893, agg_dd 9.9%, catastrophe gate clear, anti-overfit gates passed
+
+**Result:**
+- evaluator_version: 2026-05-16-univfloor
+- validation_sortino_mean: 3.202108207368932
+- validation_folds: 13
+- per_fold_sortinos: [0.1072, 0.1282, -0.2144, 9.3623, 7.7654, 1.4358, 3.2517, 6.2062, 3.9885, 1.5033, 1.8698, 4.7594, 1.4639]
+- calmar_mean: 5.913951017959931
+- hit_rate_mean: 0.4571428571428571
+- profit_factor_mean: 7.964018206334548
+- trade_count_total: 60
+- aggregate_max_dd: 0.09861093207769735
+- worst_fold_max_dd: 0.09648485716704089
+- max_position_frac_peak: 0.10611195339109662
+- lower_quartile_fold_calmar: 1.2611260510980515
+- n_negative_folds: 1/13
+- risk.passed: True
+- risk.violations: []
+
+**Learning:** Sortino changed from 2.604 to 3.202 (+0.598). Aggregate DD was 9.9% versus previous kept 6.3%; negative folds were 1/13; trades=60. Keep compounding on this change, but future iterations should still explain whether the gain came from better return, lower downside, or fewer fragile folds. Decision reason: sortino 3.202 > prev 2.6040939804723893, agg_dd 9.9%, catastrophe gate clear, anti-overfit gates passed.
+
+---

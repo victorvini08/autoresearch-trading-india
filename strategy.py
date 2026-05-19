@@ -349,24 +349,16 @@ _ANNUAL_VOL_TARGET = 0.12
 _TRADING_DAYS = 252
 
 
-def vol_targeted_gross(
-    close_by_ticker: dict[str, list[float]], lookback_days: int
-) -> float:
-    '''Volatility-targeted gross exposure (replaces the crude breadth step).
+def _annualised_realised_vol(
+    close_by_ticker: dict[str, list[float]], vol_lb: int
+) -> float | None:
+    '''Annualised std of the equal-weight cross-sectional daily return.
 
-    gross = clip(_ANNUAL_VOL_TARGET / realised_market_vol_annualised,
-                 0.0, 0.99)
-
-    realised vol = std of the equal-weight cross-sectional daily return
-    (the market proxy) over a ~6-month window (Barroso-Santa-Clara horizon,
-    derived from the signal lookback — not a new tunable knob), annualised
-    by sqrt(252). Long-only, never levered (cap 0.99); fully de-risks as
-    realised vol explodes (momentum crashes happen in high-vol panics —
-    Daniel-Moskowitz), and runs ~fully invested in calm trends. Pure and
-    deterministic. Falls back to 0.75 (the old neutral default) when the
-    cross-section is too thin to estimate vol.
+    Pure/deterministic. Returns None when fewer than 20 usable series are
+    available (caller decides the fallback), so the same robust 20-name
+    floor is enforced whether the input is the held book or the broad
+    active-universe proxy — no new tunable knob is introduced.
     '''
-    vol_lb = min(126, max(63, int(lookback_days) // 2))  # ~6 months
     rets = []
     for raw in close_by_ticker.values():
         if len(raw) < vol_lb + 1:
@@ -376,9 +368,48 @@ def vol_targeted_gross(
             continue
         rets.append(c[1:] / c[:-1] - 1.0)
     if len(rets) < 20:
-        return 0.75
+        return None
     mkt = np.mean(np.asarray(rets, dtype=float), axis=0)
-    rv = float(np.std(mkt)) * float(np.sqrt(_TRADING_DAYS))
+    return float(np.std(mkt)) * float(np.sqrt(_TRADING_DAYS))
+
+
+def vol_targeted_gross(
+    close_by_ticker: dict[str, list[float]],
+    lookback_days: int,
+    book_close_by_ticker: dict[str, list[float]] | None = None,
+) -> float:
+    '''Volatility-targeted gross exposure, referenced to the HELD book.
+
+    gross = clip(_ANNUAL_VOL_TARGET / realised_vol_annualised, 0.0, 0.99)
+
+    Refinement (this iteration): the realised-vol risk input is the
+    equal-weight daily return of the *qualified momentum-quality names we
+    actually deploy* (``book_close_by_ticker``) when ≥ 20 of them have
+    enough history, instead of the broad active-universe cross-section.
+    Daniel-Moskowitz (2016) show momentum crashes are foreshadowed by the
+    rising volatility of the momentum portfolio itself — NOT by market
+    volatility — so scaling by the strategy's own realised vol
+    (Barroso-Santa-Clara: target the volatility of the book you run) makes
+    the overlay de-risk earlier in exactly the turbulent/bear regimes that
+    drive the worst disjoint sub-period.
+
+    Robust fall-back chain (no thin-bear regression): held-book proxy if
+    ≥ 20 usable series -> else the broad active-universe cross-section
+    (the prior committed behaviour) -> else 0.75 (the old neutral default).
+    Same window, same _ANNUAL_VOL_TARGET, same 20-name floor: no new
+    hyperparameter, long-only, never levered (cap 0.99), turnover-neutral
+    (changes only the gross LEVEL, not which names are held). Pure and
+    deterministic.
+    '''
+    vol_lb = min(126, max(63, int(lookback_days) // 2))  # ~6 months
+
+    rv: float | None = None
+    if book_close_by_ticker:
+        rv = _annualised_realised_vol(book_close_by_ticker, vol_lb)
+    if rv is None:
+        rv = _annualised_realised_vol(close_by_ticker, vol_lb)
+    if rv is None:
+        return 0.75
     if not np.isfinite(rv) or rv <= 1e-9:
         return 0.99
     return float(np.clip(_ANNUAL_VOL_TARGET / rv, 0.0, 0.99))
@@ -711,7 +742,25 @@ class IndiaMomentumQualityCarry(bt.Strategy):
         new_candidates = [t for t, _ in ranked if t not in held]
         priority = retained_priority + new_candidates
 
-        gross = vol_targeted_gross(close_by_ticker, int(self.p.beta_window))
+        # Volatility-target referenced to the HELD momentum book: the
+        # priority names ARE the qualified momentum-quality pool the
+        # construction deploys (all ⊂ close_by_ticker ⊂ active universe —
+        # strictly PIT, no off-universe leak). Daniel-Moskowitz: momentum
+        # crashes are foreshadowed by the momentum book's OWN rising vol,
+        # not market vol — so scaling by the strategy's realised vol
+        # de-risks earlier in the bear/turbulent sub-periods. Falls back
+        # to the broad cross-section then 0.75 when the qualified pool is
+        # thin, so a deep-bear thin sample never regresses behaviour.
+        book_close_by_ticker = {
+            t: close_by_ticker[t]
+            for t in priority
+            if t in close_by_ticker
+        }
+        gross = vol_targeted_gross(
+            close_by_ticker,
+            int(self.p.beta_window),
+            book_close_by_ticker,
+        )
         sector_of = {
             t: (self._sector_map[t].sector
                 if self._sector_map.get(t) else 'OTHER')
