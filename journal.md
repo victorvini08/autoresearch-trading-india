@@ -2826,3 +2826,32 @@ working, not failure.
 **Learning:** Sortino changed from 3.493 to 3.254 (-0.239). Aggregate DD was 11.3% versus previous kept 12.2%; negative folds were 3/13; trades=61. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 3.254 did not improve on prev 3.4927787451086587.
 
 ---
+
+## Iteration 2026-05-19-a9da79f — REVERTED
+
+**Hypothesis:** Selecting the momentum-quality book by the MAXIMIN (worst single quality axis) of its six path/momentum percentile ranks instead of their additive sum — keeping the +0.25 ADV liquidity tilt unchanged — will raise the worst disjoint sub-period Sortino without regressing aggregate drawdown or sell-count/DP turnover, because an additive composite lets a name rank highly on one extreme axis (e.g. explosive long_mom but a deep drawdown/high downside-vol path) and those one-dimensional names are exactly the crowded, fragile momentum that unwinds in the bear/transition folds setting the negative sub-periods, whereas requiring a name to be uniformly good on its weakest axis is a regime-stationary robustness selection that directly optimizes the worst-case objective.
+
+**Change:** In momentum_quality_scores I replaced the equal-weight rank-SUM of the six quality components with their MIN (a parameter-free maximin/conjunctive robust-selection operator) while leaving the entry qualification, the +0.25*adv_rank liquidity tilt, every component definition, the bounded gross-targeting construction, the dual-horizon vol-target and the market-regime gate untouched — a change to the selection AGGREGATION operator (sum→min), structurally distinct from every reverted attempt (all of which added or transformed an input), with no new tunable hyperparameter.
+
+**Decision:** REVERTED — sortino 3.051 did not improve on prev 3.4927787451086587 | anti-overfit FAILED: sub_period_stationarity(signed min/max Sortino ratio across 2 sub-periods = 0.1722 (need ≥ 0.20); sub-periods = [+4.093, +0.705])
+
+**Result:**
+- evaluator_version: 2026-05-16-univfloor
+- validation_sortino_mean: 3.050513929767698
+- validation_folds: 13
+- per_fold_sortinos: [-0.2873, 0.3479, 0.6602, 10.0155, 10.1492, 1.1769, 5.2376, 6.3735, 3.1634, -0.7027, 0.2291, 3.1706, 0.1228]
+- calmar_mean: 5.1004596985051815
+- hit_rate_mean: 0.39587912087912086
+- profit_factor_mean: 2.3422467878952413
+- trade_count_total: 67
+- aggregate_max_dd: 0.18339557690642924
+- worst_fold_max_dd: 0.12443943877945741
+- max_position_frac_peak: 0.11035132476643164
+- lower_quartile_fold_calmar: 0.3068849161754887
+- n_negative_folds: 2/13
+- risk.passed: True
+- risk.violations: []
+
+**Learning:** Sortino changed from 3.493 to 3.051 (-0.442). Aggregate DD was 18.3% versus previous kept 12.2%; negative folds were 2/13; trades=67. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 3.051 did not improve on prev 3.4927787451086587 | anti-overfit FAILED: sub_period_stationarity(signed min/max Sortino ratio across 2 sub-periods = 0.1722 (need ≥ 0.20); sub-periods = [+4.093, +0.705]).
+
+---
