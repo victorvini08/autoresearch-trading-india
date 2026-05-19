@@ -2797,3 +2797,32 @@ working, not failure.
 **Learning:** Sortino changed from 3.493 to 2.134 (-1.358). Aggregate DD was 15.9% versus previous kept 12.2%; negative folds were 4/13; trades=78. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 2.134 did not improve on prev 3.4927787451086587.
 
 ---
+
+## Iteration 2026-05-19-d3af389 — REVERTED
+
+**Hypothesis:** Adding a parameter-free cross-sectional lottery-demand (MAX-effect) penalty rank — preferring momentum-quality names whose pre-rank path was NOT built on extreme single-day up-jumps — to the existing equal-unit-weight selection rank-sum will raise the worst disjoint sub-period Sortino without regressing drawdown or turnover, because the Bali–Cakici–Whitelaw (2011) MAX anomaly identifies speculative, lottery-like momentum names that reverse hardest in momentum unwinds (the bear/transition folds that set the negative sub-periods) and is structurally orthogonal to the path-dispersion components (downside_vol, max_drawdown measure choppy declines, not single-day extreme positive jumps).
+
+**Change:** In momentum_quality_scores I add a single parameter-free cross-sectional rank component max_ret_rank (the per-name maximum single daily return over the existing lookback window, lower-is-better) into the selection rank-sum with the same unit weight as the other six quality components — a theory-grounded selection-quality change (MAX effect) that down-ranks crash-prone lottery momentum, distinct from the exhausted gross-overlay/per-name-sizing/residual/sector-demean families and from the existing dispersion screens, with no new tunable knob, no new import, and no change to the order_target_percent contract.
+
+**Decision:** REVERTED — sortino 3.254 did not improve on prev 3.4927787451086587
+
+**Result:**
+- evaluator_version: 2026-05-16-univfloor
+- validation_sortino_mean: 3.2539036834312665
+- validation_folds: 13
+- per_fold_sortinos: [0.0347, -0.3178, -0.8892, 11.6846, 7.3042, 3.8356, 5.6852, 6.2042, 2.8105, 0.8183, 2.099, 2.7473, 0.2842]
+- calmar_mean: 5.058992384840069
+- hit_rate_mean: 0.42793040293040285
+- profit_factor_mean: 3.0608723181270503
+- trade_count_total: 61
+- aggregate_max_dd: 0.11297646683204075
+- worst_fold_max_dd: 0.09627758248212548
+- max_position_frac_peak: 0.1040257874715908
+- lower_quartile_fold_calmar: 0.14788781163066864
+- n_negative_folds: 3/13
+- risk.passed: True
+- risk.violations: []
+
+**Learning:** Sortino changed from 3.493 to 3.254 (-0.239). Aggregate DD was 11.3% versus previous kept 12.2%; negative folds were 3/13; trades=61. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 3.254 did not improve on prev 3.4927787451086587.
+
+---
