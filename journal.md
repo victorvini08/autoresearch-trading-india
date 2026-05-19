@@ -2168,3 +2168,36 @@ fetch fix — the fundamentals pipeline is now correct and current
 (2026-03), valuable regardless of the strategy verdict. `strategy.py`
 restored to committed; `tests/test_strategy_earn_tilt.py` kept as a
 SKIPPED contract; suite green (6 pre-existing baseline failures only).
+
+---
+
+## 2026-05-19 — Experiment: weekly vs biweekly rebalance — WEEKLY REJECTED; rebalance_period_weeks wired (behaviour-neutral)
+
+**Trigger:** user question — would weekly rebalancing help, esp. in
+losing markets. Tested on the `prepare.py research` walk-forward only
+(sealed set deliberately untouched — it is one-shot and already spent;
+iterating cadence on it would be overfitting).
+
+**Finding (code):** `rebalance_period_weeks` was a DEAD param —
+`_is_rebalance_today` hardcoded biweekly as `iso_week % 2`. Generalised
+to `iso_week % period` (period=`rebalance_period_weeks`); period=2 is
+behaviour-identical to the prior code (committed default unchanged —
+verified: the biweekly arm reproduced the exact committed baseline
+valSortino=2.8964 / worst_sub=2.32 / dd=0.1284). period=1 ⇒ weekly.
+
+**A/B (research, weekly=1 vs biweekly=2):** weekly is decisively worse on
+every robustness axis — valSortino 2.896→2.689 (−0.21), worst
+sub-period 2.32→2.06 (−0.26), aggregate drawdown 0.1284→0.2099
+(~63% DEEPER), trades 65→81 (~25% more DP/STT/slippage), and weekly
+FAILS the atomic anti-overfit gates outright (perm p=1.0, RW-MC pct=0.0,
+universe_respected=False) whereas biweekly passes. Faster rebalancing of
+a slow 12-1 momentum signal just churns cost and risk for no edge —
+exactly the prior; and it does NOT help losing markets (drawdown got
+worse, not better).
+
+**Decision:** biweekly STANDS (committed unchanged). The dead-param
+wiring is KEPT as a behaviour-neutral correctness fix (the param now does
+what it claims; default=2 unchanged). Do NOT re-propose weekly. Shorting
+analysed separately (see chat): structurally impossible under locked
+CNC/no-F&O, inherently not low-risk, momentum+short crashes — rejected;
+the existing vol-target-to-cash IS the safe downside tool.

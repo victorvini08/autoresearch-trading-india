@@ -541,13 +541,18 @@ class IndiaMomentumQualityCarry(bt.Strategy):
         if today.weekday() != self.p.rebalance_weekday:
             return False
         iso_week = today.isocalendar().week
+        # Honour rebalance_period_weeks (previously a dead param —
+        # biweekly was hardcoded as iso_week % 2). period=2 is
+        # behaviour-identical to the prior code (committed default
+        # unchanged); period=1 ⇒ every rebalance_weekday (weekly).
+        period = max(1, int(self.p.rebalance_period_weeks))
         if not self._week_parity_initialized:
             self._week_parity_initialized = True
             object.__setattr__(
-                self.params, 'rebalance_week_parity', iso_week % 2
+                self.params, 'rebalance_week_parity', iso_week % period
             )
             return True
-        return iso_week % 2 == self.p.rebalance_week_parity
+        return iso_week % period == self.p.rebalance_week_parity
 
     def _held_positions(self) -> dict[str, float]:
         held = {
