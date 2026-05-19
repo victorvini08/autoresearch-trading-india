@@ -2449,3 +2449,32 @@ working, not failure.
 **Learning:** Sortino changed from 3.289 to 3.175 (-0.114). Aggregate DD was 12.8% versus previous kept 9.6%; negative folds were 2/13; trades=73. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 3.175 did not improve on prev 3.2888808654214845.
 
 ---
+
+## Iteration 2026-05-19-748fe86 — REVERTED
+
+**Hypothesis:** Multiplying the committed dual-horizon vol-targeted gross by a parameter-free, one-sided stress factor that cuts exposure when the held momentum book's OWN realised peak-to-trough drawdown over the existing ~6-month window grows large relative to its same-window volatility will raise the worst disjoint sub-period Sortino and not regress aggregate drawdown or turnover, because Daniel-Moskowitz (2016) show momentum crashes follow sustained bear/panic states in which the momentum portfolio behaves like a short call and accumulates a large own-drawdown — a path/state variable that is orthogonal to volatility and is precisely the grinding-bear regime (modest daily vol, large cumulative loss) that the existing vol-magnitude-only scaler is structurally blind to and that coincides with the strategy's weakest folds.
+
+**Change:** Added a pure, deterministic, parameter-free helper that resolves the same robust source chain as the kept vol estimator (held book → broad cross-section → neutral) and returns clip(window_vol / max(book_drawdown, window_vol), 0, 1) — exactly 1.0 in calm uptrends (drawdown tiny ⇒ byte-equivalent, upside preserved) and < 1 only when the book's own drawdown exceeds its window volatility — then multiply the existing dual-horizon vol-targeted gross by this factor so gross can only ever fall (strictly weakly more defensive, turnover-neutral, no new tunable knob, the kept slow/fast estimator path left exactly intact).
+
+**Decision:** REVERTED — sortino 3.289 did not improve on prev 3.2888808654214845
+
+**Result:**
+- evaluator_version: 2026-05-16-univfloor
+- validation_sortino_mean: 3.2888808654214845
+- validation_folds: 13
+- per_fold_sortinos: [0.3153, 0.1831, -0.2829, 10.1361, 8.2572, 1.6005, 3.5311, 6.1886, 3.2637, 1.0461, 2.188, 4.6584, 1.6704]
+- calmar_mean: 5.888060363935045
+- hit_rate_mean: 0.4283216783216784
+- profit_factor_mean: 3.407823210651147
+- trade_count_total: 56
+- aggregate_max_dd: 0.09638467816807504
+- worst_fold_max_dd: 0.0963846781680749
+- max_position_frac_peak: 0.10618164006890835
+- lower_quartile_fold_calmar: 1.449220470856095
+- n_negative_folds: 1/13
+- risk.passed: True
+- risk.violations: []
+
+**Learning:** Sortino changed from 3.289 to 3.289 (+0.000). Aggregate DD was 9.6% versus previous kept 9.6%; negative folds were 1/13; trades=56. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 3.289 did not improve on prev 3.2888808654214845.
+
+---
