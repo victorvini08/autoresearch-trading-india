@@ -2681,3 +2681,32 @@ working, not failure.
 **Learning:** Sortino changed from 3.493 to 3.280 (-0.212). Aggregate DD was 13.8% versus previous kept 12.2%; negative folds were 2/13; trades=55. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 3.280 did not improve on prev 3.4927787451086587.
 
 ---
+
+## Iteration 2026-05-19-f8656b4 — REVERTED
+
+**Hypothesis:** Adding a parameter-free Da-Gurun-Warachka (2014) frog-in-the-pan information-discreteness rank — preferring momentum-quality names whose pre-skip trend was built from many small same-direction daily moves (continuous information) over a few discrete jumps — as an equal-weight term in the cross-sectional momentum-quality score will raise the worst disjoint sub-period Sortino without regressing the strong folds or aggregate drawdown, because the negative folds are a momentum-crash signature concentrated in discrete-jump winners that reverse violently, and continuous-information momentum is the single most-replicated structural reduction of momentum's crash/worst-sub-period risk while preserving average return.
+
+**Change:** In momentum_quality_scores only, I added a pure parameter-free _information_discreteness helper (fraction of negative minus positive daily returns over the existing pre-skip formation window; sign(PRET) is +1 since the entry filter already requires positive long/mid momentum) and folded its lower-is-better cross-sectional rank in as one more equal-weight term in the existing rank-sum — a selection-quality thesis change that directly down-weights the crash-prone discrete-jump winners driving the negative sub-period folds, structurally distinct from the reverted beta-hedged residual-momentum / OLS-slope / low-beta selection attempts and from the gross-overlay/slope-filter revert streak, with no new import, no new tunable hyperparameter, and no change to the order_target_percent / bounded-gross-targeting contract.
+
+**Decision:** REVERTED — sortino 2.409 did not improve on prev 3.4927787451086587
+
+**Result:**
+- evaluator_version: 2026-05-16-univfloor
+- validation_sortino_mean: 2.4092482215292788
+- validation_folds: 13
+- per_fold_sortinos: [2.2726, -1.2702, -1.2406, 5.7349, 5.6229, 0.1872, 3.4436, 5.574, 2.725, 1.5514, 2.5309, 4.3802, -0.1918]
+- calmar_mean: 4.178522464367452
+- hit_rate_mean: 0.4274919524919525
+- profit_factor_mean: 20.933615513770437
+- trade_count_total: 69
+- aggregate_max_dd: 0.13654178490736593
+- worst_fold_max_dd: 0.09527852284118905
+- max_position_frac_peak: 0.11213468771853247
+- lower_quartile_fold_calmar: 0.1003801242803948
+- n_negative_folds: 3/13
+- risk.passed: True
+- risk.violations: []
+
+**Learning:** Sortino changed from 3.493 to 2.409 (-1.084). Aggregate DD was 13.7% versus previous kept 12.2%; negative folds were 3/13; trades=69. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 2.409 did not improve on prev 3.4927787451086587.
+
+---
