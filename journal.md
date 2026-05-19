@@ -2391,3 +2391,32 @@ working, not failure.
 **Learning:** Sortino changed from 3.202 to 2.707 (-0.495). Aggregate DD was 11.3% versus previous kept 9.9%; negative folds were 1/13; trades=53. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 2.707 did not improve on prev 3.202108207368932.
 
 ---
+
+## Iteration 2026-05-19-1e98e18 — KEPT
+
+**Hypothesis:** Replacing the single ~6-month realised-vol input of the kept book-referenced vol-target with the MAX of that slow estimate and a parameter-free ~1-month fast estimate of the SAME held momentum book will improve the worst disjoint sub-period Sortino and not regress drawdown or turnover, because a momentum crash is foreshadowed by a rapid rise in the momentum book's own short-horizon volatility (Daniel-Moskowitz 2016) that a slow 6-month estimate lags, and taking the max makes the overlay de-risk earlier in turbulence while remaining byte-equivalent in calm regimes (fast≈slow) and never less defensive than the committed estimator (gross can only fall, never rise — one-sided, turnover-neutral).
+
+**Change:** In the vol-target overlay I added a parameter-free dual-horizon realised-vol estimator that takes the maximum of the existing ~6-month slow vol and a ~1-month fast vol computed from the SAME robustly-resolved source (held qualified book, else broad cross-section, else 0.75 fallback), with the fast window DERIVED from the existing slow window (vol_lb//6) so no tunable hyperparameter is added and the change is strictly weakly-more-defensive (gross only ever falls vs the kept behaviour).
+
+**Decision:** KEPT — sortino 3.289 > prev 3.202108207368932, agg_dd 9.6%, catastrophe gate clear, anti-overfit gates passed
+
+**Result:**
+- evaluator_version: 2026-05-16-univfloor
+- validation_sortino_mean: 3.2888808654214845
+- validation_folds: 13
+- per_fold_sortinos: [0.3153, 0.1831, -0.2829, 10.1361, 8.2572, 1.6005, 3.5311, 6.1886, 3.2637, 1.0461, 2.188, 4.6584, 1.6704]
+- calmar_mean: 5.888060363935045
+- hit_rate_mean: 0.4283216783216784
+- profit_factor_mean: 3.407823210651147
+- trade_count_total: 56
+- aggregate_max_dd: 0.09638467816807504
+- worst_fold_max_dd: 0.0963846781680749
+- max_position_frac_peak: 0.10618164006890835
+- lower_quartile_fold_calmar: 1.449220470856095
+- n_negative_folds: 1/13
+- risk.passed: True
+- risk.violations: []
+
+**Learning:** Sortino changed from 3.202 to 3.289 (+0.087). Aggregate DD was 9.6% versus previous kept 9.9%; negative folds were 1/13; trades=56. Keep compounding on this change, but future iterations should still explain whether the gain came from better return, lower downside, or fewer fragile folds. Decision reason: sortino 3.289 > prev 3.202108207368932, agg_dd 9.6%, catastrophe gate clear, anti-overfit gates passed.
+
+---
