@@ -3058,3 +3058,32 @@ working, not failure.
 **Learning:** Sortino changed from 3.493 to 2.746 (-0.747). Aggregate DD was 7.4% versus previous kept 12.2%; negative folds were 3/13; trades=85. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 2.746 did not improve on prev 3.4927787451086587 | anti-overfit FAILED: sub_period_stationarity(signed min/max Sortino ratio across 2 sub-periods = 0.1631 (need ≥ 0.20); sub-periods = [+3.699, +0.603]).
 
 ---
+
+## Iteration 2026-05-19-cf1386f — REVERTED
+
+**Hypothesis:** Funding the deployment priority in true momentum-quality rank order (a held name no longer leapfrogs higher-ranked new names; it is merely still gated by the existing retain_n eligibility) raises the mean and worst disjoint sub-period net-of-cost Sortino, because the committed 'all held names in the top retain_n=2·n_positions=50 come before ANY new name' rule lets the book persistently fund names ranked 11–50 while ignoring names ranked 1–10 — a direct Jegadeesh-Titman momentum-decay drag that bites hardest in rotational/choppy sub-periods (the weak folds), is byte-near-identical in strong persistent trends (top names are the held names → strong folds preserved), and whose incremental DP turnover is negligible at ₹5L scale (₹14.75/scrip ≈ 0.03% of a 10% position) versus the decayed-winner return drag it removes.
+
+**Change:** In `next()` only, replaced the stale-biased priority `[held∩top-retain_n by rank] + [all new by rank]` with a parameter-free rank-true priority `[every qualified name in score order, dropping only held names ranked outside the existing top retain_n]` — held names now interleave with new names strictly by current momentum-quality score, restoring the Jegadeesh-Titman principle of holding the CURRENT strongest names while leaving the retain_n eligibility gate, structural exit, gross overlays, and all concentration caps untouched.
+
+**Decision:** REVERTED — sortino 1.899 did not improve on prev 3.4927787451086587 | anti-overfit FAILED: universe_respect(variant traded tickers outside the point-in-time universe — survivorship/look-ahead reintroduced (hard reject)) · bonferroni(p=1.0000 >= alpha/N=0.0100) · random_walk_mc(only 0.00% percentile vs RW null)
+
+**Result:**
+- evaluator_version: 2026-05-16-univfloor
+- validation_sortino_mean: 1.8990383089955203
+- validation_folds: 13
+- per_fold_sortinos: [0.4362, -1.2593, -2.5553, 1.6081, 5.2049, 2.8039, 5.196, 6.8432, 2.8873, 0.0055, 1.0863, 2.3394, 0.0913]
+- calmar_mean: 3.76669458400039
+- hit_rate_mean: 0.5190447593601362
+- profit_factor_mean: 3.931551561357762
+- trade_count_total: 273
+- aggregate_max_dd: 0.1945151984073265
+- worst_fold_max_dd: 0.10731572775276449
+- max_position_frac_peak: 0.10474189619202887
+- lower_quartile_fold_calmar: 0.011023926522613123
+- n_negative_folds: 3/13
+- risk.passed: True
+- risk.violations: []
+
+**Learning:** Sortino changed from 3.493 to 1.899 (-1.594). Aggregate DD was 19.5% versus previous kept 12.2%; negative folds were 3/13; trades=273. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 1.899 did not improve on prev 3.4927787451086587 | anti-overfit FAILED: universe_respect(variant traded tickers outside the point-in-time universe — survivorship/look-ahead reintroduced (hard reject)) · bonferroni(p=1.0000 >= alpha/N=0.0100) · random_walk_mc(only 0.00% percentile vs RW null).
+
+---
