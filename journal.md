@@ -3000,3 +3000,32 @@ working, not failure.
 **Learning:** Sortino changed from 3.493 to 2.670 (-0.822). Aggregate DD was 11.5% versus previous kept 12.2%; negative folds were 2/13; trades=50. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 2.670 did not improve on prev 3.4927787451086587.
 
 ---
+
+## Iteration 2026-05-19-afc44ce — REVERTED
+
+**Hypothesis:** Adding a binary, one-sided forward-implied-volatility confirmation — take gross fully to cash when the broad equal-weight index is in an EARLY (below structural MA but MA not yet rolled over) down-state AND India VIX is simultaneously in its own top-decile 252-day stress percentile — raises the worst disjoint sub-period Sortino without regressing drawdown, the strong folds, or turnover, because option-implied (ex-ante) vol leads the first bear leg-down by weeks while the kept slope-gate and the realized-vol target structurally lag it, which is the exact mechanism the journal repeatedly names for the 2 negative early/bear folds.
+
+**Change:** Introduced `_forward_vol_stress` (lazy, defensively-wrapped `llm.features.macro_signals` read of `india_vix_pct_252d`) and `_market_below_structural_ma` (the un-slope-confirmed early-leg condition the kept `_market_regime_breakdown` deliberately excludes), and added one binary gross→0.0 branch in `next()` that fires only when forward-implied vol is ≥ the codebase's pre-committed 0.90 stress convention AND the index is in that early below-MA state — a genuinely novel orthogonal signal (no prior iteration used `llm.features`; every reverted vol attempt was price-derived realized vol, which is structurally above Nifty VIX so a naive blend would be inert), one-sided and byte-inert in every healthy uptrend and whenever forward vol is below its top decile.
+
+**Decision:** REVERTED — sortino 3.493 did not improve on prev 3.4927787451086587
+
+**Result:**
+- evaluator_version: 2026-05-16-univfloor
+- validation_sortino_mean: 3.4927787451086587
+- validation_folds: 13
+- per_fold_sortinos: [2.8246, -0.6147, -1.2201, 10.1361, 8.6149, 3.1183, 3.5343, 6.1885, 3.2613, 1.0461, 2.188, 4.6584, 1.6704]
+- calmar_mean: 6.324215769057869
+- hit_rate_mean: 0.4393106893106893
+- profit_factor_mean: 3.6738447858137095
+- trade_count_total: 55
+- aggregate_max_dd: 0.12201940792569868
+- worst_fold_max_dd: 0.07219779925229142
+- max_position_frac_peak: 0.1061646093260265
+- lower_quartile_fold_calmar: 2.346354509750694
+- n_negative_folds: 2/13
+- risk.passed: True
+- risk.violations: []
+
+**Learning:** Sortino changed from 3.493 to 3.493 (+0.000). Aggregate DD was 12.2% versus previous kept 12.2%; negative folds were 2/13; trades=55. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 3.493 did not improve on prev 3.4927787451086587.
+
+---
