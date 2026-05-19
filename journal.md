@@ -2855,3 +2855,32 @@ working, not failure.
 **Learning:** Sortino changed from 3.493 to 3.051 (-0.442). Aggregate DD was 18.3% versus previous kept 12.2%; negative folds were 2/13; trades=67. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 3.051 did not improve on prev 3.4927787451086587 | anti-overfit FAILED: sub_period_stationarity(signed min/max Sortino ratio across 2 sub-periods = 0.1722 (need ≥ 0.20); sub-periods = [+4.093, +0.705]).
 
 ---
+
+## Iteration 2026-05-19-f031d0e — REVERTED
+
+**Hypothesis:** Adding a parameter-free, one-sided inverse-volatility (risk-parity) downscale of the per-name cap inside `construct_gross_targets` — the median-vol name keeps the full 10% cap, higher-vol crash-prone momentum names get strictly less, lower-vol names stay at the cap — will raise the worst disjoint sub-period Sortino and not regress drawdown, because the negative early/bear folds are driven by concentrated fragile high-volatility momentum names that unwind hardest, and risk-parity weighting within a long momentum book is the single most-replicated robust real-world improvement after vol-targeting (Asness/Frazzini), here applied so it can only weakly reduce concentration and walk deeper into more names — never lever, never more concentrated than the committed equal-weight-at-cap book.
+
+**Change:** I changed only the intra-book WEIGHTING scheme (a structurally new thesis vs the exhausted gross-level / selection-rank / sector-demean families): `construct_gross_targets` now multiplies each name's deployment cap by clip(median_vol / vol_i, 0, 1) using a per-name realised-vol window derived from the existing signal lookback (no new tunable knob, byte-identical when vol info is absent), preserving the Σ≤gross, ≤10% per-name and ≤25% per-sector invariants while downweighting the fragile high-vol tail and diversifying deeper — a strictly one-sided, weakly-less-concentrated change distinct from every prior attempt.
+
+**Decision:** REVERTED — sortino 3.355 did not improve on prev 3.4927787451086587
+
+**Result:**
+- evaluator_version: 2026-05-16-univfloor
+- validation_sortino_mean: 3.3545572584723384
+- validation_folds: 13
+- per_fold_sortinos: [2.7969, -0.8688, -1.1558, 11.8206, 7.1155, 1.2389, 3.8649, 6.5239, 2.9124, 0.8083, 2.456, 4.6686, 1.4278]
+- calmar_mean: 5.3781254106988365
+- hit_rate_mean: 0.371911421911422
+- profit_factor_mean: 4.094264208230028
+- trade_count_total: 70
+- aggregate_max_dd: 0.1487284904612762
+- worst_fold_max_dd: 0.08276237167730323
+- max_position_frac_peak: 0.09913604006415441
+- lower_quartile_fold_calmar: 1.6140770642604083
+- n_negative_folds: 2/13
+- risk.passed: True
+- risk.violations: []
+
+**Learning:** Sortino changed from 3.493 to 3.355 (-0.138). Aggregate DD was 14.9% versus previous kept 12.2%; negative folds were 2/13; trades=70. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 3.355 did not improve on prev 3.4927787451086587.
+
+---
