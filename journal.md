@@ -2304,3 +2304,32 @@ working, not failure.
 **Learning:** Sortino changed from 2.604 to 3.202 (+0.598). Aggregate DD was 9.9% versus previous kept 6.3%; negative folds were 1/13; trades=60. Keep compounding on this change, but future iterations should still explain whether the gain came from better return, lower downside, or fewer fragile folds. Decision reason: sortino 3.202 > prev 2.6040939804723893, agg_dd 9.9%, catastrophe gate clear, anti-overfit gates passed.
 
 ---
+
+## Iteration 2026-05-19-29b872e — REVERTED
+
+**Hypothesis:** Replacing the endpoint cumulative-return momentum inputs (long_mom, mid_mom) with the OLS log-price trend-slope t-statistic over the same long and mid windows — a parameter-free re-specification of the momentum *measure* — will improve worst disjoint sub-period Sortino, not regress drawdown, and reduce DP-cost turnover at scale, because endpoint returns are dominated by start/end noise and are exactly the jumpy, high-residual 'momentum' that reverses violently in bear-to-rebound transitions (Daniel-Moskowitz crash mechanism), whereas the slope t-stat down-weights noisy spikes and up-weights statistically persistent trends that are more stable period-to-period.
+
+**Change:** In momentum_quality_scores I replaced the two raw cumulative-return signal inputs (long_mom = pre_skip/start-1, mid_mom = pre_skip/mid_start-1) and their positivity gate with the t-statistic of the OLS slope of log price over the identical pre-skip long window and mid window (new parameter-free helper _log_price_trend_tstat using the existing lookback/skip windows), keeping every other component (high_proximity, max_drawdown, downside_vol, trend_consistency, adv), the price>structural-MA gate, the vol-targeted gross, the sector cap, biweekly cadence and the order_target_percent contract unchanged.
+
+**Decision:** REVERTED — sortino 2.430 did not improve on prev 3.202108207368932
+
+**Result:**
+- evaluator_version: 2026-05-16-univfloor
+- validation_sortino_mean: 2.4295468970834637
+- validation_folds: 13
+- per_fold_sortinos: [-0.0853, -0.9952, -1.5433, 7.2851, 5.5615, 0.9649, 3.7084, 7.2166, 2.8945, 0.4432, 2.1295, 4.1076, -0.1034]
+- calmar_mean: 4.286428733681358
+- hit_rate_mean: 0.3893772893772894
+- profit_factor_mean: 12.095104152715916
+- trade_count_total: 58
+- aggregate_max_dd: 0.1738732107755759
+- worst_fold_max_dd: 0.1013278382634036
+- max_position_frac_peak: 0.12902727970287223
+- lower_quartile_fold_calmar: -0.1454692502540239
+- n_negative_folds: 4/13
+- risk.passed: True
+- risk.violations: []
+
+**Learning:** Sortino changed from 3.202 to 2.430 (-0.773). Aggregate DD was 17.4% versus previous kept 9.9%; negative folds were 4/13; trades=58. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 2.430 did not improve on prev 3.202108207368932.
+
+---
