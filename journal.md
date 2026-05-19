@@ -2536,3 +2536,32 @@ working, not failure.
 **Learning:** Sortino changed from 3.289 to 3.308 (+0.019). Aggregate DD was 12.9% versus previous kept 9.6%; negative folds were 2/13; trades=56. Keep compounding on this change, but future iterations should still explain whether the gain came from better return, lower downside, or fewer fragile folds. Decision reason: sortino 3.308 > prev 3.2888808654214845, agg_dd 12.9%, catastrophe gate clear, anti-overfit gates passed.
 
 ---
+
+## Iteration 2026-05-19-a55b11d — REVERTED
+
+**Hypothesis:** Tightening the momentum-quality entry qualification so a name must be not only ABOVE its structural MA but with that SAME MA RISING (parameter-free slope over the existing formation/skip horizon) — the entry-side symmetric counterpart of the just-kept slope-gated structural exit — will raise the worst disjoint sub-period Sortino and lower DP turnover without regressing aggregate drawdown, because a close poking above a still-falling long MA is the classic unconfirmed bear-rebound bounce (Daniel-Moskowitz 2016; Moskowitz-Ooi-Pedersen TS-momentum; Faber 2007 dual price+trend filter) that the bare close>MA gate admitted only for the kept exit to churn it out a fortnight later at a ₹14.75 DP cost, whereas in healthy rising-MA up-trends (the strong folds) the MA is rising so the filter is byte-inert.
+
+**Change:** In momentum_quality_scores only, the entry qualification now additionally requires the structural MA to be rising (its same-length value `skip` bars ago is below today's), reusing the existing ma_window and formation/skip quantities (no new tunable hyperparameter) and skipping the slope test when the window is too short so the change is strictly weakly fewer/safer entries — making entry and the kept structural exit a clean symmetric slope-confirmed trend filter targeting the falling-MA whipsaw/bear sub-periods that set the worst disjoint Sortino.
+
+**Decision:** REVERTED — sortino 3.138 did not improve on prev 3.3082196634381384
+
+**Result:**
+- evaluator_version: 2026-05-16-univfloor
+- validation_sortino_mean: 3.1380541826723007
+- validation_folds: 13
+- per_fold_sortinos: [0.1771, -0.9658, -1.7587, 9.9455, 8.6196, 3.1076, 3.435, 5.3859, 3.2612, 1.0705, 2.188, 4.6584, 1.6704]
+- calmar_mean: 5.687845985370534
+- hit_rate_mean: 0.45689310689310686
+- profit_factor_mean: 3.2364616704545335
+- trade_count_total: 60
+- aggregate_max_dd: 0.16000237992458016
+- worst_fold_max_dd: 0.09710941986112612
+- max_position_frac_peak: 0.11237158482493774
+- lower_quartile_fold_calmar: 1.449220470856095
+- n_negative_folds: 2/13
+- risk.passed: True
+- risk.violations: []
+
+**Learning:** Sortino changed from 3.308 to 3.138 (-0.170). Aggregate DD was 16.0% versus previous kept 12.9%; negative folds were 2/13; trades=60. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 3.138 did not improve on prev 3.3082196634381384.
+
+---
