@@ -2710,3 +2710,32 @@ working, not failure.
 **Learning:** Sortino changed from 3.493 to 2.409 (-1.084). Aggregate DD was 13.7% versus previous kept 12.2%; negative folds were 3/13; trades=69. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 2.409 did not improve on prev 3.4927787451086587.
 
 ---
+
+## Iteration 2026-05-19-c5df59b — REVERTED
+
+**Hypothesis:** Adding a second, orthogonal parameter-free slope-confirmed breakdown gate computed on the equal-weight cumulative-return index of the QUALIFIED momentum-quality long leg (not the broad universe) — taking gross fully to cash on a confirmed slope-down momentum-factor unwind — will raise the worst disjoint sub-period Sortino without regressing aggregate drawdown or the strong folds, because the canonical Daniel-Moskowitz (2016) momentum crash occurs while the broad market is flat/rebounding (so the existing broad-universe market gate is structurally blind to it) yet the momentum long leg specifically reverses, which is exactly the residual bear/rebound channel that sets the negative folds.
+
+**Change:** In next() only, after the existing broad-market regime gate, I added a momentum-FACTOR breakdown gate that reuses the exact proven parameter-free slope-confirmed `_market_regime_breakdown` logic but feeds it the qualified momentum long-leg (`priority`) closes instead of the broad universe, setting gross to 0.0 on a confirmed momentum-factor breakdown the market gate cannot see — no new import, no new tunable hyperparameter, strictly one-sided (can only lower gross), and byte-inert whenever the momentum long leg is in a healthy rising-MA trend.
+
+**Decision:** REVERTED — sortino 3.493 did not improve on prev 3.4927787451086587
+
+**Result:**
+- evaluator_version: 2026-05-16-univfloor
+- validation_sortino_mean: 3.4927787451086587
+- validation_folds: 13
+- per_fold_sortinos: [2.8246, -0.6147, -1.2201, 10.1361, 8.6149, 3.1183, 3.5343, 6.1885, 3.2613, 1.0461, 2.188, 4.6584, 1.6704]
+- calmar_mean: 6.324215769057869
+- hit_rate_mean: 0.4393106893106893
+- profit_factor_mean: 3.6738447858137095
+- trade_count_total: 55
+- aggregate_max_dd: 0.12201940792569868
+- worst_fold_max_dd: 0.07219779925229142
+- max_position_frac_peak: 0.1061646093260265
+- lower_quartile_fold_calmar: 2.346354509750694
+- n_negative_folds: 2/13
+- risk.passed: True
+- risk.violations: []
+
+**Learning:** Sortino changed from 3.493 to 3.493 (+0.000). Aggregate DD was 12.2% versus previous kept 12.2%; negative folds were 2/13; trades=55. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 3.493 did not improve on prev 3.4927787451086587.
+
+---
