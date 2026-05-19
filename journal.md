@@ -2420,3 +2420,32 @@ working, not failure.
 **Learning:** Sortino changed from 3.202 to 3.289 (+0.087). Aggregate DD was 9.6% versus previous kept 9.9%; negative folds were 1/13; trades=56. Keep compounding on this change, but future iterations should still explain whether the gain came from better return, lower downside, or fewer fragile folds. Decision reason: sortino 3.289 > prev 3.202108207368932, agg_dd 9.6%, catastrophe gate clear, anti-overfit gates passed.
 
 ---
+
+## Iteration 2026-05-19-a658518 — REVERTED
+
+**Hypothesis:** Replacing the total-volatility input of the kept dual-horizon vol-target with a parameter-free Sortino-consistent downside-semideviation risk measure (√2·downside-RMS over all observations, scale-equivalent to total-std in calm symmetric regimes) will improve the worst disjoint sub-period Sortino and not regress aggregate drawdown or turnover, because the kept overlay currently cuts gross for benign upside volatility too, whereas a downside-only risk denominator de-risks earlier and deeper exactly in the left-skewed/fat-left-tail states that foreshadow momentum crashes (Daniel-Moskowitz 2016) while deploying MORE in right-skewed healthy melt-ups (capturing the upside the user explicitly asks for, still hard-capped at 0.99), aligning the risk-targeting denominator with the Sortino/worst-sub-period objective itself.
+
+**Change:** Inside the contained vol-target path I replaced the total realised-std computed by `_annualised_realised_vol` with the Sortino-consistent lower-partial second moment with target 0 — `sqrt(2)·sqrt(mean_over_ALL_obs(min(r,0)^2))·sqrt(252)` — a parameter-free re-specification of the *risk measure* (the √2 is the analytic zero-mean-Gaussian constant, no new tunable knob, all windows and the kept MAX(slow,fast) dual-horizon structure and 20-name fallback chain unchanged), so the overlay penalises only downside variance.
+
+**Decision:** REVERTED — sortino 3.175 did not improve on prev 3.2888808654214845
+
+**Result:**
+- evaluator_version: 2026-05-16-univfloor
+- validation_sortino_mean: 3.174665138729263
+- validation_folds: 13
+- per_fold_sortinos: [0.2322, -0.4532, -1.2128, 9.9104, 8.9981, 1.4317, 3.2522, 5.7845, 2.5546, 1.36, 2.8493, 4.5141, 2.0494]
+- calmar_mean: 5.825776973211717
+- hit_rate_mean: 0.4474358974358974
+- profit_factor_mean: 7.375111174627768
+- trade_count_total: 73
+- aggregate_max_dd: 0.12786354259540814
+- worst_fold_max_dd: 0.09703331861965728
+- max_position_frac_peak: 0.10132245342984685
+- lower_quartile_fold_calmar: 1.782519668231153
+- n_negative_folds: 2/13
+- risk.passed: True
+- risk.violations: []
+
+**Learning:** Sortino changed from 3.289 to 3.175 (-0.114). Aggregate DD was 12.8% versus previous kept 9.6%; negative folds were 2/13; trades=73. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 3.175 did not improve on prev 3.2888808654214845.
+
+---
