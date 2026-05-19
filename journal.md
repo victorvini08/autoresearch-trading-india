@@ -2971,3 +2971,32 @@ working, not failure.
 **Learning:** Sortino changed from 3.493 to 3.493 (+0.000). Aggregate DD was 12.2% versus previous kept 12.2%; negative folds were 2/13; trades=55. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 3.493 did not improve on prev 3.4927787451086587.
 
 ---
+
+## Iteration 2026-05-19-3faefe4 — REVERTED
+
+**Hypothesis:** Halving rebalance frequency from biweekly to ~monthly (rebalance_period_weeks 2→4) raises mean and worst-sub-period net-of-cost Sortino because the ₹14.75/scrip DP charge is the dominant trade-level cost and rebalance-driven turnover is its main driver, while 12-1 cross-sectional momentum persists well beyond a month (Jegadeesh-Titman use a monthly cadence as standard) so the selection edge is preserved, and the daily slope-confirmed per-name structural exit still de-risks broken names between rebalances so bear-fold protection is not lost.
+
+**Change:** Changed the committed cadence thesis from biweekly to monthly by flipping the existing rebalance_period_weeks default from 2 to 4 (no new hyperparameter, no other logic touched) to roughly halve rebalance turnover and the dominant DP cost while keeping the momentum edge and the daily structural-exit downside protection intact.
+
+**Decision:** REVERTED — sortino 2.670 did not improve on prev 3.4927787451086587
+
+**Result:**
+- evaluator_version: 2026-05-16-univfloor
+- validation_sortino_mean: 2.670472981268996
+- validation_folds: 13
+- per_fold_sortinos: [0.0242, -1.5227, 0.1572, 7.319, 8.9386, 1.4295, 2.2392, 5.1563, 3.2893, 1.1545, 1.6312, 3.4426, 1.4572]
+- calmar_mean: 4.449735584847582
+- hit_rate_mean: 0.44636752136752134
+- profit_factor_mean: 1.027804065921097
+- trade_count_total: 50
+- aggregate_max_dd: 0.11482451558059581
+- worst_fold_max_dd: 0.09816072565163313
+- max_position_frac_peak: 0.10191047389826832
+- lower_quartile_fold_calmar: 1.9157583575939348
+- n_negative_folds: 2/13
+- risk.passed: True
+- risk.violations: []
+
+**Learning:** Sortino changed from 3.493 to 2.670 (-0.822). Aggregate DD was 11.5% versus previous kept 12.2%; negative folds were 2/13; trades=50. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 2.670 did not improve on prev 3.4927787451086587.
+
+---
