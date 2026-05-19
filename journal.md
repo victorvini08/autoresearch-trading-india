@@ -2652,3 +2652,32 @@ working, not failure.
 **Learning:** Sortino changed from 3.493 to 3.070 (-0.423). Aggregate DD was 9.1% versus previous kept 12.2%; negative folds were 0/13; trades=73. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 3.070 did not improve on prev 3.4927787451086587.
 
 ---
+
+## Iteration 2026-05-19-8e919df — REVERTED
+
+**Hypothesis:** Adding a parameter-free asymmetric re-entry hysteresis (fast-exit / slow-re-entry) to the KEPT slope-confirmed market-regime gate — keeping gross at cash not only while a confirmed market breakdown holds but also until that breakdown has been absent for one full formation/skip horizon — will raise the worst disjoint sub-period Sortino without regressing aggregate drawdown, because the residual negative folds bleed from cash↔redeploy whipsaw as the equal-weight index oscillates around its falling MA, and confirming the recovery before re-risking is the textbook regime-persistence whipsaw reducer (the OPPOSITE of the burned slow-exit/fast-re-entry).
+
+**Change:** Modified only `_market_regime_breakdown` to return risk-off if the slope-confirmed breakdown holds now OR still held one formation/skip horizon ago (re-entry confirmation lag), a strictly one-sided extension of the committed binary gate that is byte-inert in every healthy rising-MA up-trend (strong folds preserved exactly) and adds no new tunable hyperparameter (reuses the existing `skip`/`_structural_ma_window` horizons).
+
+**Decision:** REVERTED — sortino 3.280 did not improve on prev 3.4927787451086587
+
+**Result:**
+- evaluator_version: 2026-05-16-univfloor
+- validation_sortino_mean: 3.2803182372569393
+- validation_folds: 13
+- per_fold_sortinos: [0.9736, -1.268, -1.4776, 10.1361, 8.6149, 3.1183, 3.5343, 6.1885, 3.2613, 1.0461, 2.188, 4.6584, 1.6704]
+- calmar_mean: 6.020211577796186
+- hit_rate_mean: 0.4393106893106893
+- profit_factor_mean: 3.64860032850795
+- trade_count_total: 55
+- aggregate_max_dd: 0.13837105760871404
+- worst_fold_max_dd: 0.07530826278100097
+- max_position_frac_peak: 0.1061646093260265
+- lower_quartile_fold_calmar: 2.346354509750694
+- n_negative_folds: 2/13
+- risk.passed: True
+- risk.violations: []
+
+**Learning:** Sortino changed from 3.493 to 3.280 (-0.212). Aggregate DD was 13.8% versus previous kept 12.2%; negative folds were 2/13; trades=55. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 3.280 did not improve on prev 3.4927787451086587.
+
+---
