@@ -2201,3 +2201,48 @@ what it claims; default=2 unchanged). Do NOT re-propose weekly. Shorting
 analysed separately (see chat): structurally impossible under locked
 CNC/no-F&O, inherently not low-risk, momentum+short crashes — rejected;
 the existing vol-target-to-cash IS the safe downside tool.
+
+---
+
+# ════════ AUTORESEARCH STEERING — READ THIS FIRST (realworld-autoresearch branch) ════════
+
+**This branch's loop is re-aimed at REAL-WORLD robustness, not backtest
+Sortino.** Read `program.md` for the curated objective + constraints.
+Synthesis of everything this campaign established (do not re-derive):
+
+**Committed baseline (do not regress):** momentum-quality selection →
+bounded gross-targeting (per-name ≤10%, per-sector ≤25%) → vol-targeted
+gross + structural exit, biweekly. Sealed 2025-01→2026-05: +12.07% vs
+Nifty-500 −1.94%, maxDD 11.3% (< index 14.8%), Sortino 0.72,
+scale-robust at ₹5L. This is a *validated, index-beating* book — the bar
+is real-world robustness improvement, not a marginal tick.
+
+**Judge by (in priority): worst disjoint sub-period → drawdown →
+cost-after-DP at ≥₹5L scale → regime-stationarity → then net Sortino.**
+A gate-passing variant that worsens worst-sub / drawdown / cost-at-scale
+is a REVERT. Mean validation Sortino is reference-only.
+
+**BURNED — do NOT re-propose (each rigorously tested & rejected this
+campaign; see dated entries above):** PEAD asymmetric suppression
+(sealed-negative); PEAD positive concentration tilt (sealed-negative,
+hit-rate 41→23%); asymmetric trend slow-exit/fast-reentry (scale-gate
+fail ₹5L −8.94%); weekly rebalance (gates fail, drawdown ~63% deeper);
+equity shorting / any F&O (structurally locked, not low-risk,
+momentum-crash); per-ticker news as a return signal (horizon mismatch —
+priced in hours, we rebalance biweekly; weaker than earnings which
+already failed). After 2–3 "no edge" reverts a family is exhausted —
+change the *thesis*, never perturb knobs.
+
+**Fundamentals/SUE infra now EXISTS & is PIT-clean & current to 2026-03**
+(`data.pead.pead_signal`, robust Hampel SUE) — but computable SUE spans
+only ~2024-04→2026-05 (~2yr, growing). Both naive uses are burned; the
+sub-period gate will punish a 2-year-only signal. Default: deprioritize
+until more history accrues; only a genuinely novel theory-grounded
+formulation is worth an iteration.
+
+**Operational reality:** the live run_live→executor→ledger path had 6
+interface-drift bugs (now fixed) and paper validation has NOT started.
+The highest real-world EV is operational integrity + the 4-week clean
+paper validation + running at ≥₹5L scale — not another backtest lever.
+Most loop iterations here SHOULD end in REVERT; that is the gated search
+working, not failure.
