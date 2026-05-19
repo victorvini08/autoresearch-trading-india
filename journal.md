@@ -2478,3 +2478,32 @@ working, not failure.
 **Learning:** Sortino changed from 3.289 to 3.289 (+0.000). Aggregate DD was 9.6% versus previous kept 9.6%; negative folds were 1/13; trades=56. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 3.289 did not improve on prev 3.2888808654214845.
 
 ---
+
+## Iteration 2026-05-19-18ec7c3 — REVERTED
+
+**Hypothesis:** Adding a parameter-free soft low-beta tilt — an equal-weight rank that prefers momentum-quality names with LOWER beta to the cohort's own equal-weight return — to the existing rank-sum will raise the worst disjoint sub-period Sortino and not regress aggregate drawdown or turnover, because a momentum book's catastrophic left tail is concentrated in its high past-beta winners that collapse hardest on bear-market rebounds (Daniel-Moskowitz 2016; Frazzini-Pedersen BAB; Asness QMJ), so de-emphasizing that crash fuel is asymmetric: near-inert in calm bull folds (cohort broadly healthy) but protective in exactly the turbulent/bear sub-periods that set the worst fold.
+
+**Change:** Added a pure, deterministic `_market_betas` helper and a unit-weight `beta_rank` (lower beta → higher rank) term into `momentum_quality_scores`, computing each qualified name's beta against the equal-weight mean of the same momentum-quality cohort over the existing signal window; the tilt is omitted entirely (uniform 0.0 contribution) whenever the beta estimate is ill-posed, and it is a soft reorder within the already-qualified cohort — not an exclusion, not a residualisation of the ranked return, and no new strategy param or tunable literal (parsimony-neutral, turnover-neutral construction unchanged).
+
+**Decision:** REVERTED — anti-overfit FAILED: universe_respect(variant traded tickers outside the point-in-time universe — survivorship/look-ahead reintroduced (hard reject)) · bonferroni(p=1.0000 >= alpha/N=0.0333) · random_walk_mc(only 0.00% percentile vs RW null)
+
+**Result:**
+- evaluator_version: 2026-05-16-univfloor
+- validation_sortino_mean: 3.32899332072243
+- validation_folds: 13
+- per_fold_sortinos: [0.5371, -0.6992, 0.8723, 8.6972, 7.939, 1.8257, 4.7279, 6.8062, 3.174, 1.2574, 3.9469, 3.9532, 0.2392]
+- calmar_mean: 5.412171806544818
+- hit_rate_mean: 0.44017094017094016
+- profit_factor_mean: 7.32783606936865
+- trade_count_total: 60
+- aggregate_max_dd: 0.09004455654546459
+- worst_fold_max_dd: 0.07712092146463549
+- max_position_frac_peak: 0.10067408079723365
+- lower_quartile_fold_calmar: 0.7957709033193572
+- n_negative_folds: 1/13
+- risk.passed: True
+- risk.violations: []
+
+**Learning:** Sortino changed from 3.289 to 3.329 (+0.040). Aggregate DD was 9.0% versus previous kept 9.6%; negative folds were 1/13; trades=60. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: anti-overfit FAILED: universe_respect(variant traded tickers outside the point-in-time universe — survivorship/look-ahead reintroduced (hard reject)) · bonferroni(p=1.0000 >= alpha/N=0.0333) · random_walk_mc(only 0.00% percentile vs RW null).
+
+---
