@@ -2507,3 +2507,32 @@ working, not failure.
 **Learning:** Sortino changed from 3.289 to 3.329 (+0.040). Aggregate DD was 9.0% versus previous kept 9.6%; negative folds were 1/13; trades=60. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: anti-overfit FAILED: universe_respect(variant traded tickers outside the point-in-time universe — survivorship/look-ahead reintroduced (hard reject)) · bonferroni(p=1.0000 >= alpha/N=0.0333) · random_walk_mc(only 0.00% percentile vs RW null).
 
 ---
+
+## Iteration 2026-05-19-ccae79c — KEPT
+
+**Hypothesis:** Gating the between-rebalance structural exit so it fires only when the close is below the structural MA AND that MA is itself no longer rising (its own slope, measured parameter-free over the existing formation/skip horizon, has turned down) will raise the worst disjoint sub-period Sortino and lower turnover/DP cost without regressing aggregate drawdown, because the current bare close<MA exit churns intact winners on routine pullbacks within still-rising long uptrends (the dominant false-exit / DP-drag case in choppy, low-vol whipsaw folds that the vol-target — blind to direction in low volatility — cannot help), whereas a genuine regime break rolls the long MA itself over, where the exit still fires and two orthogonal de-risking channels (vol-targeted gross, biweekly re-selection) also act.
+
+**Change:** In `_apply_structural_exit` only, the exit now requires both close < structural MA and the structural MA falling (its same-length value as of `skip` bars ago exceeds today's), reusing the strategy's existing ma_window and formation/skip quantities so no new tunable hyperparameter is added; this is strictly weakly fewer exits than the committed behaviour (whipsaw-robust in rising-MA pullbacks, byte-equivalent once the MA has rolled over in a real bear), targeting the real-world turnover/DP and worst-sub-period objective rather than a knob tweak on the exhausted vol-target / ranking families.
+
+**Decision:** KEPT — sortino 3.308 > prev 3.2888808654214845, agg_dd 12.9%, catastrophe gate clear, anti-overfit gates passed
+
+**Result:**
+- evaluator_version: 2026-05-16-univfloor
+- validation_sortino_mean: 3.3082196634381384
+- validation_folds: 13
+- per_fold_sortinos: [0.3004, -0.6311, -1.0787, 10.1361, 8.6149, 3.1183, 3.5343, 6.1885, 3.2613, 1.0461, 2.188, 4.6584, 1.6704]
+- calmar_mean: 6.0349818729390785
+- hit_rate_mean: 0.4393106893106893
+- profit_factor_mean: 3.672888447788454
+- trade_count_total: 56
+- aggregate_max_dd: 0.12865169164692922
+- worst_fold_max_dd: 0.0970885008014123
+- max_position_frac_peak: 0.1061646093260265
+- lower_quartile_fold_calmar: 1.449220470856095
+- n_negative_folds: 2/13
+- risk.passed: True
+- risk.violations: []
+
+**Learning:** Sortino changed from 3.289 to 3.308 (+0.019). Aggregate DD was 12.9% versus previous kept 9.6%; negative folds were 2/13; trades=56. Keep compounding on this change, but future iterations should still explain whether the gain came from better return, lower downside, or fewer fragile folds. Decision reason: sortino 3.308 > prev 3.2888808654214845, agg_dd 12.9%, catastrophe gate clear, anti-overfit gates passed.
+
+---

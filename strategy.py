@@ -696,19 +696,37 @@ class IndiaMomentumQualityCarry(bt.Strategy):
             self._stop_pending.discard(self._ticker_of(trade.data))
 
     def _apply_structural_exit(self) -> None:
-        '''Trend-state exit, symmetric with the entry's structural filter.
+        '''Slope-confirmed trend-state exit, symmetric with the entry filter.
 
         The entry (momentum_quality_scores) only buys a name whose close is
-        ABOVE its own beta_window-derived structural MA. This sells a held
-        name once its close falls BELOW that SAME MA -- i.e. its long
-        uptrend has objectively broken. A ~190-day MA does not move on the
-        routine 5-10% Indian mid-cap pullbacks (so intact winners are never
-        churned -- momentum's right tail is preserved), only on a sustained
-        breakdown (regime transition / bear), where many names breaking
-        together cascade the book toward cash: emergent graceful de-risking
-        with no binary macro gate and gross only ever falling (long-only,
-        <=100%, no leverage). Adds no tunable hyperparameter -- the MA is the
-        strategy's existing structural definition applied symmetrically.
+        ABOVE its own beta_window-derived structural MA. The committed exit
+        sold a held name the instant its close fell BELOW that SAME MA. The
+        refinement here: the exit now ALSO requires the structural MA to be
+        falling (its same-length value as of ``skip`` bars ago exceeds
+        today's). Rationale (real-world objective: turnover/DP cost is the
+        dominant trade-level cost, and choppy/whipsaw sub-periods set the
+        worst disjoint Sortino): a close dipping below a still-RISING long
+        MA is a routine 5-10% Indian mid-cap pullback within an intact
+        uptrend -- momentum's right tail. The bare close<MA rule churned
+        those winners out (a sell = a ~190d-MA-crossing whipsaw and a
+        ₹14.75/scrip DP charge) only to re-buy them at the next rebalance
+        when the trend never actually broke. Gating the exit on the MA's
+        OWN slope keeps the name through the pullback and exits only on a
+        genuine breakdown, where the long MA has itself rolled over.
+
+        This is strictly weakly FEWER exits than the committed behaviour
+        (new exits are a subset: it still requires close < MA, plus the
+        extra MA-falling condition), so it is byte-equivalent once the MA
+        has rolled over in a real bear and only ever defers/suppresses the
+        false-exit case. Directional downside is still protected by two
+        orthogonal channels untouched here: the vol-targeted gross overlay
+        de-risks on the book's own rising volatility, and the biweekly
+        re-selection drops any name that falls below retain_n. Adds NO new
+        tunable hyperparameter -- both the MA window and the ``skip`` slope
+        horizon are the strategy's existing structural/formation
+        quantities, reused (the same no-new-knob convention the codebase
+        already uses for the dual-horizon vol estimator). Pure and
+        deterministic.
 
         Runs only on non-rebalance bars so the rebalance owns every order
         decision on its own bar (no same-bar double-ordering); a structurally
@@ -717,6 +735,9 @@ class IndiaMomentumQualityCarry(bt.Strategy):
         skip = max(1, int(self.p.formation_days))
         lookback = max(skip + 21, int(self.p.beta_window))
         ma_window = _structural_ma_window(lookback)
+        # Need ma_window points for today's MA plus `skip` more to also
+        # compute the SAME-length MA as of `skip` bars ago (its slope sign).
+        need = ma_window + skip
 
         for d in self.datas:
             t = self._ticker_of(d)
@@ -725,10 +746,10 @@ class IndiaMomentumQualityCarry(bt.Strategy):
                 continue
             if t in self._stop_pending:
                 continue  # exit submitted; await next-open fill
-            if len(d) < ma_window + 1:
+            if len(d) < need + 1:
                 continue
             closes = np.asarray(
-                [float(d.close[-i]) for i in range(ma_window, -1, -1)],
+                [float(d.close[-i]) for i in range(need, -1, -1)],
                 dtype=float,
             )
             if bool(np.any(~np.isfinite(closes))) or bool(
@@ -737,7 +758,15 @@ class IndiaMomentumQualityCarry(bt.Strategy):
                 continue
             close_now = float(closes[-1])
             structural_ma = float(np.mean(closes[-ma_window:]))
-            if close_now < structural_ma:
+            # Same-length structural MA evaluated `skip` bars earlier; its
+            # comparison to today's MA is a parameter-free slope sign that
+            # reuses the strategy's existing formation/skip horizon (no new
+            # tunable knob).
+            structural_ma_prev = float(
+                np.mean(closes[-(ma_window + skip):-skip])
+            )
+            ma_falling = structural_ma < structural_ma_prev
+            if close_now < structural_ma and ma_falling:
                 self.order_target_percent(d, target=0.0)
                 self._stop_pending.add(t)
 
