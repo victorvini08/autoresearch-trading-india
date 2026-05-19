@@ -2333,3 +2333,32 @@ working, not failure.
 **Learning:** Sortino changed from 3.202 to 2.430 (-0.773). Aggregate DD was 17.4% versus previous kept 9.9%; negative folds were 4/13; trades=58. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 2.430 did not improve on prev 3.202108207368932.
 
 ---
+
+## Iteration 2026-05-19-d4d7bf4 — REVERTED
+
+**Hypothesis:** Coupling the per-name deployment cap to the vol-targeted gross (name_cap = _MAX_NAME_WEIGHT × gross/_GROSS_DEPLOY_CAP) — so a de-risked book keeps the same ~10-name breadth instead of collapsing into the ~4 highest-momentum names that crash hardest — will improve the worst disjoint sub-period Sortino and reduce aggregate drawdown without regressing the calm-regime folds, because it removes the perverse concentration-in-crisis where the existing flat 10% cap lumps a shrunk budget into exactly the names Daniel-Moskowitz identify as the momentum-crash epicentre.
+
+**Change:** Refactored the inlined 0.99 gross ceiling into a single shared constant _GROSS_DEPLOY_CAP and added a parameter-free _regime_coupled_name_cap(gross) that scales the per-name cap proportionally with gross (== _MAX_NAME_WEIGHT at full gross, so calm/KEPT folds are byte-identical, and proportionally lower when the vol-target de-risks), threaded into construct_gross_targets via its existing name_cap argument so de-risked books diversify across the same number of top-quality names rather than concentrate.
+
+**Decision:** REVERTED — sortino 2.659 did not improve on prev 3.202108207368932 | anti-overfit FAILED: sub_period_stationarity(signed min/max Sortino ratio across 2 sub-periods = 0.1891 (need ≥ 0.20); sub-periods = [+3.543, +0.670])
+
+**Result:**
+- evaluator_version: 2026-05-16-univfloor
+- validation_sortino_mean: 2.658817451883743
+- validation_folds: 13
+- per_fold_sortinos: [0.2598, -0.1423, -1.0744, 5.9135, 9.9683, 2.4567, 3.8976, 6.5559, 4.0495, 0.6858, 1.6151, 1.0909, -0.7117]
+- calmar_mean: 5.1804439037818515
+- hit_rate_mean: 0.43733211233211233
+- profit_factor_mean: 3.0645843452745343
+- trade_count_total: 89
+- aggregate_max_dd: 0.08209053199704927
+- worst_fold_max_dd: 0.08209053199704937
+- max_position_frac_peak: 0.09571963332600321
+- lower_quartile_fold_calmar: 0.41215400214326897
+- n_negative_folds: 3/13
+- risk.passed: True
+- risk.violations: []
+
+**Learning:** Sortino changed from 3.202 to 2.659 (-0.543). Aggregate DD was 8.2% versus previous kept 9.9%; negative folds were 3/13; trades=89. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 2.659 did not improve on prev 3.202108207368932 | anti-overfit FAILED: sub_period_stationarity(signed min/max Sortino ratio across 2 sub-periods = 0.1891 (need ≥ 0.20); sub-periods = [+3.543, +0.670]).
+
+---
