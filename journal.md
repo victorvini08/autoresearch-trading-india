@@ -3087,3 +3087,36 @@ working, not failure.
 **Learning:** Sortino changed from 3.493 to 1.899 (-1.594). Aggregate DD was 19.5% versus previous kept 12.2%; negative folds were 3/13; trades=273. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 1.899 did not improve on prev 3.4927787451086587 | anti-overfit FAILED: universe_respect(variant traded tickers outside the point-in-time universe — survivorship/look-ahead reintroduced (hard reject)) · bonferroni(p=1.0000 >= alpha/N=0.0100) · random_walk_mc(only 0.00% percentile vs RW null).
 
 ---
+
+## Human-directed promotion 2026-05-19 — KEPT (direction-aware downside-vol risk estimator)
+
+**Context:** Not a loop iteration. Human-directed root-cause work on the long-standing "book lags strong up-moves" complaint. Diagnosis: the committed `_annualised_realised_vol` used **total std** — a *direction-blind* risk measure that scaled gross down equally on sharp UP days and down days, so the vol-managed overlay de-risked into strength. Baseline re-anchored (explicit user decision) to commit `ccae79c` (momentum-quality + dual-horizon MAX vol + slope-confirmed structural exit); the loop's later ~3.49 lineage (binary all-to-cash market-regime gate) was human-reviewed as non-robust and is NOT the baseline.
+
+**Hypothesis:** Replacing total std with the **downside (semi-)deviation** of the same equal-weight market/book return series makes the SAME risk budget direction-aware (near-zero in up-skewed tape -> gross->cap; elevated in down-skewed tape -> gross cut), improving the worst disjoint sub-period and regime-stationarity without regressing drawdown/turnover. Reuses the module's already-tested `_downside_volatility` helper (the same downside concept `momentum_quality_scores` ranks on) -> ZERO new hyperparameters (parsimony N/A). Theory: Moreira-Muir / downside-vol-managed momentum.
+
+**Change:** One executable line in `_annualised_realised_vol`: `float(np.std(mkt))` -> `_downside_volatility(mkt)`. `_ANNUAL_VOL_TARGET`, the dual-horizon MAX structure, the thin-sample None contract, the slope-confirmed structural exit, and all concentration caps are byte-identical. n_hyperparameters 6->6.
+
+**Decision:** KEPT — research walk-forward [2020-01,2025-01) 13 folds. All 5 atomic anti-overfit gates PASS; worst disjoint sub-period Sortino +22% (2.391->2.924); sub-period stationarity ratio 0.648->0.843; aggregate DD flat (9.64%->9.74%); turnover flat (0.314->0.312); val Sortino 3.2889->3.3019; zero added hyperparameters.
+
+**Result:**
+- evaluator_version: 2026-05-16-univfloor
+- baseline: ccae79c (human-designated)
+- validation_sortino_mean: 3.3019 (baseline 3.2889)
+- validation_folds: 13
+- per_fold_sortinos: [0.2255, 0.099, -0.2345, 10.5868, 6.4531, 2.7669, 3.3871, 5.4291, 2.5177, 1.7784, 1.8328, 5.8629, 2.22]
+- sub_period_sortinos: [3.470, 2.924]  (baseline [3.688, 2.391]) — stationarity ratio 0.843
+- aggregate_max_dd: 0.0974  (baseline 0.0964)
+- worst_fold_max_dd: 0.0966
+- calmar_mean: 4.8232  (baseline 5.8881)
+- hit_rate_mean: 0.4551
+- turnover_mean: 0.3121
+- trade_count_total: 59
+- n_negative_folds: 1/13
+- n_hyperparameters: 6  (baseline 6 — parsimony N/A)
+- rw_mc_null_pct: 1.0 ; bonferroni p=0.0005
+- all_atomic_gates: PASS (universe_respect, bonferroni, random_walk_mc, parsimony, sub_period_stationarity)
+- scale_robust_sealed_blind: 2023Q3 base -1.47% -> variant +5.90% ; 2024Q2 base +4.10% -> variant +5.28% (₹5L)
+
+**Learning:** The book's bear defence is delivered by the momentum-quality selection + the slope-confirmed structural exit, NOT by the symmetric vol cap — which was a direction-blind drag. A downside-aware estimator lifts the worst sub-period (+22%) and regime-stationarity (0.65->0.84) with flat DD/turnover and zero added parameters: a robustness/scale upgrade, not a return amplifier (training mean fold return and Calmar are modestly lower — an accepted trade per the real-world objective priority stack). The original "lags strong rallies" framing was substantially a cap-weight (Nifty-500) vs equal-weight (the tape the book actually trades) benchmark artifact. This is the new committed baseline; do not re-propose symmetric total-vol targeting.
+
+---

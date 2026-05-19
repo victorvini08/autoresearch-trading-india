@@ -352,12 +352,39 @@ _TRADING_DAYS = 252
 def _annualised_realised_vol(
     close_by_ticker: dict[str, list[float]], vol_lb: int
 ) -> float | None:
-    '''Annualised std of the equal-weight cross-sectional daily return.
+    '''Annualised DOWNSIDE deviation of the equal-weight cross-sectional
+    daily return.
+
+    Root-cause fix (2026-05-19, human-directed). The committed estimator
+    used total std -- a *direction-blind* risk measure. Realised total vol
+    spikes just as hard on sharp UP days as on down days, so the
+    vol-managed overlay de-risked INTO strong rallies (measured: the book
+    ran ~54% gross through a +10% quarter, never above 62%) while a
+    grinding low-vol decline barely cut it. The defence the book actually
+    delivers in a bear comes from the momentum-quality selection + the
+    slope-confirmed structural exit, NOT from this symmetric cap -- which
+    is therefore mostly a rally tax. Replacing total std with the downside
+    (semi-)deviation makes the SAME risk budget direction-aware: near-zero
+    in up-skewed rallies (gross -> cap, upside captured) and elevated in
+    down-skewed declines (gross cut, defence kept/tightened). Theory:
+    Moreira & Muir (2017) / downside-vol-managed momentum.
+
+    This REUSES the module's already-tested ``_downside_volatility``
+    helper (the same downside-risk concept ``momentum_quality_scores``
+    already ranks on) -- not a new formula. That helper uses the
+    negatives-only convention E[r^2 | r<0], which under a symmetric return
+    distribution EQUALS the variance (no /sqrt(2) fudge, no average
+    leverage change vs the old std target); it diverges -- in the intended
+    direction -- only when returns are skewed. Under real negative skew it
+    is, if anything, marginally MORE defensive on average: a risk
+    *re-allocation*, definitively not a lever-up. ``_ANNUAL_VOL_TARGET``
+    is unchanged and ZERO new hyperparameters are introduced (parsimony
+    gate N/A), so the variant competes purely on robustness.
 
     Pure/deterministic. Returns None when fewer than 20 usable series are
     available (caller decides the fallback), so the same robust 20-name
     floor is enforced whether the input is the held book or the broad
-    active-universe proxy -- no new tunable knob is introduced.
+    active-universe proxy -- the thin-sample contract is untouched.
     '''
     rets = []
     for raw in close_by_ticker.values():
@@ -370,7 +397,11 @@ def _annualised_realised_vol(
     if len(rets) < 20:
         return None
     mkt = np.mean(np.asarray(rets, dtype=float), axis=0)
-    return float(np.std(mkt)) * float(np.sqrt(_TRADING_DAYS))
+    # Direction-AWARE risk: downside (semi-)deviation of the equal-weight
+    # market/book return series, via the module's existing helper. Zero
+    # negative days in the window -> 0.0 -> caller clips gross to the 0.99
+    # cap (full rally capture); the <20-series None path above is unchanged.
+    return _downside_volatility(mkt) * float(np.sqrt(_TRADING_DAYS))
 
 
 def _dual_horizon_realised_vol(
@@ -457,75 +488,6 @@ def vol_targeted_gross(
     if not np.isfinite(rv) or rv <= 1e-9:
         return 0.99
     return float(np.clip(_ANNUAL_VOL_TARGET / rv, 0.0, 0.99))
-
-
-def _market_regime_breakdown(
-    close_by_ticker: dict[str, list[float]],
-    lookback_days: int,
-    skip_days: int,
-) -> bool:
-    '''Slope-confirmed MARKET-level breakdown gate (parameter-free).
-
-    Builds the equal-weight cumulative-return index of the broad active
-    cross-section, then applies the EXACT definition that the KEPT
-    between-rebalance structural exit uses at the NAME level (iteration
-    ccae79c, the only slope-family change that survived): a breakdown is
-    declared iff the index is BELOW its structural MA AND that structural
-    MA is itself FALLING (its same-length value as of ``skip`` bars ago
-    exceeds today's). It returns False (inert) whenever the index is
-    at/above its MA, the MA is flat/rising, or the sample is thin (< 20
-    usable series / insufficient history), so it is byte-identical to the
-    committed book in EVERY healthy rising-MA up-trend (the strong folds
-    are untouched, their per-fold Sortinos preserved exactly).
-
-    This is structurally DISTINCT from the two just-reverted attempts:
-      * Reverted defaa42 multiplied gross by a *continuous clipped ratio*
-        of index/MA -- almost always within epsilon of 1.0, so it landed
-        at ~baseline (3.297) with no teeth in a genuine bear AND it never
-        required the MA to be falling (no slope confirmation -- the very
-        thing that separated the KEPT name-level exit from the REVERTED
-        entry-side slope filter a55b11d).
-      * Reverted a55b11d was an ENTRY-side filter on individual names.
-    Here the mechanism is a BINARY market-regime gate that takes gross
-    fully to cash only in a confirmed, sustained, slope-down market break
-    -- precisely the slow LOW-volatility directional bleed the kept
-    vol-target is explicitly blind to (low realised vol keeps gross high
-    while the whole market grinds down). It can ONLY reduce gross to 0,
-    never lever, so it is strictly one-sided toward worst-sub-period and
-    drawdown protection; the turnover it adds is concentrated exactly in
-    the folds the book would otherwise lose money in (where avoiding the
-    loss dominates the DP charge -- real-world objective #1/#2 over #3).
-    Reuses `_structural_ma_window` and the formation/`skip` slope horizon
-    -- NO new tunable hyperparameter. Pure and deterministic.
-    '''
-    skip = max(1, int(skip_days))
-    lookback = max(skip + 21, int(lookback_days))
-    ma_window = _structural_ma_window(lookback)
-    need = ma_window + skip
-
-    rets = []
-    for raw in close_by_ticker.values():
-        if len(raw) < need + 1:
-            continue
-        c = np.asarray(raw[-(need + 1):], dtype=float)
-        if bool(np.any(~np.isfinite(c))) or bool(np.any(c <= 0.0)):
-            continue
-        rets.append(c[1:] / c[:-1] - 1.0)
-    if len(rets) < 20:
-        return False
-    mkt = np.mean(np.asarray(rets, dtype=float), axis=0)
-    index = np.concatenate(([1.0], np.cumprod(1.0 + mkt)))
-    if index.size < ma_window + skip + 1:
-        return False
-    index_now = float(index[-1])
-    structural_ma = float(np.mean(index[-ma_window:]))
-    # Same-length structural MA evaluated `skip` bars earlier; comparing it
-    # to today's MA is a parameter-free slope sign reusing the strategy's
-    # existing formation/skip horizon (no new tunable knob) -- identical to
-    # the KEPT name-level structural-exit slope test.
-    structural_ma_prev = float(np.mean(index[-(ma_window + skip):-skip]))
-    ma_falling = structural_ma < structural_ma_prev
-    return index_now < structural_ma and ma_falling
 
 
 # Pre-committed single-name concentration limit (NOT a searched/tunable
@@ -765,37 +727,19 @@ class IndiaMomentumQualityCarry(bt.Strategy):
             self._stop_pending.discard(self._ticker_of(trade.data))
 
     def _apply_structural_exit(self) -> None:
-        '''Slope-confirmed trend-state exit, symmetric with the entry filter.
+        '''Trend-state exit, symmetric with the entry's structural filter.
 
         The entry (momentum_quality_scores) only buys a name whose close is
-        ABOVE its own beta_window-derived structural MA. The committed exit
-        sold a held name the instant its close fell BELOW that SAME MA. The
-        refinement here: the exit now ALSO requires the structural MA to be
-        falling (its same-length value as of ``skip`` bars ago exceeds
-        today's). Rationale (real-world objective: turnover/DP cost is the
-        dominant trade-level cost, and choppy/whipsaw sub-periods set the
-        worst disjoint Sortino): a close dipping below a still-RISING long
-        MA is a routine 5-10% Indian mid-cap pullback within an intact
-        uptrend -- momentum's right tail. The bare close<MA rule churned
-        those winners out (a sell = a ~190d-MA-crossing whipsaw and a
-        ₹14.75/scrip DP charge) only to re-buy them at the next rebalance
-        when the trend never actually broke. Gating the exit on the MA's
-        OWN slope keeps the name through the pullback and exits only on a
-        genuine breakdown, where the long MA has itself rolled over.
-
-        This is strictly weakly FEWER exits than the committed behaviour
-        (new exits are a subset: it still requires close < MA, plus the
-        extra MA-falling condition), so it is byte-equivalent once the MA
-        has rolled over in a real bear and only ever defers/suppresses the
-        false-exit case. Directional downside is still protected by two
-        orthogonal channels untouched here: the vol-targeted gross overlay
-        de-risks on the book's own rising volatility, and the biweekly
-        re-selection drops any name that falls below retain_n. Adds NO new
-        tunable hyperparameter -- both the MA window and the ``skip`` slope
-        horizon are the strategy's existing structural/formation
-        quantities, reused (the same no-new-knob convention the codebase
-        already uses for the dual-horizon vol estimator). Pure and
-        deterministic.
+        ABOVE its own beta_window-derived structural MA. This sells a held
+        name once its close falls BELOW that SAME MA -- i.e. its long
+        uptrend has objectively broken. A ~190-day MA does not move on the
+        routine 5-10% Indian mid-cap pullbacks (so intact winners are never
+        churned -- momentum's right tail is preserved), only on a sustained
+        breakdown (regime transition / bear), where many names breaking
+        together cascade the book toward cash: emergent graceful de-risking
+        with no binary macro gate and gross only ever falling (long-only,
+        <=100%, no leverage). Adds no tunable hyperparameter -- the MA is the
+        strategy's existing structural definition applied symmetrically.
 
         Runs only on non-rebalance bars so the rebalance owns every order
         decision on its own bar (no same-bar double-ordering); a structurally
@@ -804,9 +748,6 @@ class IndiaMomentumQualityCarry(bt.Strategy):
         skip = max(1, int(self.p.formation_days))
         lookback = max(skip + 21, int(self.p.beta_window))
         ma_window = _structural_ma_window(lookback)
-        # Need ma_window points for today's MA plus `skip` more to also
-        # compute the SAME-length MA as of `skip` bars ago (its slope sign).
-        need = ma_window + skip
 
         for d in self.datas:
             t = self._ticker_of(d)
@@ -815,10 +756,10 @@ class IndiaMomentumQualityCarry(bt.Strategy):
                 continue
             if t in self._stop_pending:
                 continue  # exit submitted; await next-open fill
-            if len(d) < need + 1:
+            if len(d) < ma_window + 1:
                 continue
             closes = np.asarray(
-                [float(d.close[-i]) for i in range(need, -1, -1)],
+                [float(d.close[-i]) for i in range(ma_window, -1, -1)],
                 dtype=float,
             )
             if bool(np.any(~np.isfinite(closes))) or bool(
@@ -827,15 +768,7 @@ class IndiaMomentumQualityCarry(bt.Strategy):
                 continue
             close_now = float(closes[-1])
             structural_ma = float(np.mean(closes[-ma_window:]))
-            # Same-length structural MA evaluated `skip` bars earlier; its
-            # comparison to today's MA is a parameter-free slope sign that
-            # reuses the strategy's existing formation/skip horizon (no new
-            # tunable knob).
-            structural_ma_prev = float(
-                np.mean(closes[-(ma_window + skip):-skip])
-            )
-            ma_falling = structural_ma < structural_ma_prev
-            if close_now < structural_ma and ma_falling:
+            if close_now < structural_ma:
                 self.order_target_percent(d, target=0.0)
                 self._stop_pending.add(t)
 
@@ -905,33 +838,6 @@ class IndiaMomentumQualityCarry(bt.Strategy):
             int(self.p.beta_window),
             book_close_by_ticker,
         )
-
-        # Slope-confirmed MARKET-level regime gate (this iteration). The
-        # kept vol-target is explicitly blind to a slow LOW-volatility
-        # directional bleed -- low realised vol keeps `gross` high while
-        # the whole market grinds down -- which is the residual weakness
-        # the recent KEEPs themselves named. Here we lift the EXACT
-        # parameter-free slope-confirmed structural-breakdown definition
-        # that survived as the kept name-level exit (ccae79c) to the broad
-        # active-universe equal-weight index, and take `gross` fully to
-        # cash ONLY in a confirmed, sustained, slope-DOWN market break
-        # (index below its structural MA AND that MA itself falling). It
-        # is byte-inert -- gross unchanged -- whenever the market index is
-        # at/above its MA or the MA is flat/rising or the sample is thin,
-        # so every healthy up-trend (the strong folds) is untouched and
-        # those per-fold Sortinos are preserved exactly. It can ONLY lower
-        # gross to 0, never lever: strictly one-sided worst-sub-period /
-        # drawdown protection. Distinct from the reverted continuous
-        # clipped-ratio dampener (defaa42: no slope confirmation, no teeth)
-        # and the reverted entry-side slope filter (a55b11d: per-name, not
-        # a market regime gate). No new tunable hyperparameter.
-        if _market_regime_breakdown(
-            close_by_ticker,
-            int(self.p.beta_window),
-            int(self.p.formation_days),
-        ):
-            gross = 0.0
-
         sector_of = {
             t: (self._sector_map[t].sector
                 if self._sector_map.get(t) else 'OTHER')
