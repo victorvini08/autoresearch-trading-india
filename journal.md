@@ -2739,3 +2739,32 @@ working, not failure.
 **Learning:** Sortino changed from 3.493 to 3.493 (+0.000). Aggregate DD was 12.2% versus previous kept 12.2%; negative folds were 2/13; trades=55. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 3.493 did not improve on prev 3.4927787451086587.
 
 ---
+
+## Iteration 2026-05-19-1cff42d — REVERTED
+
+**Hypothesis:** Multiplying the committed dual-horizon vol-targeted, market-regime-gated gross by a parameter-free one-sided market-BREADTH dampener — the fraction of active names trading at/above their own structural MA, applied as a continuous scale `breadth/0.5` only when that fraction is below the structural majority boundary (0.5) — will raise the worst disjoint sub-period Sortino without regressing the strong folds or aggregate drawdown, because the kept binary index-level slope gate and the vol-target are both structurally blind to a narrow/eroding tape (a few large names holding the equal-weight index at/above its MA at low realised vol while participation has already collapsed), exactly the slow low-volatility directional-bleed blind spot the recent KEEPs themselves named, and market breadth is the canonical regime-stationary internal that deteriorates in that regime before either committed channel confirms.
+
+**Change:** Added a parameter-free `_market_breadth` helper (fraction of usable active names with close ≥ their own structural MA, reusing `_structural_ma_window` and the same ≥20-series floor and formation/skip horizon as the kept regime gate — no new tunable hyperparameter) and, in `next()` after the existing binary market-regime gate, scaled `gross` by the one-sided continuous factor `breadth/0.5` only when breadth < 0.5, so the book is byte-inert in every healthy ≥50%-participation up-trend (strong folds preserved exactly), can only lower gross (never lever), and de-risks specifically in the narrow-tape blind spot the index-level slope gate and vol-target cannot see.
+
+**Decision:** REVERTED — sortino 3.441 did not improve on prev 3.4927787451086587
+
+**Result:**
+- evaluator_version: 2026-05-16-univfloor
+- validation_sortino_mean: 3.44068952485712
+- validation_folds: 13
+- per_fold_sortinos: [2.8246, -0.6147, -1.2586, 9.2699, 8.8817, 3.0909, 3.5224, 6.1885, 3.2613, 1.0461, 2.188, 4.6584, 1.6704]
+- calmar_mean: 6.220766098215085
+- hit_rate_mean: 0.44187479187479184
+- profit_factor_mean: 3.602782142912249
+- trade_count_total: 55
+- aggregate_max_dd: 0.12201940792569868
+- worst_fold_max_dd: 0.07219779925229142
+- max_position_frac_peak: 0.10751926484245256
+- lower_quartile_fold_calmar: 2.346354509750694
+- n_negative_folds: 2/13
+- risk.passed: True
+- risk.violations: []
+
+**Learning:** Sortino changed from 3.493 to 3.441 (-0.052). Aggregate DD was 12.2% versus previous kept 12.2%; negative folds were 2/13; trades=55. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 3.441 did not improve on prev 3.4927787451086587.
+
+---
