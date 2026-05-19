@@ -2246,3 +2246,32 @@ The highest real-world EV is operational integrity + the 4-week clean
 paper validation + running at ≥₹5L scale — not another backtest lever.
 Most loop iterations here SHOULD end in REVERT; that is the gated search
 working, not failure.
+
+## Iteration 2026-05-19-6355bb2 — REVERTED
+
+**Hypothesis:** Replacing the flat 10%-per-name deployment in the bounded gross-targeting step with inverse-realised-volatility per-name caps (risk-parity construction, hard-anchored at the existing 10% ceiling, no new tunable knob) will improve worst disjoint sub-period Sortino and reduce aggregate drawdown by trimming the highest-volatility momentum names — the ones that crash hardest in bear regimes — while keeping the unchanged 12-1 momentum-quality selection, sector cap and vol-targeted gross.
+
+**Change:** Added a parameter-free risk-parity construction layer: each selected name's deployment cap is scaled by v_min/vol_t (least-volatile candidate keeps the full hard 10% cap; more volatile names are trimmed toward a pre-committed 0.5x floor, never exceeding 10%), threaded into construct_gross_targets via an optional backward-compatible name_cap_of override so the gross budget is spread over more, lower-volatility names instead of equal-weighting the riskiest ones.
+
+**Decision:** REVERTED — anti-overfit FAILED: universe_respect(variant traded tickers outside the point-in-time universe — survivorship/look-ahead reintroduced (hard reject)) · bonferroni(p=1.0000 >= alpha/N=0.1000) · random_walk_mc(only 0.00% percentile vs RW null)
+
+**Result:**
+- evaluator_version: 2026-05-16-univfloor
+- validation_sortino_mean: 2.6146480683925852
+- validation_folds: 13
+- per_fold_sortinos: [0.2501, -0.4544, -0.9072, 4.9233, 10.555, 1.7424, 4.5454, 6.7993, 3.3989, -0.1344, 1.727, 2.6787, -1.1336]
+- calmar_mean: 4.5562510825772256
+- hit_rate_mean: 0.5194139194139195
+- profit_factor_mean: 8.694718418390416
+- trade_count_total: 129
+- aggregate_max_dd: 0.1228571814869461
+- worst_fold_max_dd: 0.1186419129456552
+- max_position_frac_peak: 0.0850676510779961
+- lower_quartile_fold_calmar: -0.3944382422320537
+- n_negative_folds: 4/13
+- risk.passed: True
+- risk.violations: []
+
+**Learning:** Sortino changed from 2.604 to 2.615 (+0.011). Aggregate DD was 12.3% versus previous kept 6.3%; negative folds were 4/13; trades=129. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: anti-overfit FAILED: universe_respect(variant traded tickers outside the point-in-time universe — survivorship/look-ahead reintroduced (hard reject)) · bonferroni(p=1.0000 >= alpha/N=0.1000) · random_walk_mc(only 0.00% percentile vs RW null).
+
+---
