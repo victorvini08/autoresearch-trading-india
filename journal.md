@@ -2913,3 +2913,32 @@ working, not failure.
 **Learning:** Sortino changed from 3.493 to 3.159 (-0.333). Aggregate DD was 11.8% versus previous kept 12.2%; negative folds were 2/13; trades=60. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 3.159 did not improve on prev 3.4927787451086587.
 
 ---
+
+## Iteration 2026-05-19-34881dd — REVERTED
+
+**Hypothesis:** Stabilising the cross-sectional selection ORDER with a parameter-free 2-period overlapping average of this rebalance's momentum-quality rank and the previous rebalance's rank (a Jegadeesh-Titman overlapping-portfolio / rebalance-timing-luck de-luck applied to the ranking, leaving the signal, the gross overlays, the caps and the cadence byte-identical) will raise the worst disjoint sub-period Sortino and reduce DP turnover, because the journal's repeatedly-diagnosed weakness is selection luck from a single unlucky sampling date flickering borderline names in and out (and ejecting held winners on one noisy reading) in exactly the transition/bear folds that set the worst sub-period, and overlapping two adjacent rank samples removes that single-date dependence without lagging genuinely new momentum (new names blend with themselves) and without blunting the kept fast crash de-risk (gross level untouched).
+
+**Change:** Added a parameter-free 2-tranche overlapping-portfolio smoothing of the selection RANK only: `next()` now orders `priority` by the average of this rebalance's rank-percentile and the prior rebalance's stored raw rank-percentile (new/unseen names blend with themselves, so they enter on full merit), which de-flickers the selection boundary and the retain_n test to cut whipsaw DP sells while leaving `momentum_quality_scores`, the vol-target, the slope-confirmed market-regime gate, `construct_gross_targets`, every cap and the biweekly cadence completely unchanged.
+
+**Decision:** REVERTED — sortino 2.802 did not improve on prev 3.4927787451086587
+
+**Result:**
+- evaluator_version: 2026-05-16-univfloor
+- validation_sortino_mean: 2.802294865872881
+- validation_folds: 13
+- per_fold_sortinos: [1.0645, -1.2539, -1.4135, 6.1211, 9.9009, 1.1248, 4.2409, 7.0638, 3.859, 0.7576, 1.3172, 2.4737, 1.1736]
+- calmar_mean: 4.908453134984014
+- hit_rate_mean: 0.44145299145299144
+- profit_factor_mean: 6.196840138187164
+- trade_count_total: 65
+- aggregate_max_dd: 0.13865640415975863
+- worst_fold_max_dd: 0.08637362099707524
+- max_position_frac_peak: 0.10887344136895627
+- lower_quartile_fold_calmar: 1.5472292854511371
+- n_negative_folds: 2/13
+- risk.passed: True
+- risk.violations: []
+
+**Learning:** Sortino changed from 3.493 to 2.802 (-0.690). Aggregate DD was 13.9% versus previous kept 12.2%; negative folds were 2/13; trades=65. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 2.802 did not improve on prev 3.4927787451086587.
+
+---
