@@ -2623,3 +2623,32 @@ working, not failure.
 **Learning:** Sortino changed from 3.308 to 3.493 (+0.185). Aggregate DD was 12.2% versus previous kept 12.9%; negative folds were 2/13; trades=55. Keep compounding on this change, but future iterations should still explain whether the gain came from better return, lower downside, or fewer fragile folds. Decision reason: sortino 3.493 > prev 3.3082196634381384, agg_dd 12.2%, catastrophe gate clear, anti-overfit gates passed.
 
 ---
+
+## Iteration 2026-05-19-40bfa7b — REVERTED
+
+**Hypothesis:** Adding a parameter-free market-beta-hedged residual-momentum rank (cumulative residual of each qualifying name's returns after stripping its time-varying exposure to the equal-weight cross-sectional factor, over the same pre-skip 12-1 horizon) as an equal-weight component of the momentum-quality score will raise the worst disjoint sub-period Sortino without regressing aggregate drawdown or turnover, because the catastrophic bear/rebound momentum crash that sets the negative folds is driven by momentum's time-varying market beta (Grundy-Martin 2001; Daniel-Moskowitz 2016), and ranking on beta-hedged residual strength (Blitz-Huij-Martens 2011 residual momentum) is the single most-replicated structural reduction of momentum's worst sub-period while preserving average return.
+
+**Change:** In momentum_quality_scores only, I capture the per-name return panel during the existing qualification pass and, using the file's already-present tested market_factor/ols_beta helpers (no new imports, no new tunable literal, no new hyperparameter — it reuses the existing beta_window panel and formation/skip horizon), add an equal-weight cross-sectional rank of each qualifying name's cumulative RESIDUAL return after regressing out the equal-weight market factor, with a strict fallback that omits the term (behaviour byte-identical to the committed book) whenever the residual is not computable for every qualifying name or the cross-section is degenerate/thin — a selection-quality thesis change, structurally distinct from the recent gross-overlay/slope-filter revert streak, that directly targets the momentum-crash mechanism behind the worst disjoint folds.
+
+**Decision:** REVERTED — sortino 3.070 did not improve on prev 3.4927787451086587
+
+**Result:**
+- evaluator_version: 2026-05-16-univfloor
+- validation_sortino_mean: 3.0695658291374617
+- validation_folds: 13
+- per_fold_sortinos: [1.5816, 0.4891, 0.3378, 6.0873, 8.7997, 0.5869, 3.0757, 4.8014, 5.0912, 2.0164, 3.1606, 2.6748, 1.202]
+- calmar_mean: 5.248215738712828
+- hit_rate_mean: 0.4316350316350316
+- profit_factor_mean: 39.54532884803161
+- trade_count_total: 73
+- aggregate_max_dd: 0.09125620914299026
+- worst_fold_max_dd: 0.08250914227289231
+- max_position_frac_peak: 0.10450256132659523
+- lower_quartile_fold_calmar: 0.9929678882570976
+- n_negative_folds: 0/13
+- risk.passed: True
+- risk.violations: []
+
+**Learning:** Sortino changed from 3.493 to 3.070 (-0.423). Aggregate DD was 9.1% versus previous kept 12.2%; negative folds were 0/13; trades=73. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 3.070 did not improve on prev 3.4927787451086587.
+
+---
