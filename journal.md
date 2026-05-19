@@ -2594,3 +2594,32 @@ working, not failure.
 **Learning:** Sortino changed from 3.308 to 3.297 (-0.011). Aggregate DD was 12.9% versus previous kept 12.9%; negative folds were 2/13; trades=56. Do not repeat this exact idea without a materially different mechanism; the keep gate rejected it for the stated reason. Decision reason: sortino 3.297 did not improve on prev 3.3082196634381384.
 
 ---
+
+## Iteration 2026-05-19-6361e83 — KEPT
+
+**Hypothesis:** Multiplying the committed dual-horizon vol-targeted gross to exactly zero (full cash) only when the broad active-universe equal-weight cumulative-return index is in a *slope-confirmed* breakdown — index below its structural MA AND that MA itself falling, the exact parameter-free definition the just-KEPT name-level structural exit (ccae79c) uses, lifted to the market level — will raise the worst disjoint sub-period Sortino and not regress aggregate drawdown, because it is byte-inert in every healthy rising-MA up-trend (strong folds unchanged) yet, unlike the reverted weak clipped continuous dampener (defaa42), it has real teeth in a genuine sustained bear where the vol-target is blind to a slow low-volatility directional bleed.
+
+**Change:** Added a pure, deterministic, parameter-free `_market_regime_breakdown` that builds the equal-weight active-universe cumulative-return index and applies the SAME slope-confirmed structural-breakdown test the KEPT between-rebalance exit uses at the name level (reusing `_structural_ma_window` and the formation/`skip` slope horizon, no new knob), then in `next()` forces the vol-targeted `gross` to 0.0 only when that confirmed market breakdown holds — one-sided (gross can only fall to cash, never lever), inert otherwise, structurally distinct from the reverted continuous ratio dampener and the reverted entry-side slope filter.
+
+**Decision:** KEPT — sortino 3.493 > prev 3.3082196634381384, agg_dd 12.2%, catastrophe gate clear, anti-overfit gates passed
+
+**Result:**
+- evaluator_version: 2026-05-16-univfloor
+- validation_sortino_mean: 3.4927787451086587
+- validation_folds: 13
+- per_fold_sortinos: [2.8246, -0.6147, -1.2201, 10.1361, 8.6149, 3.1183, 3.5343, 6.1885, 3.2613, 1.0461, 2.188, 4.6584, 1.6704]
+- calmar_mean: 6.324215769057869
+- hit_rate_mean: 0.4393106893106893
+- profit_factor_mean: 3.6738447858137095
+- trade_count_total: 55
+- aggregate_max_dd: 0.12201940792569868
+- worst_fold_max_dd: 0.07219779925229142
+- max_position_frac_peak: 0.1061646093260265
+- lower_quartile_fold_calmar: 2.346354509750694
+- n_negative_folds: 2/13
+- risk.passed: True
+- risk.violations: []
+
+**Learning:** Sortino changed from 3.308 to 3.493 (+0.185). Aggregate DD was 12.2% versus previous kept 12.9%; negative folds were 2/13; trades=55. Keep compounding on this change, but future iterations should still explain whether the gain came from better return, lower downside, or fewer fragile folds. Decision reason: sortino 3.493 > prev 3.3082196634381384, agg_dd 12.2%, catastrophe gate clear, anti-overfit gates passed.
+
+---
