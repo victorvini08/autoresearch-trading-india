@@ -116,7 +116,10 @@ def write_execution_result(
 
         # 2. actual_fills + 3. cash_ledger + 4. position_lots + 5. realized_trades
         for f in fills:
-            commission = commission_usd(f.fill_price * f.quantity)
+            # India cost model is side-aware (DP charge ₹14.75 on SELL
+            # only, STT sell-side, stamp buy-side); commission_usd requires
+            # `side`. Carried-over call predated the side-aware model.
+            commission = commission_usd(f.fill_price * f.quantity, f.side)
             portfolio_db.insert_fill(
                 conn,
                 fill_id=f.fill_id,

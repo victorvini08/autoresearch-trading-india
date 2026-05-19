@@ -27,8 +27,17 @@ HALT_FILE_PATH = REPO_ROOT / "state" / "halt.json"
 
 
 def connect(db_path: Path | str = DEFAULT_DB_PATH) -> duckdb.DuckDBPyConnection:
-    """Open (or create) the portfolio duckdb file. Caller closes when done."""
-    return duckdb.connect(str(db_path))
+    """Open (or create) the portfolio duckdb file, ensuring the ledger
+    schema exists. Caller closes when done.
+
+    init_schema is idempotent (CREATE TABLE IF NOT EXISTS), so a fresh
+    paper ledger self-bootstraps on first use — previously every consumer
+    (premarket_scan, run_live, daily_report, dashboard) crashed with
+    'Table broker_positions does not exist' because nothing ever called
+    init_schema on storage/portfolio.duckdb."""
+    conn = duckdb.connect(str(db_path))
+    init_schema(conn)
+    return conn
 
 
 _DDL = [

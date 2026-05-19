@@ -29,7 +29,8 @@ from __future__ import annotations
 import logging
 import os
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import date, datetime, timezone
+from types import SimpleNamespace
 from pathlib import Path
 
 from brokers.dhan import (
@@ -117,15 +118,31 @@ class DhanExecutor:
             from scripts.signal_today import generate_signals
 
             signals_result = generate_signals(
-                as_of_date=as_of_date,
-                strategy_module=strategy_module,
+                target_date=as_of_date,
+                strategy_module_name=strategy_module,
             )
-            # `generate_signals` returns a dict-like result; we use only the
-            # `targets` slice. Falls back to {} on unexpected shapes — the
-            # downstream empty-targets branch handles that cleanly.
-            targets = getattr(signals_result, "targets", None) or (
-                signals_result.get("targets", {}) if isinstance(signals_result, dict) else {}
+            # generate_signals returns {"targets": [{"ticker","target_fraction"},...],
+            # "exits":[...]} — a LIST of entry rows. _build_orders expects a
+            # {ticker: target_fraction} MAPPING (a ticker absent from the map is
+            # liquidated, which is exactly how `exits` should manifest). Adapt
+            # the shape here; tolerate the legacy mapping form defensively so an
+            # unexpected shape degrades to {} rather than crashing the cron.
+            raw_targets = (
+                signals_result.get("targets", [])
+                if isinstance(signals_result, dict)
+                else getattr(signals_result, "targets", []) or []
             )
+            if isinstance(raw_targets, dict):
+                targets = {k: float(v) for k, v in raw_targets.items()}
+            elif isinstance(raw_targets, list):
+                targets = {
+                    r["ticker"]: float(r["target_fraction"])
+                    for r in raw_targets
+                    if isinstance(r, dict)
+                    and "ticker" in r and "target_fraction" in r
+                }
+            else:
+                targets = {}
         except PreflightSkipped as e:
             if e.set_halt:
                 set_halt(e.reason, set_by="DhanExecutor")
@@ -204,21 +221,72 @@ class DhanExecutor:
         n_fills = len(todays)
         total_commission = sum(f.commission for f in todays)
 
-        # 6. Ledger write — delegate to ledger_writer (carried from US repo)
+        # 6. Ledger write — single-transaction via ledger_writer. The real
+        # API is write_execution_result(conn, *, as_of_date, mode, orders,
+        # fills, new_positions={ticker:(qty, mark_price)}); the old
+        # write_day_ledger(path, targets=..., source_tag=...) name/signature
+        # never existed in the India build. new_positions is the post-fill
+        # broker state marked at the latest close ≤ as_of_date.
         try:
-            from scripts.ledger_writer import write_day_ledger
+            from storage import portfolio_db as _pdb
+            from scripts.ledger_writer import write_execution_result
 
-            n_disc = write_day_ledger(
-                portfolio_db=self.portfolio_db,
-                mode=self.mode,
-                as_of_date=as_of_date,
-                fill_date=as_of_date,
-                targets=targets,
-                orders=[r for _, r in placed],
-                fills=todays,
-                source_tag=source_tag,
-                currency="INR",
+            post = self.broker.get_positions()
+            mark_px = _load_latest_closes(
+                self.prices_db,
+                tickers={p.ticker for p in post},
+                on_or_before=as_of_date,
             )
+            new_positions = {
+                p.ticker: (p.quantity, float(mark_px.get(p.ticker, 0.0)))
+                for p in post
+            }
+            # Impedance adapter: the India broker model
+            # (OrderRequest/OrderResponse pair, Fill with .price/.fill_time/
+            # 'BUY'|'SELL') -> the ledger model expected by
+            # write_execution_result / portfolio_db.insert_{order,fill}
+            # (order_id/submitted_at/ticker/side/order_type/quantity/
+            # limit_price/status; fill_id/order_id/filled_at/ticker/side/
+            # quantity/fill_price/commission). ledger_writer's lot FIFO
+            # compares `side == "buy"` (lowercase), so normalise case.
+            _submitted_at = datetime.now(timezone.utc).replace(tzinfo=None)
+            ledger_orders = [
+                SimpleNamespace(
+                    order_id=resp.order_id,
+                    submitted_at=_submitted_at,
+                    ticker=req.ticker,
+                    side=req.transaction_type.lower(),
+                    order_type=req.order_type,
+                    quantity=req.quantity,
+                    limit_price=req.price,
+                    status=resp.status,
+                )
+                for req, resp in placed
+            ]
+            ledger_fills = [
+                SimpleNamespace(
+                    fill_id=f.order_id,          # 1 fill/order (mock) → unique
+                    order_id=f.order_id,
+                    filled_at=f.fill_time,
+                    ticker=f.ticker,
+                    side=f.side.lower(),
+                    quantity=f.quantity,
+                    fill_price=f.price,
+                    commission=f.commission,
+                    slippage_bps=None,
+                )
+                for f in todays
+            ]
+            with _pdb.connect(self.portfolio_db) as conn:
+                ws = write_execution_result(
+                    conn,
+                    as_of_date=as_of_date,
+                    mode=self.mode,
+                    orders=ledger_orders,
+                    fills=ledger_fills,
+                    new_positions=new_positions,
+                )
+            n_disc = ws.n_discrepancies
         except Exception as e:
             logger.error("ledger write failed: %s", e)
             notes.append(f"ledger write failed: {e}")
