@@ -22,8 +22,8 @@ Trade contract:
     hard per-name and per-sector caps bound single-name/single-sector
     concentration (the blow-up risk §4 exists to prevent), while removing
     the unintended deployment pin (old fixed-slot `gross/n_positions` +
-    cap-and-leak deployed only ~24% in ALL regimes — even when
-    breadth_scaled_gross asked for 0.99 — because the sector cap divided by
+    cap-and-leak deployed only ~24% in ALL regimes -- even when
+    breadth_scaled_gross asked for 0.99 -- because the sector cap divided by
     a tiny per-name target clamped the whole book to ~one sector).
 '''
 
@@ -210,7 +210,7 @@ def _structural_ma_window(lookback: int) -> int:
     Single source of truth so the entry filter (price must be ABOVE this MA
     to qualify) and the between-rebalance structural exit (sell once price
     falls BELOW it) provably use the SAME definition and cannot drift apart.
-    Not a new tunable knob — this is the strategy's pre-existing inline
+    Not a new tunable knob -- this is the strategy's pre-existing inline
     convention (was `min(200, max(50, lookback*3//4))` in
     momentum_quality_scores), now named and shared.
     '''
@@ -341,7 +341,7 @@ def breadth_scaled_gross(
 # ~this realised volatility. 12% is a standard institutional moderate
 # target. This is the single most-replicated robust improvement to a
 # momentum book (Barroso & Santa-Clara 2015; Moreira & Muir 2017): it
-# deploys MORE in calm up-trends (captures upside — the user's core ask)
+# deploys MORE in calm up-trends (captures upside -- the user's core ask)
 # and LESS in turbulent / momentum-crash regimes (principled downside,
 # not the old 25%-cap bug artefact). Now meaningful only because the
 # sector-wiring bug is fixed and gross actually deploys.
@@ -349,24 +349,43 @@ _ANNUAL_VOL_TARGET = 0.12
 _TRADING_DAYS = 252
 
 
-def vol_targeted_gross(
-    close_by_ticker: dict[str, list[float]], lookback_days: int
-) -> float:
-    '''Volatility-targeted gross exposure (replaces the crude breadth step).
+def _annualised_realised_vol(
+    close_by_ticker: dict[str, list[float]], vol_lb: int
+) -> float | None:
+    '''Annualised DOWNSIDE deviation of the equal-weight cross-sectional
+    daily return.
 
-    gross = clip(_ANNUAL_VOL_TARGET / realised_market_vol_annualised,
-                 0.0, 0.99)
+    Root-cause fix (2026-05-19, human-directed). The committed estimator
+    used total std -- a *direction-blind* risk measure. Realised total vol
+    spikes just as hard on sharp UP days as on down days, so the
+    vol-managed overlay de-risked INTO strong rallies (measured: the book
+    ran ~54% gross through a +10% quarter, never above 62%) while a
+    grinding low-vol decline barely cut it. The defence the book actually
+    delivers in a bear comes from the momentum-quality selection + the
+    slope-confirmed structural exit, NOT from this symmetric cap -- which
+    is therefore mostly a rally tax. Replacing total std with the downside
+    (semi-)deviation makes the SAME risk budget direction-aware: near-zero
+    in up-skewed rallies (gross -> cap, upside captured) and elevated in
+    down-skewed declines (gross cut, defence kept/tightened). Theory:
+    Moreira & Muir (2017) / downside-vol-managed momentum.
 
-    realised vol = std of the equal-weight cross-sectional daily return
-    (the market proxy) over a ~6-month window (Barroso-Santa-Clara horizon,
-    derived from the signal lookback — not a new tunable knob), annualised
-    by sqrt(252). Long-only, never levered (cap 0.99); fully de-risks as
-    realised vol explodes (momentum crashes happen in high-vol panics —
-    Daniel-Moskowitz), and runs ~fully invested in calm trends. Pure and
-    deterministic. Falls back to 0.75 (the old neutral default) when the
-    cross-section is too thin to estimate vol.
+    This REUSES the module's already-tested ``_downside_volatility``
+    helper (the same downside-risk concept ``momentum_quality_scores``
+    already ranks on) -- not a new formula. That helper uses the
+    negatives-only convention E[r^2 | r<0], which under a symmetric return
+    distribution EQUALS the variance (no /sqrt(2) fudge, no average
+    leverage change vs the old std target); it diverges -- in the intended
+    direction -- only when returns are skewed. Under real negative skew it
+    is, if anything, marginally MORE defensive on average: a risk
+    *re-allocation*, definitively not a lever-up. ``_ANNUAL_VOL_TARGET``
+    is unchanged and ZERO new hyperparameters are introduced (parsimony
+    gate N/A), so the variant competes purely on robustness.
+
+    Pure/deterministic. Returns None when fewer than 20 usable series are
+    available (caller decides the fallback), so the same robust 20-name
+    floor is enforced whether the input is the held book or the broad
+    active-universe proxy -- the thin-sample contract is untouched.
     '''
-    vol_lb = min(126, max(63, int(lookback_days) // 2))  # ~6 months
     rets = []
     for raw in close_by_ticker.values():
         if len(raw) < vol_lb + 1:
@@ -376,22 +395,109 @@ def vol_targeted_gross(
             continue
         rets.append(c[1:] / c[:-1] - 1.0)
     if len(rets) < 20:
-        return 0.75
+        return None
     mkt = np.mean(np.asarray(rets, dtype=float), axis=0)
-    rv = float(np.std(mkt)) * float(np.sqrt(_TRADING_DAYS))
+    # Direction-AWARE risk: downside (semi-)deviation of the equal-weight
+    # market/book return series, via the module's existing helper. Zero
+    # negative days in the window -> 0.0 -> caller clips gross to the 0.99
+    # cap (full rally capture); the <20-series None path above is unchanged.
+    return _downside_volatility(mkt) * float(np.sqrt(_TRADING_DAYS))
+
+
+def _dual_horizon_realised_vol(
+    book_close_by_ticker: dict[str, list[float]] | None,
+    close_by_ticker: dict[str, list[float]],
+    slow_lb: int,
+    fast_lb: int,
+) -> float | None:
+    '''MAX of a slow (~6m) and a fast (~1m) annualised realised-vol estimate.
+
+    Both estimates are drawn from the SAME source resolved by the existing
+    robust preference -- the held qualified momentum book if it yields a
+    slow estimate with >= 20 usable series, else the broad active-universe
+    cross-section -- so the proven held-book referencing (Daniel-Moskowitz:
+    a momentum crash is foreshadowed by the rising vol of the momentum
+    book ITSELF, not the market) is preserved unchanged.
+
+    Taking the MAX makes the overlay weakly MORE defensive ONLY when the
+    book's short-horizon vol spikes above its slow estimate -- precisely
+    the momentum-crash precursor a 6-month estimate lags -- and leaves it
+    ~unchanged in calm regimes (fast ~ slow). It can NEVER be less
+    defensive than the committed slow-only estimator, so the resulting
+    gross can only fall, never rise, relative to the kept behaviour:
+    one-sided toward drawdown / worst-sub-period protection and
+    turnover-neutral (the overlay still changes only the gross LEVEL, not
+    which names are held). No new tunable hyperparameter: fast_lb is
+    DERIVED from the existing slow window exactly as slow_lb is derived
+    from the signal lookback. Pure and deterministic.
+    '''
+    for src in (book_close_by_ticker, close_by_ticker):
+        if not src:
+            continue
+        slow = _annualised_realised_vol(src, slow_lb)
+        if slow is None:
+            continue
+        fast = _annualised_realised_vol(src, fast_lb)
+        if fast is None:
+            return slow
+        return max(slow, fast)
+    return None
+
+
+def vol_targeted_gross(
+    close_by_ticker: dict[str, list[float]],
+    lookback_days: int,
+    book_close_by_ticker: dict[str, list[float]] | None = None,
+) -> float:
+    '''Volatility-targeted gross exposure, referenced to the HELD book.
+
+    gross = clip(_ANNUAL_VOL_TARGET / realised_vol_annualised, 0.0, 0.99)
+
+    Refinement (this iteration): the realised-vol risk input is now the
+    MAX of a slow ~6-month estimate (the committed window) and a fast
+    ~1-month estimate of the *same* qualified momentum-quality book we
+    actually deploy (``book_close_by_ticker``), with the robust fall-back
+    chain unchanged (held-book proxy if >= 20 usable series -> else the
+    broad active-universe cross-section -> else 0.75). Daniel-Moskowitz
+    (2016) show momentum crashes are foreshadowed by a RAPID rise in the
+    momentum portfolio's OWN volatility; a single 6-month estimate lags
+    that rise by months, so the de-risk arrives after the worst of the
+    drawdown. Adding the fast estimate via MAX makes the overlay cut gross
+    promptly when short-horizon book vol spikes (earlier crash de-risk in
+    exactly the turbulent/bear sub-periods that set the worst disjoint
+    Sortino) while staying byte-~equivalent in calm trends (fast ~ slow,
+    still clipped at 0.99 -- upside capture preserved). The MAX guarantees
+    the estimate is never below the committed slow-only value, so gross is
+    weakly LOWER only -- never higher -- than the kept behaviour: strictly
+    one-sided downside protection, never levered (cap 0.99), turnover-
+    neutral (only the gross LEVEL moves, not which names are held). Same
+    _ANNUAL_VOL_TARGET, same 20-name floor; the fast window is DERIVED
+    from the existing slow window (no new hyperparameter). Pure and
+    deterministic.
+    '''
+    vol_lb = min(126, max(63, int(lookback_days) // 2))  # ~6 months (slow)
+    # ~1-month fast horizon, DERIVED from the slow window the same way the
+    # slow window is derived from lookback -- NOT a new tunable knob.
+    fast_lb = max(21, int(vol_lb) // 6)
+
+    rv = _dual_horizon_realised_vol(
+        book_close_by_ticker, close_by_ticker, vol_lb, fast_lb
+    )
+    if rv is None:
+        return 0.75
     if not np.isfinite(rv) or rv <= 1e-9:
         return 0.99
     return float(np.clip(_ANNUAL_VOL_TARGET / rv, 0.0, 0.99))
 
 
 # Pre-committed single-name concentration limit (NOT a searched/tunable
-# knob — a hard risk control, same status as the 0.5-2.0 risk-parity clip
-# the codebase already pre-commits). 10% ⇒ a fully-invested book is spread
+# knob -- a hard risk control, same status as the 0.5-2.0 risk-parity clip
+# the codebase already pre-commits). 10% => a fully-invested book is spread
 # over at least ~10 names. This is precisely what bounds the blow-up risk
 # CLAUDE.md §4 exists to prevent (the predecessor blew up sizing from
 # len(selected) with NO per-name bound and 1 name qualifying). With this
-# cap, even a 1-name regime puts ≤10% in that name and the rest stays cash
-# — strictly safer than the old fixed-slot scheme, never concentrated.
+# cap, even a 1-name regime puts <=10% in that name and the rest stays cash
+# -- strictly safer than the old fixed-slot scheme, never concentrated.
 _MAX_NAME_WEIGHT = 0.10
 
 
@@ -405,7 +511,7 @@ def construct_gross_targets(
     '''Deploy `gross` down the ranked `priority` list, bounded by per-name
     `name_cap` and per-sector `sector_cap`, CONTINUING into lower-ranked
     names in other sectors until the gross budget is met (instead of
-    leaking the sector-capped remainder to cash — the bug that pinned the
+    leaking the sector-capped remainder to cash -- the bug that pinned the
     old book to ~24% deployed in every regime).
 
     Greedy by rank: each name in turn gets
@@ -414,12 +520,12 @@ def construct_gross_targets(
     sector with room. Pure and deterministic.
 
     Invariants (long-only, no leverage, bounded concentration):
-      * Σ targets ≤ gross  (≤ 0.99 — the budget is never exceeded; it can
+      * Σ targets <= gross  (<= 0.99 -- the budget is never exceeded; it can
         only fall short when the priority list / sector rooms are exhausted,
         which is the correct defensive behaviour in a genuinely narrow
         market, not a leak).
-      * targets[t] ≤ name_cap for every name.
-      * Σ_{t∈sector} targets[t] ≤ sector_cap for every sector.
+      * targets[t] <= name_cap for every name.
+      * Σ_{t∈sector} targets[t] <= sector_cap for every sector.
     '''
     budget = float(gross)
     if budget <= 0.0 or not priority:
@@ -494,12 +600,12 @@ class IndiaMomentumQualityCarry(bt.Strategy):
 
         ROOT-CAUSE FIX (Improvement G, 2026-05-18): the backtest/live feeds
         (`bt.feeds.PandasData`) never carry an `_industry` attribute, so the
-        old `getattr(d,'_industry',...)` made EVERY name 'OTHER' — the 25%
+        old `getattr(d,'_industry',...)` made EVERY name 'OTHER' -- the 25%
         per-sector cap silently became a hard 25% whole-book net-exposure
         ceiling in every backtest ever run (and live). Industry is static
         enrichment metadata (CLAUDE.md locked decision: the Nifty-500 list
         is sector/ISIN enrichment, never a membership/return signal), so
-        sourcing it from the universe DB is point-in-time-safe — it is not
+        sourcing it from the universe DB is point-in-time-safe -- it is not
         a tradable look-ahead. Feed attribute is kept as a fallback; if the
         DB is unavailable the old (degenerate) behaviour is preserved so
         nothing hard-fails.
@@ -521,7 +627,7 @@ class IndiaMomentumQualityCarry(bt.Strategy):
                     industry_by_ticker[str(tkr).upper()] = str(ind)
             finally:
                 conn.close()
-        except Exception:  # noqa: BLE001 — DB absent in some unit tests
+        except Exception:  # noqa: BLE001 -- DB absent in some unit tests
             industry_by_ticker = {}
 
         rows = []
@@ -541,10 +647,10 @@ class IndiaMomentumQualityCarry(bt.Strategy):
         if today.weekday() != self.p.rebalance_weekday:
             return False
         iso_week = today.isocalendar().week
-        # Honour rebalance_period_weeks (previously a dead param —
+        # Honour rebalance_period_weeks (previously a dead param --
         # biweekly was hardcoded as iso_week % 2). period=2 is
         # behaviour-identical to the prior code (committed default
-        # unchanged); period=1 ⇒ every rebalance_weekday (weekly).
+        # unchanged); period=1 => every rebalance_weekday (weekly).
         period = max(1, int(self.p.rebalance_period_weeks))
         if not self._week_parity_initialized:
             self._week_parity_initialized = True
@@ -614,7 +720,7 @@ class IndiaMomentumQualityCarry(bt.Strategy):
 
         backtrader delivers this before ``next()`` on the fill bar, so a
         name exited (structurally or by rebalance) is stop-eligible again
-        the moment it is re-entered — no stale flag can silently disable a
+        the moment it is re-entered -- no stale flag can silently disable a
         future structural exit on a re-bought position.
         '''
         if getattr(trade, 'isclosed', False):
@@ -625,14 +731,14 @@ class IndiaMomentumQualityCarry(bt.Strategy):
 
         The entry (momentum_quality_scores) only buys a name whose close is
         ABOVE its own beta_window-derived structural MA. This sells a held
-        name once its close falls BELOW that SAME MA — i.e. its long
+        name once its close falls BELOW that SAME MA -- i.e. its long
         uptrend has objectively broken. A ~190-day MA does not move on the
         routine 5-10% Indian mid-cap pullbacks (so intact winners are never
-        churned — momentum's right tail is preserved), only on a sustained
+        churned -- momentum's right tail is preserved), only on a sustained
         breakdown (regime transition / bear), where many names breaking
         together cascade the book toward cash: emergent graceful de-risking
         with no binary macro gate and gross only ever falling (long-only,
-        <=100%, no leverage). Adds no tunable hyperparameter — the MA is the
+        <=100%, no leverage). Adds no tunable hyperparameter -- the MA is the
         strategy's existing structural definition applied symmetrically.
 
         Runs only on non-rebalance bars so the rebalance owns every order
@@ -700,18 +806,38 @@ class IndiaMomentumQualityCarry(bt.Strategy):
         )
 
         # Held winners still ranked within retain_n keep priority (low
-        # turnover ⇒ low DP drag); then ALL remaining ranked, quality-gated
+        # turnover => low DP drag); then ALL remaining ranked, quality-gated
         # names by score as new-entry candidates. The pool is intentionally
         # the full ranked list (not capped at an eligible_n) so the
         # construction can walk DEEP across sectors to actually reach the
-        # intended gross — the old eligible_n/n_positions caps were part of
+        # intended gross -- the old eligible_n/n_positions caps were part of
         # the ~24% deployment pin. A held name ranked BELOW retain_n is not
-        # in priority ⇒ it is exited (momentum discipline preserved).
+        # in priority => it is exited (momentum discipline preserved).
         retained_priority = [t for t, _ in ranked[:retain_n] if t in held]
         new_candidates = [t for t, _ in ranked if t not in held]
         priority = retained_priority + new_candidates
 
-        gross = vol_targeted_gross(close_by_ticker, int(self.p.beta_window))
+        # Volatility-target referenced to the HELD momentum book: the
+        # priority names ARE the qualified momentum-quality pool the
+        # construction deploys (all ⊂ close_by_ticker ⊂ active universe --
+        # strictly PIT, no off-universe leak). Daniel-Moskowitz: momentum
+        # crashes are foreshadowed by the momentum book's OWN rising vol,
+        # not market vol -- and a 6-month estimate lags that rise, so the
+        # overlay now also reads a derived ~1-month fast vol of the same
+        # book and uses the MAX (de-risk earlier in the bear/turbulent
+        # sub-periods, ~unchanged in calm). Falls back to the broad
+        # cross-section then 0.75 when the qualified pool is thin, so a
+        # deep-bear thin sample never regresses behaviour.
+        book_close_by_ticker = {
+            t: close_by_ticker[t]
+            for t in priority
+            if t in close_by_ticker
+        }
+        gross = vol_targeted_gross(
+            close_by_ticker,
+            int(self.p.beta_window),
+            book_close_by_ticker,
+        )
         sector_of = {
             t: (self._sector_map[t].sector
                 if self._sector_map.get(t) else 'OTHER')
