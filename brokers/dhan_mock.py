@@ -28,8 +28,12 @@ import uuid
 from dataclasses import dataclass, field
 from datetime import date, datetime
 from pathlib import Path
+from typing import Callable
+from zoneinfo import ZoneInfo
 
 import duckdb
+
+IST = ZoneInfo("Asia/Kolkata")
 
 from brokers.dhan import (
     EXCHANGE_NSE_EQ,
@@ -67,6 +71,13 @@ class DhanMock:
 
     prices_db: Path | None = None
     portfolio_db: Path | None = None
+    # Phase B (close→open fix): when set, paper MARKET fills are priced at
+    # the value returned by this fetcher (today's NSE open via yfinance, in
+    # the live operational wiring), not at the prior bhav close. Falls back
+    # to the bhav close when the fetcher returns None / raises, so the mock
+    # works in offline tests too. The executor injects the live fetcher at
+    # construction; unit tests leave it None (no network, deterministic).
+    fill_price_fetcher: Callable[[str], float | None] | None = None
     initial_cash_inr: float = 50_000.0
     slippage_bps: float = DEFAULT_SLIPPAGE_BPS
     mode: str = "dhan-paper"
@@ -127,6 +138,44 @@ class DhanMock:
         return f"MOCK_{ticker.upper()}"
 
     # ── price lookup ──
+    def _fill_reference_price(
+        self, ticker: str, as_of_date: date | None
+    ) -> float | None:
+        """Reference price for a paper MARKET fill.
+
+        Phase B of the close→open fix: when as_of_date is today (live
+        operational mode) and a fill_price_fetcher is injected, use it
+        — typically wired to yfinance's today's-NSE-open. This matches
+        the validated backtest's 'fill at next bar open' semantics for
+        the trade-day execution.
+
+        Falls back to the most-recent bhav close in any of these cases:
+          - No fetcher injected (unit tests, offline runs).
+          - Fetcher returned None / raised / returned a non-positive
+            value (yfinance scrape glitch, Yahoo lag).
+          - as_of_date is in the past (backfill / replay) — yfinance
+            'today' is not the trade date, so we use the authoritative
+            bhav archive directly.
+        """
+        today_ist = datetime.now(IST).date()
+        if (
+            self.fill_price_fetcher is not None
+            and as_of_date is not None
+            and as_of_date == today_ist
+        ):
+            try:
+                px = self.fill_price_fetcher(ticker)
+            except Exception as e:  # noqa: BLE001 — best-effort scrape
+                logger.warning(
+                    "DhanMock fill-price fetcher failed for %s: %s — "
+                    "falling back to bhav close",
+                    ticker, e,
+                )
+                px = None
+            if px is not None and px > 0:
+                return float(px)
+        return self._latest_close(ticker, on_or_before=as_of_date)
+
     def _latest_close(self, ticker: str, on_or_before: date | None = None) -> float | None:
         if self.prices_db is None or not Path(self.prices_db).exists():
             return None
@@ -194,7 +243,7 @@ class DhanMock:
 
         ref_price: float | None = req.price
         if req.order_type == ORDER_TYPE_MARKET:
-            ref_price = self._latest_close(req.ticker, on_or_before=as_of_date)
+            ref_price = self._fill_reference_price(req.ticker, as_of_date)
         if ref_price is None:
             # No price data → reject. This is how live would behave if the
             # exchange couldn't price the order.

@@ -314,7 +314,11 @@ class DhanBroker:
 
     # ── orders ──
 
-    def place_order(self, req: OrderRequest) -> OrderResponse:
+    def place_order(self, req: OrderRequest, *, as_of_date=None) -> OrderResponse:
+        # `as_of_date` kwarg accepted (ignored) so DhanBroker and DhanMock
+        # share an identical call signature — paper's mock uses it to drive
+        # the Phase B yfinance fill-price fetcher; live ignores it (the
+        # exchange supplies the true fill price via tradedPrice).
         security_id = self.security_id_for(req.ticker)
         body: dict = {
             "dhanClientId": self.client_id,

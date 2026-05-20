@@ -79,10 +79,24 @@ class DhanExecutor:
         )
         if use_mock:
             from brokers.dhan_mock import DhanMock
+            from scripts.premarket_scan import _default_quote_fetch
+
+            def _yfinance_today_open(ticker: str) -> float | None:
+                """Phase B (close→open fix): live paper-fill pricing —
+                today's NSE open via yfinance. Reuses premarket_scan's
+                already-tested fetcher (same Yahoo .NS / ^INDIAVIX
+                symbol resolution + the 'must be today's row' guard +
+                fail-closed semantics). Returns the open or None;
+                DhanMock falls back to the bhav close on None."""
+                row = _default_quote_fetch(ticker)
+                if not row:
+                    return None
+                return row.get("premarket_price")
 
             return DhanMock(
                 prices_db=self.prices_db,
                 portfolio_db=self.portfolio_db,
+                fill_price_fetcher=_yfinance_today_open,
                 initial_cash_inr=self.initial_cash_inr,
                 mode=self.mode,
             )
@@ -219,7 +233,9 @@ class DhanExecutor:
         for req in order_reqs:
             try:
                 if hasattr(self.broker, "place_order"):
-                    resp = self.broker.place_order(req)
+                    # as_of_date drives Phase B fill-pricing in the mock
+                    # (today's NSE open via yfinance); DhanBroker ignores it.
+                    resp = self.broker.place_order(req, as_of_date=as_of_date)
                 else:
                     raise RuntimeError("broker has no place_order")
                 placed.append((req, resp))
