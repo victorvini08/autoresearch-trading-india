@@ -100,8 +100,14 @@ class DhanExecutor:
         *,
         strategy_module: str = "strategy",
         source_tag: str = "run_live",
+        skips: set[str] | None = None,
     ) -> ExecutionSummary:
+        """`skips`: tickers flagged by premarket_scan (>=5% pre-open move or
+        VIX hard-halt). Built orders touching these names are dropped after
+        construction — leaves any current position in place (no buy, no
+        sell) rather than transacting into a violently-moving tape."""
         notes: list[str] = []
+        skips = set(s.upper() for s in (skips or ()))
 
         # 1. Pre-flight: halt (halt.json is global — not per-mode)
         halt_payload = show_halt()
@@ -170,6 +176,30 @@ class DhanExecutor:
             as_of_date=as_of_date,
             targets=targets,
         )
+        # 3b. Drop orders touching premarket-flagged tickers (gap/halt). For
+        #     held names this leaves the position in place (no sell into a
+        #     gap-down); for new entries this defers them to the next
+        #     rebalance day (no buy into a gap-up).
+        if skips and order_reqs:
+            before = len(order_reqs)
+            dropped: dict[str, float] = {}
+            kept = []
+            for req in order_reqs:
+                if req.ticker.upper() in skips:
+                    notional = float(req.quantity) * float(req.price or 0.0)
+                    dropped[req.ticker.upper()] = notional
+                    if req.transaction_type.upper() == "BUY":
+                        gross_buy -= notional
+                    else:
+                        gross_sell -= notional
+                else:
+                    kept.append(req)
+            order_reqs = kept
+            if dropped:
+                notes.append(
+                    f"premarket: dropped {before - len(order_reqs)} orders for "
+                    f"gap-flagged tickers {sorted(dropped)}"
+                )
         if not order_reqs:
             notes.append("FRACTION_CHANGE_THRESHOLD suppressed all rebalance deltas")
             return ExecutionSummary(
