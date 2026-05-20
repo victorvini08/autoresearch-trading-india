@@ -168,6 +168,72 @@ def test_cash_hydrates_from_ledger(tmp_path: Path, prices_db: Path) -> None:
         50_000.0 - 12_050.0, abs=0.01)
 
 
+# ── Phase B contract: paper MARKET fills priced at today's NSE open ──
+# via the injected fetcher (yfinance in live operation), with graceful
+# fallback to bhav close when the fetcher returns None / fails.
+
+
+def test_phase_b_uses_injected_fetcher_for_today(prices_db: Path) -> None:
+    from datetime import date as _date
+    today = datetime.now().astimezone().date() if False else None
+    # We don't know "today" in the test environment vs the mock's IST clock,
+    # so call the price-resolution helper directly with as_of_date == today.
+    fetcher_called: list = []
+    def fixed(t):
+        fetcher_called.append(t)
+        return 1234.56  # NOT 1205 (bhav close); has to come from the fetcher
+    m = DhanMock(
+        prices_db=prices_db, initial_cash_inr=50_000.0,
+        slippage_bps=0.0, fill_price_fetcher=fixed,
+    )
+    from zoneinfo import ZoneInfo
+    from datetime import datetime as _dt
+    today_ist = _dt.now(ZoneInfo("Asia/Kolkata")).date()
+    px = m._fill_reference_price("RELIANCE", today_ist)
+    assert px == 1234.56, "today's fill must come from the injected fetcher"
+    assert fetcher_called == ["RELIANCE"]
+
+
+def test_phase_b_falls_back_to_bhav_when_fetcher_returns_none(prices_db: Path) -> None:
+    from zoneinfo import ZoneInfo
+    from datetime import datetime as _dt
+    m = DhanMock(
+        prices_db=prices_db, initial_cash_inr=50_000.0,
+        slippage_bps=0.0,
+        fill_price_fetcher=lambda t: None,  # yfinance glitch / stale day
+    )
+    today_ist = _dt.now(ZoneInfo("Asia/Kolkata")).date()
+    px = m._fill_reference_price("RELIANCE", today_ist)
+    assert px == 1205.0, "fetcher=None must fall back to the bhav close"
+
+
+def test_phase_b_falls_back_to_bhav_when_fetcher_raises(prices_db: Path) -> None:
+    from zoneinfo import ZoneInfo
+    from datetime import datetime as _dt
+    def boom(t):
+        raise RuntimeError("Yahoo 503")
+    m = DhanMock(
+        prices_db=prices_db, initial_cash_inr=50_000.0,
+        slippage_bps=0.0, fill_price_fetcher=boom,
+    )
+    today_ist = _dt.now(ZoneInfo("Asia/Kolkata")).date()
+    px = m._fill_reference_price("RELIANCE", today_ist)
+    assert px == 1205.0, "fetcher exception must fall back to the bhav close"
+
+
+def test_phase_b_uses_bhav_for_backfill_dates(prices_db: Path) -> None:
+    # Backfill / replay: as_of_date is in the past. yfinance "today" is not
+    # the trade date, so use the authoritative bhav archive regardless of
+    # whether a fetcher is injected.
+    m = DhanMock(
+        prices_db=prices_db, initial_cash_inr=50_000.0,
+        slippage_bps=0.0,
+        fill_price_fetcher=lambda t: 9999.0,  # would be wrong for backfill
+    )
+    px = m._fill_reference_price("RELIANCE", date(2026, 5, 13))
+    assert px == 1205.0, "backfill must use bhav close, not the fetcher"
+
+
 def test_positions_hydrate_from_open_lots(tmp_path: Path, prices_db: Path) -> None:
     from storage import portfolio_db
     p = _make_portfolio_db(tmp_path)
