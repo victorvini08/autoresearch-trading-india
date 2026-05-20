@@ -39,13 +39,13 @@ from storage.portfolio_db import HALT_FILE_PATH
 
 IST = ZoneInfo("Asia/Kolkata")
 
-# Indian execution window: NSE trades 09:15-15:30 IST. We fire at 10:30,
-# 30 min after premarket_scan @ 10:00 fetches today's NSE open via
+# Indian execution window: NSE trades 09:15-15:30 IST. We fire at 10:15,
+# 15 min after premarket_scan @ 10:00 fetches today's NSE open via
 # yfinance (15-min Yahoo delay → today's 09:15 open is reliably published
 # by ~09:30, premarket_scan reads it at 10:00, run_live consumes the JSON
-# at 10:30). Refuse new orders past 15:00 to leave a 30-min buffer before
+# at 10:15). Refuse new orders past 15:00 to leave a 30-min buffer before
 # market close.
-EXECUTION_WINDOW_IST: tuple[time, time] = (time(10, 30), time(15, 0))
+EXECUTION_WINDOW_IST: tuple[time, time] = (time(10, 15), time(15, 0))
 
 # launchd may fire late (laptop just woke up). For LIVE modes only,
 # refuse to trade if we're more than this many minutes past the

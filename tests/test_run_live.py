@@ -208,20 +208,19 @@ def test_premarket_scan_payload_loaded_when_present(env, monkeypatch):
 
 
 def test_within_execution_window_helper():
-    """Window is 10:30-15:00 IST (was 10:00 before yfinance premarket
-    scan moved to 10:00 — run_live now starts at 10:30 with the same
-    30-min late tolerance)."""
+    """Window is 10:15-15:00 IST. premarket_scan @ 10:00 publishes the
+    yfinance gap-JSON; run_live consumes it 15 min later."""
     # Just inside the window
     assert run_live._within_execution_window(
-        datetime(2026, 5, 13, 10, 35)
+        datetime(2026, 5, 13, 10, 20)
     ) is True
-    # Before window (was true under old 10:00 start)
+    # Before window
     assert run_live._within_execution_window(
-        datetime(2026, 5, 13, 10, 5)
+        datetime(2026, 5, 13, 10, 10)
     ) is False
-    # Past late tolerance (10:30 + 30 = 11:00)
+    # Past late tolerance (10:15 + 30 = 10:45)
     assert run_live._within_execution_window(
-        datetime(2026, 5, 13, 11, 5)
+        datetime(2026, 5, 13, 10, 50)
     ) is False
     # Past official close-of-window
     assert run_live._within_execution_window(
