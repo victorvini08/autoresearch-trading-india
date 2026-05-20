@@ -616,7 +616,9 @@ function renderDay(bucketEl, bucket, iso) {
   const pnl = day.today_pnl_usd;
   const pnlEl = bucketEl.querySelector('.m-today-pnl');
   pnlEl.textContent = fmtSignedUSD(pnl);
-  pnlEl.className = 'metric-value m-today-pnl ' + cls(pnl);
+  // No 'metric-value' class — 1D is a sub-metric of Holdings now, sized
+  // the same as Total returns. Inherits font from parent metric-sub.
+  pnlEl.className = 'm-today-pnl ' + cls(pnl);
   const pnlPctEl = bucketEl.querySelector('.m-today-pnl-pct');
   const baseEquity = day.total_equity_usd - pnl;
   if (baseEquity > 0) {
