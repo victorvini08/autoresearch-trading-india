@@ -78,6 +78,36 @@ ADV_LOOKBACK_DAYS = 20
 RECENT_SESSIONS_WINDOW = 250
 TARGET_UNIVERSE_SIZE = 200
 
+# Non-equity instruments that trade in the NSE EQ segment alongside common
+# stocks (and pass the ADV/listing-age gates) but do NOT belong in a
+# cross-sectional momentum-quality EQUITY strategy:
+#   - Money-market / liquid funds (LIQUIDBEES, LIQUIDCASE …): near-zero
+#     downside-vol and ~monotonic up-trend (daily yield accrual) cause the
+#     momentum-quality score to rank them in the top tier on 4 of its 7
+#     components by construction. Pure scoring pathology, not an alpha.
+#   - Commodity ETFs (GOLDBEES, SILVERBEES, SILVER/GOLD IETFs): real trends
+#     occur (gold rallies), but the score is built on equity 12-1 momentum;
+#     the factor drivers of gold/silver (USD, real rates, central-bank
+#     policy) are entirely outside the signal's information set.
+#   - Index ETFs (NIFTYBEES, BANKBEES, ...): equity exposure, but they are
+#     the *average* of the cross-section. A cross-sectional momentum book
+#     that picks the index defeats its own thesis and dodges the sector cap
+#     (industry='OTHER' bypasses the bucket discipline).
+# Eventually this should be replaced by capturing `series` from the NSE bhav
+# at ingest time and filtering series='EQ' structurally; this static set
+# defends the universe immediately.
+_ETF_EXCLUDE: frozenset[str] = frozenset({
+    # Cash / money-market funds
+    "LIQUIDBEES", "LIQUIDCASE", "LIQUIDETF", "LIQUIDADD", "LIQUIDSHRI",
+    "LIQUID", "AONELIQUID",
+    # Commodity ETFs
+    "GOLDBEES", "GOLDIETF", "GOLD1", "GOLDSHARE", "GOLDETFADD", "AONEGOLD",
+    "SILVERBEES", "SILVERIETF", "SILVERETF", "SILVER",
+    # Index ETFs (Nifty / Bank / Junior / IT / PSU / sector / international)
+    "NIFTYBEES", "BANKBEES", "JUNIORBEES", "ITBEES", "PSUBNKBEES",
+    "CPSEETF", "MON100", "MOSEC50", "MNCETF", "NIFTYIETF", "BANKIETF",
+})
+
 
 @dataclass(frozen=True)
 class UniverseRow:
@@ -225,6 +255,10 @@ def compute_universe(
     # as_of_date (point-in-time, survivorship-free). NOT a fixed list.
     survivors: list[UniverseRow] = []
     for ticker, stats in by_ticker.items():
+        # Drop non-equity instruments (ETFs / liquid funds / commodity ETFs)
+        # that leak into the NSE EQ bhav. See _ETF_EXCLUDE for the rationale.
+        if ticker in _ETF_EXCLUDE:
+            continue
         if stats["n_bars"] < MIN_LISTING_TRADING_DAYS:
             continue
         if stats["adv_cr"] < min_adv_cr:
