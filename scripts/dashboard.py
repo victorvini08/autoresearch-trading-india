@@ -430,8 +430,12 @@ _HTML_TEMPLATE = r"""<!doctype html>
     display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px;
     margin-bottom: 20px;
   }
+  /* Holdings is the headline card — give it 2 columns so the sub-metrics
+     (Invested · 1D · Total returns) sit on one line, not wrapped. */
+  .metrics-grid .card-wide { grid-column: span 2; }
   @media (max-width: 800px) {
     .metrics-grid { grid-template-columns: repeat(2, 1fr); }
+    .metrics-grid .card-wide { grid-column: span 2; }
   }
   .card {
     background: var(--panel); border: 1px solid var(--border);
@@ -518,9 +522,9 @@ _HTML_TEMPLATE = r"""<!doctype html>
     <span class="status-badge"></span>
   </div>
   <div class="metrics-grid">
-    <div class="card"><div class="metric-label">Holdings — current value</div>
+    <div class="card card-wide"><div class="metric-label">Holdings — current value</div>
       <div class="metric-value m-current-value">—</div>
-      <div class="metric-sub" style="margin-top:10px">
+      <div class="metric-sub" style="margin-top:10px; white-space:nowrap">
         <span class="metric-label" style="margin-right:6px">Invested</span>
         <span class="m-invested-value">—</span>
         &nbsp;·&nbsp;
