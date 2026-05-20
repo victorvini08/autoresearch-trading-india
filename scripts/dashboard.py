@@ -265,6 +265,17 @@ def _query_one_day(conn, *, modes: tuple[str, ...], d: date) -> dict:
         for t, q, mp, mv, mode, sd in pos_rows
     ]
     positions_mark = sum(p["mark_value"] or 0 for p in positions)
+    # Invested value = sum of (qty_open × buy_price) across currently open
+    # lots, for every mode in the bucket. This is what we ACTUALLY PAID for
+    # the still-held shares (slippage + ref-price baked in via buy_price).
+    # Total return = mark - invested; per-position view of execution-cost
+    # drag and mark-to-market P&L without the cash side polluting it.
+    invested_row = conn.execute(
+        f"SELECT COALESCE(SUM(qty_open * buy_price), 0.0) "
+        f"FROM position_lots WHERE mode IN ({placeholders}) AND qty_open > 0",
+        [*modes],
+    ).fetchone()
+    positions_invested = float(invested_row[0] or 0.0)
 
     # Cash + peak + today-PnL across all modes in the bucket.
     # We sum across modes; the assumption is one bucket = one logical
@@ -308,6 +319,8 @@ def _query_one_day(conn, *, modes: tuple[str, ...], d: date) -> dict:
         "total_equity_usd": float(total_equity),
         "peak_equity_usd": float(peak_equity),
         "today_pnl_usd": float(today_pnl),
+        "positions_invested_inr": float(positions_invested),
+        "positions_mark_inr": float(positions_mark),
         "drawdown_pct": float(drawdown_pct),
         "halted": bool(halted_any),
         "discrepancies": discrepancies,
@@ -505,16 +518,27 @@ _HTML_TEMPLATE = r"""<!doctype html>
     <span class="status-badge"></span>
   </div>
   <div class="metrics-grid">
-    <div class="card"><div class="metric-label">Today's P&L</div>
-      <div class="metric-value m-today-pnl">—</div>
-      <div class="metric-sub m-today-pnl-pct"></div>
+    <div class="card"><div class="metric-label">Holdings — current value</div>
+      <div class="metric-value m-current-value">—</div>
+      <div class="metric-sub" style="margin-top:10px">
+        <span class="metric-label" style="margin-right:6px">Invested</span>
+        <span class="m-invested-value">—</span>
+        &nbsp;·&nbsp;
+        <span class="metric-label" style="margin-right:6px">1D</span>
+        <span class="m-today-pnl">—</span> <span class="m-today-pnl-pct"></span>
+        &nbsp;·&nbsp;
+        <span class="metric-label" style="margin-right:6px">Total returns</span>
+        <span class="m-total-returns">—</span> <span class="m-total-returns-pct"></span>
+      </div>
       <div class="metric-sub m-realized-pnl-today" style="margin-top:6px"></div></div>
-    <div class="card"><div class="metric-label">Total Equity</div>
-      <div class="metric-value m-total-equity">—</div>
-      <div class="metric-sub m-drawdown"></div></div>
     <div class="card"><div class="metric-label">Cash</div>
       <div class="metric-value m-cash">—</div>
-      <div class="metric-sub m-cash-pct"></div></div>
+      <div class="metric-sub m-cash-pct"></div>
+      <div class="metric-sub" style="margin-top:6px">
+        <span class="metric-label" style="margin-right:6px">Net worth</span>
+        <span class="m-total-equity">—</span>
+      </div>
+      <div class="metric-sub m-drawdown"></div></div>
     <div class="card"><div class="metric-label">Fills Today</div>
       <div class="metric-value m-trades">—</div>
       <div class="metric-sub m-commission"></div></div>
@@ -610,6 +634,27 @@ function renderDay(bucketEl, bucket, iso) {
   } else {
     rpEl.innerHTML = '<span style="color:var(--muted)">No realized P&L today</span>';
     rpEl.className = 'metric-sub m-realized-pnl-today';
+  }
+
+  // Holdings: invested (sum of qty_open * buy_price across open lots) +
+  // current value (mark-to-market) + total returns. Cash is shown as a
+  // separate card; total equity = holdings + cash is a footnote.
+  const invested = day.positions_invested_inr || 0;
+  const current = day.positions_mark_inr || 0;
+  const totRet = current - invested;
+  bucketEl.querySelector('.m-current-value').textContent = fmtUSD(current);
+  bucketEl.querySelector('.m-invested-value').textContent = fmtUSD(invested);
+  const trEl = bucketEl.querySelector('.m-total-returns');
+  trEl.textContent = fmtSignedUSD(totRet);
+  trEl.className = 'm-total-returns ' + cls(totRet);
+  const trpEl = bucketEl.querySelector('.m-total-returns-pct');
+  if (invested > 0) {
+    const r = totRet / invested;
+    trpEl.textContent = '(' + fmtPct(r) + ')';
+    trpEl.className = 'm-total-returns-pct ' + cls(r);
+  } else {
+    trpEl.textContent = '';
+    trpEl.className = 'm-total-returns-pct';
   }
 
   bucketEl.querySelector('.m-total-equity').textContent = fmtUSD(day.total_equity_usd);
