@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Live/paper execution — 10:00 IST.
+
+  EXECUTION_MODE defaults to dhan-paper (in-memory mock broker); set it to
+  dhan-live ONLY after a clean 4-week paper validation AND explicit
+  approval AND the halt.json gate is cleared. run_live self-gates: it
+  no-ops on non-rebalance days (strategy rebalances biweekly, alternate
+  Fridays) and skips cleanly outside the 10:00-15:00 IST window, so a
+  plain daily 10:00 trigger is correct and safe.
+
+  Install:
+    1. Confirm WorkingDirectory + the uv path below match this machine.
+    2. cp this file to ~/Library/LaunchAgents/
+    3. launchctl load ~/Library/LaunchAgents/com.autoresearch.run_live.plist
+    4. Verify: launchctl list | grep run_live
+
+  Logs to state/logs/run_live.{out,err}.log. Machine clock is IST.
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.autoresearch.run_live</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/sh</string>
+    <string>-c</string>
+    <string>cd "/Users/aryanmehta/Desktop/My Work/autoresearch-trading-india" &amp;&amp; /opt/homebrew/bin/uv run python -m scripts.run_live</string>
+  </array>
+
+  <key>StartCalendarInterval</key>
+  <dict>
+    <key>Hour</key>
+    <integer>10</integer>
+    <key>Minute</key>
+    <integer>0</integer>
+  </dict>
+
+  <key>StandardOutPath</key>
+  <string>/Users/aryanmehta/Desktop/My Work/autoresearch-trading-india/state/logs/run_live.out.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/aryanmehta/Desktop/My Work/autoresearch-trading-india/state/logs/run_live.err.log</string>
+
+  <key>RunAtLoad</key>
+  <false/>
+</dict>
+</plist>

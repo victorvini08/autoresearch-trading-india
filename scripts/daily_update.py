@@ -15,19 +15,31 @@ Steps:
      short-circuit without an LLM call)
 
 Usage:
-    uv run python -m scripts.daily_update                           # uses today
+    uv run python -m scripts.daily_update                           # data only (classify SKIPPED by default)
     uv run python -m scripts.daily_update --date 2026-05-09         # backdated
-    uv run python -m scripts.daily_update --provider codex          # default claude
-    uv run python -m scripts.daily_update --skip-classify           # data only
+    uv run python -m scripts.daily_update --no-skip-classify        # also run classifiers
+    uv run python -m scripts.daily_update --no-skip-classify --provider codex
 
-Subscription quota: per market day, ~1 macro + ~200 sentiment/events calls
-(only tickers with non-empty news fire the classifier). Comfortable budget.
+Classification is SKIPPED BY DEFAULT (2026-05-18 decision): the committed
+momentum-quality strategy consumes only prices/universe/sectors — not
+macro_regime/sentiment/events — so daily LLM classify is wasted cost and
+adds noise to the paper-validation logs. Re-enable per-run with
+--no-skip-classify (then quota ≈ 1 macro + ~200 sentiment/events calls
+per market day; only non-empty-news tickers fire the classifier).
 """
 from __future__ import annotations
 
 import argparse
 import time
 from datetime import date, timedelta
+
+# Standalone orchestrator: source .env so FRED_API_KEY / DHAN_* are
+# present when invoked directly or by the launchd job (matches the same
+# pattern in scripts/backfill_5y.py, scripts/bootstrap_ingest.py,
+# llm/features.py — nothing else loads .env into the process).
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # Phase 3 rewires the data.* package to Indian sources (NSE bhav, Pulse,
 # RBI, NSE filings). The function NAMES below — ingest_earnings,
@@ -77,8 +89,17 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--model", default=None)
     p.add_argument("--chunk-size", type=int, default=50)
     p.add_argument(
-        "--skip-classify", action="store_true",
-        help="Only refresh raw data; don't run classifiers.",
+        "--skip-classify",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Skip the LLM classification steps. DEFAULT: skip — the "
+             "committed momentum strategy does not consume "
+             "macro_regime/sentiment/events, so daily classify is wasted "
+             "cost. Pass --no-skip-classify to run the classifiers.",
+    )
+    p.add_argument(
+        "--skip-fundamentals", action="store_true",
+        help="Skip the live fundamentals snapshot step.",
     )
     args = p.parse_args(argv)
 
@@ -112,13 +133,37 @@ def main(argv: list[str] | None = None) -> int:
     n_news = 0
     print(f"      → {n_news} rows ({time.time()-t0:.1f}s)  [Phase 6: news ingest TODO]", flush=True)
 
-    # Step 4: earnings calendar (forward-looking)
+    # Step 4: earnings — same-day news-extraction supplement (real India
+    # ingest_earnings signature is (news_db, earnings_db); it has no
+    # forward date-range / tickers params). The forward-looking NSE
+    # results *calendar* is not implemented for India yet (same
+    # documented-gap status as the Phase-6 news ingest above); the
+    # point-in-time fundamentals/earnings the system actually uses are
+    # refreshed by the NSE results pipeline + Step 4b snapshot_live.
     t0 = time.time()
-    print(f"[4/6] earnings: {today_d}..{earnings_end}", flush=True)
-    n_earn = ingest_earnings(
-        today_d.isoformat(), earnings_end.isoformat(), tickers=tickers,
-    )
+    print(f"[4/6] earnings: news-extraction supplement "
+          f"(forward NSE calendar: TODO India)", flush=True)
+    n_earn = ingest_earnings()
     print(f"      → {n_earn} rows ({time.time()-t0:.1f}s)", flush=True)
+
+    # Step 4b: live fundamentals snapshot — PIT-clean by construction
+    # (capture date == as_of_date). Non-fatal: the cron must never abort on
+    # a fundamentals-source hiccup; the PEAD gate soft-degrades downstream.
+    if not args.skip_fundamentals:
+        try:
+            from pathlib import Path
+
+            from data.ingest_fundamentals import snapshot_live
+
+            n_fund = snapshot_live(
+                Path("storage/universe.duckdb"), on_date=today_d,
+            )
+            print(f"[4b] fundamentals snapshot: {n_fund} new", flush=True)
+        except Exception as e:  # noqa: BLE001 — cron must not abort
+            print(
+                f"[4b] fundamentals snapshot FAILED (non-fatal): {e}",
+                flush=True,
+            )
 
     if args.skip_classify:
         print("\n[skip-classify] not running classifiers.")

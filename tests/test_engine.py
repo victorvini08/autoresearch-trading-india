@@ -4,14 +4,15 @@ import pandas as pd
 import pytest
 
 from backtest.engine import run_backtest
-# TWEAK: India strategy class is IndiaMomentumQualityRegime; aliased to
-# BaselineMomentum locally so the rest of the test body matches the US repo.
-from strategy import IndiaMomentumQualityRegime as BaselineMomentum
+# Branch mean-reversion-quant-strategy: strategy.py is the residual
+# mean-reversion stat-arb book; aliased so the engine tests stay
+# strategy-agnostic.
+from strategy import IndiaMomentumQualityCarry as StrategyUnderTest
 
 
 # In-test strategy fixtures so the new gross-exposure tests below don't
 # depend on whatever strategy.py contains. The pre-existing tests in this
-# file still use BaselineMomentum (the main-branch strategy); the new
+# file still use StrategyUnderTest (this branch's strategy); the new
 # tests added by the paper-trade-ledger work use these lightweight stand-ins.
 
 
@@ -54,7 +55,7 @@ def _synthetic_price_df(start: str, n: int = 252, seed: int = 0) -> pd.DataFrame
 
 def test_run_backtest_returns_structured_result():
     feeds = {"FAKE": _synthetic_price_df("2020-01-01")}
-    result = run_backtest(BaselineMomentum, feeds, initial_cash=100_000)
+    result = run_backtest(StrategyUnderTest, feeds, initial_cash=100_000)
     for key in ("equity_curve", "daily_returns", "trades", "trade_count", "final_value"):
         assert key in result, f"missing key: {key}"
     assert np.isfinite(result["final_value"])
@@ -64,7 +65,7 @@ def test_run_backtest_returns_structured_result():
 
 def test_run_backtest_respects_initial_cash():
     # Flat data → strategy never enters → final == initial. Need ≥50 bars
-    # so the 50-day SMA in BaselineMomentum can warm up.
+    # so the 50-day SMA in StrategyUnderTest can warm up.
     n = 60
     dates = pd.date_range("2020-01-01", periods=n, freq="B")
     df = pd.DataFrame({
@@ -72,15 +73,15 @@ def test_run_backtest_respects_initial_cash():
         "close": [100.0] * n, "volume": [1_000_000] * n,
     }, index=dates)
     feeds = {"FLAT": df}
-    result = run_backtest(BaselineMomentum, feeds, initial_cash=50_000)
+    result = run_backtest(StrategyUnderTest, feeds, initial_cash=50_000)
     assert result["trade_count"] == 0
     assert abs(result["final_value"] - 50_000) < 1e-6
 
 
 def test_higher_slippage_costs_more_when_trades_occur():
     feeds = {"FAKE": _synthetic_price_df("2020-01-01")}
-    r_with = run_backtest(BaselineMomentum, feeds, initial_cash=100_000, slippage_bps=20)
-    r_zero = run_backtest(BaselineMomentum, feeds, initial_cash=100_000, slippage_bps=0)
+    r_with = run_backtest(StrategyUnderTest, feeds, initial_cash=100_000, slippage_bps=20)
+    r_zero = run_backtest(StrategyUnderTest, feeds, initial_cash=100_000, slippage_bps=0)
     if r_with["trade_count"] > 0:
         assert r_with["final_value"] <= r_zero["final_value"]
 
@@ -94,22 +95,22 @@ EXPECTED_TRADE_COLUMNS = [
 def test_trades_dataframe_has_expected_columns():
     """Lock the v2 schema produced by TradeRecorder."""
     feeds = {"FAKE": _synthetic_price_df("2020-01-01", n=60)}
-    result = run_backtest(BaselineMomentum, feeds, initial_cash=100_000)
+    result = run_backtest(StrategyUnderTest, feeds, initial_cash=100_000)
     assert list(result["trades"].columns) == EXPECTED_TRADE_COLUMNS
 
 
 @pytest.mark.xfail(
     reason=(
-        "India strategy is cross-sectional momentum + retention: with a "
-        "single feed it enters and holds — TradeRecorder records CLOSED "
-        "round-trips and never sees one. Multi-feed tests below exercise "
-        "the same code paths."
+        "Residual mean-reversion is cross-sectional: a single feed has no "
+        "cross-section to rank, so the strategy never trades and "
+        "TradeRecorder sees no closed round-trip. Multi-feed tests below "
+        "exercise the same code paths."
     ),
     strict=False,
 )
 def test_trade_recorder_populates_rows_on_uptrend():
     feeds = {"FAKE": _synthetic_price_df("2020-01-01", n=600, seed=0)}
-    result = run_backtest(BaselineMomentum, feeds, initial_cash=100_000)
+    result = run_backtest(StrategyUnderTest, feeds, initial_cash=100_000)
     trades = result["trades"]
     assert len(trades) > 0, "expected non-empty trades on a 600-day random walk"
     assert len(trades) == result["trade_count"], \
@@ -118,7 +119,7 @@ def test_trade_recorder_populates_rows_on_uptrend():
 
 def test_trade_recorder_pnl_consistent_with_equity_delta():
     feeds = {"FAKE": _synthetic_price_df("2020-01-01", n=600, seed=1)}
-    result = run_backtest(BaselineMomentum, feeds, initial_cash=100_000)
+    result = run_backtest(StrategyUnderTest, feeds, initial_cash=100_000)
     trades = result["trades"]
     if len(trades) == 0:
         return  # nothing to verify
@@ -132,12 +133,12 @@ def test_trade_recorder_pnl_consistent_with_equity_delta():
 
 def test_trade_recorder_position_fraction_within_cap():
     feeds = {"FAKE": _synthetic_price_df("2020-01-01", n=600, seed=2)}
-    result = run_backtest(BaselineMomentum, feeds, initial_cash=100_000)
+    result = run_backtest(StrategyUnderTest, feeds, initial_cash=100_000)
     trades = result["trades"]
     if len(trades) == 0:
         return
-    # BaselineMomentum targets 5% sizing; with floating-point and equity drift
-    # we expect well under the 10% hard cap.
+    # Single-feed → no cross-section → no trades, so the guard above returns
+    # and this cap assertion is exercised only by the multi-feed paths.
     assert (trades["max_position_frac"] < 0.10).all(), \
         f"position cap violated: {trades['max_position_frac'].max():.3%}"
 

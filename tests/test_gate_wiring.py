@@ -13,7 +13,7 @@ from backtest.anti_overfit import (
     universe_respect_gate,
 )
 from scripts.loop import evaluate_anti_overfit_gates
-from strategy import IndiaMomentumQualityRegime
+from strategy import IndiaMomentumQualityCarry
 
 
 def _summary(**kw) -> StrategySummary:
@@ -72,12 +72,16 @@ def test_bonferroni_tightens_with_more_variants():
 
 # ── prepare.py pure helpers feeding the gates ───────────────────────────
 def test_count_hyperparameters_excludes_plumbing():
-    n = prepare.count_hyperparameters(IndiaMomentumQualityRegime)
-    # Signal knobs after quality_pct removal (2026-05-15): lookback, skip,
-    # retention, regime_pct, fii_threshold_cr, n_positions, sector_cap = 7.
-    # Excludes db paths / weekday / parity / enforce_sector_cap /
-    # universe_by_date.
-    assert n == 7
+    n = prepare.count_hyperparameters(IndiaMomentumQualityCarry)
+    # Momentum-quality signal knobs: beta_window (lookback), formation_days
+    # (skip), retention_mult, entry_pct, n_positions, sector_cap = 6. The
+    # legacy `regime_pct` knob was removed 2026-05-17 in manual production
+    # development: it was declared and parsimony-counted but never read by any
+    # code path (verified repo-wide) — a dead knob that wasted the parsimony
+    # budget and inflated the visible-complexity count (PRODUCTION_STRATEGY.md
+    # caveat #4 / roadmap #1: make complexity honest). Excludes db paths /
+    # weekday / parity / enforce_sector_cap / universe_by_date.
+    assert n == 6
 
 
 def test_universe_respected_tolerates_decision_vs_fill_lag(monkeypatch):

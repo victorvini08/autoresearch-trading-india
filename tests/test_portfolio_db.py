@@ -127,6 +127,39 @@ def test_connect_uses_explicit_path_when_provided(tmp_path):
     assert explicit.exists(), f"connect() did not create the file at {explicit}"
 
 
+def test_connect_auto_initialises_schema(tmp_path):
+    """Regression (2026-05-19): connect() must self-bootstrap the schema.
+
+    premarket_scan / run_live / daily_report / dashboard all do
+    `portfolio_db.connect(path)` then immediately read the ledger WITHOUT
+    calling init_schema — a fresh storage/portfolio.duckdb therefore
+    crashed every morning with 'Table broker_positions does not exist',
+    so paper trading never actually executed. connect() now runs the
+    idempotent init_schema itself."""
+    fresh = tmp_path / "fresh_ledger.duckdb"
+    c = portfolio_db.connect(fresh)  # NO explicit init_schema
+    try:
+        names = {
+            r[0] for r in c.execute(
+                "SELECT table_name FROM information_schema.tables "
+                "WHERE table_schema = 'main'"
+            ).fetchall()
+        }
+        assert names == {
+            "actual_fills", "broker_positions", "cash_ledger",
+            "desired_targets", "discrepancies", "position_lots",
+            "realized_trades", "submitted_orders",
+        }
+        # The exact query that was crashing premarket_scan must now work.
+        c.execute(
+            "SELECT MAX(snapshot_date) FROM broker_positions "
+            "WHERE mode = ? AND snapshot_date <= ?",
+            ("dhan-paper", date(2026, 5, 19)),
+        )
+    finally:
+        c.close()
+
+
 def test_upsert_target_round_trip(conn):
     portfolio_db.upsert_target(
         conn,

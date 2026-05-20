@@ -51,11 +51,12 @@ def test_walk_forward_folds_nonempty_and_within_bounds():
         assert val_e < TEST_BOUNDARY
 
 
-def test_find_strategy_class_returns_india_momentum():
-    """TWEAK: India strategy class is IndiaMomentumQualityRegime (was BaselineMomentum in US)."""
+def test_find_strategy_class_returns_residual_reversal():
+    """Branch mean-reversion-quant-strategy: strategy.py defines exactly one
+    bt.Strategy subclass, the residual mean-reversion stat-arb book."""
     strat_mod = importlib.import_module("strategy")
     cls = _find_strategy_class(strat_mod)
-    assert cls.__name__ == "IndiaMomentumQualityRegime"
+    assert cls.__name__ == "IndiaMomentumQualityCarry"
 
 
 def test_research_mode_hides_test_set(monkeypatch):

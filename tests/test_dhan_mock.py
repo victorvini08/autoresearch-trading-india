@@ -119,3 +119,73 @@ def test_no_prices_db_rejects(tmp_path: Path) -> None:
     m = DhanMock(prices_db=tmp_path / "does_not_exist.duckdb", initial_cash_inr=50_000.0)
     resp = m.place_order(OrderRequest("BUY", "RELIANCE", 5, "MARKET"))
     assert resp.status == "REJECTED"
+
+
+# ── Cross-invocation state contract (regressions for the 2026-05-20 paper bug) ──
+# Launchd starts a fresh process daily. The old mock (counter from 1;
+# empty positions; cash reset to initial) (a) collided on the persisted
+# submitted_orders PK on day 2, and (b) would have double-bought
+# yesterday's book even if (a) were fixed.
+
+
+def test_order_ids_unique_across_instances(prices_db: Path) -> None:
+    m1 = DhanMock(prices_db=prices_db, initial_cash_inr=50_000.0, slippage_bps=0.0)
+    m2 = DhanMock(prices_db=prices_db, initial_cash_inr=50_000.0, slippage_bps=0.0)
+    r1 = m1.place_order(OrderRequest("BUY", "RELIANCE", 1, "MARKET"))
+    r2 = m2.place_order(OrderRequest("BUY", "RELIANCE", 1, "MARKET"))
+    assert r1.status == "TRADED" and r2.status == "TRADED"
+    assert r1.order_id != r2.order_id
+
+
+def _make_portfolio_db(tmp_path: Path) -> Path:
+    from storage import portfolio_db
+    p = tmp_path / "portfolio.duckdb"
+    conn = duckdb.connect(str(p))
+    try:
+        portfolio_db.init_schema(conn)
+    finally:
+        conn.close()
+    return p
+
+
+def test_cash_hydrates_from_ledger(tmp_path: Path, prices_db: Path) -> None:
+    from datetime import datetime
+    from storage import portfolio_db
+    p = _make_portfolio_db(tmp_path)
+    conn = duckdb.connect(str(p))
+    try:
+        portfolio_db.insert_cash_entry(
+            conn, entry_id="e1",
+            entry_at=datetime(2026, 5, 19, 10, 0),
+            as_of_date=date(2026, 5, 19),
+            kind="buy", amount_usd=-12_050.0, notes="t", mode="dhan-paper",
+        )
+    finally:
+        conn.close()
+    m = DhanMock(prices_db=prices_db, portfolio_db=p,
+                 initial_cash_inr=50_000.0, mode="dhan-paper")
+    assert m.get_cash()["availableBalance"] == pytest.approx(
+        50_000.0 - 12_050.0, abs=0.01)
+
+
+def test_positions_hydrate_from_open_lots(tmp_path: Path, prices_db: Path) -> None:
+    from storage import portfolio_db
+    p = _make_portfolio_db(tmp_path)
+    conn = duckdb.connect(str(p))
+    try:
+        portfolio_db.open_lot(
+            conn, lot_id="L1", ticker="RELIANCE", buy_fill_id="F1",
+            buy_date=date(2026, 5, 19), buy_price=1200.0, qty=10,
+            mode="dhan-paper",
+        )
+    finally:
+        conn.close()
+    m = DhanMock(prices_db=prices_db, portfolio_db=p,
+                 initial_cash_inr=50_000.0, mode="dhan-paper")
+    pos = m.get_positions()
+    assert len(pos) == 1
+    assert pos[0].ticker == "RELIANCE"
+    assert pos[0].quantity == 10
+    resp = m.place_order(OrderRequest("SELL", "RELIANCE", 4, "MARKET"))
+    assert resp.status == "TRADED"
+    assert m.get_positions()[0].quantity == 6
