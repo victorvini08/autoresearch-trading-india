@@ -82,6 +82,7 @@ class DhanExecutor:
 
             return DhanMock(
                 prices_db=self.prices_db,
+                portfolio_db=self.portfolio_db,
                 initial_cash_inr=self.initial_cash_inr,
                 mode=self.mode,
             )

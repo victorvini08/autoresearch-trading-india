@@ -713,10 +713,25 @@ def get_positions_as_of(
     }
 
 
+_INITIAL_DEPOSIT_BY_MODE: dict[str, float] = {
+    # cash_ledger does NOT store an "initial deposit" row by convention,
+    # so the raw SUM is the DELTA from the bootstrap cash, not the
+    # balance. Every caller of get_cash_balance treated the return value
+    # as the actual balance and displayed it as such — including the
+    # dashboard, which surfaced negative cash to the user. Anchor here so
+    # the ledger has a single source of truth for "real cash." Paper boots
+    # with ₹50k (DhanExecutor / DhanMock default); dhan-live's real cash
+    # comes from the broker and is not seeded from the ledger.
+    "dhan-paper": 50_000.0,
+    "dhan-live": 0.0,
+}
+
+
 def get_cash_balance(
     conn: duckdb.DuckDBPyConnection, mode: str, as_of: date | None = None
 ) -> float:
-    """Sum of signed cash_ledger entries. as_of is INCLUSIVE on entry_at::DATE."""
+    """Actual cash balance = mode's initial deposit + signed cash_ledger sum
+    through `as_of` (inclusive on entry_at::DATE)."""
     if as_of is None:
         row = conn.execute(
             "SELECT COALESCE(SUM(amount_usd), 0.0) FROM cash_ledger WHERE mode = ?",
@@ -728,7 +743,7 @@ def get_cash_balance(
             "WHERE mode = ? AND CAST(entry_at AS DATE) <= ?",
             [mode, as_of],
         ).fetchone()
-    return float(row[0])
+    return _INITIAL_DEPOSIT_BY_MODE.get(mode, 0.0) + float(row[0])
 
 
 def _latest_snapshot_date_on_or_before(

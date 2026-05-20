@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import logging
 import time
+import uuid
 from dataclasses import dataclass, field
 from datetime import date, datetime
 from pathlib import Path
@@ -65,6 +66,7 @@ class DhanMock:
     """
 
     prices_db: Path | None = None
+    portfolio_db: Path | None = None
     initial_cash_inr: float = 50_000.0
     slippage_bps: float = DEFAULT_SLIPPAGE_BPS
     mode: str = "dhan-paper"
@@ -74,10 +76,44 @@ class DhanMock:
     # _positions[ticker] = list of [qty, avg_price] lots (FIFO when selling)
     _orders: dict[str, _MockOrder] = field(init=False, default_factory=dict)
     _trades: list[Fill] = field(init=False, default_factory=list)
-    _next_order_id: int = field(init=False, default=1)
 
     def __post_init__(self) -> None:
+        # Default: brand-new account with the seed cash and no positions.
         self._cash = self.initial_cash_inr
+        # Hydrate cross-invocation state from the persistent ledger so the
+        # mock survives daily cron restarts. Without this, every process
+        # invocation reset positions to empty and cash to initial — causing
+        # the next-day rebalancer to re-buy yesterday's book on top of it
+        # (double-counting). The hydration convention: cash_ledger does NOT
+        # store an "initial deposit" row; cash = initial_cash_inr + SUM(signed
+        # entries). Empty ledger -> _cash stays at initial. Live (DhanBroker)
+        # path never reaches this code; this is paper-only state recovery.
+        if self.portfolio_db is not None and Path(self.portfolio_db).exists():
+            self._hydrate_from_ledger()
+
+    def _hydrate_from_ledger(self) -> None:
+        # Single source of truth for "real cash" lives in portfolio_db.get_cash_balance
+        # (which now anchors the initial deposit by mode). Reusing it here keeps the
+        # mock and the dashboard from disagreeing on what the balance is.
+        from storage import portfolio_db
+
+        conn = duckdb.connect(str(self.portfolio_db), read_only=True)
+        try:
+            self._cash = portfolio_db.get_cash_balance(conn, mode=self.mode)
+            # FIFO-ordered open lots; sells consume in this order.
+            for ticker, qty, price in conn.execute(
+                "SELECT ticker, qty_open, buy_price FROM position_lots "
+                "WHERE mode = ? AND qty_open > 0 "
+                "ORDER BY ticker, buy_date, lot_id",
+                (self.mode,),
+            ).fetchall():
+                self._positions.setdefault(str(ticker).upper(), []).append(
+                    [float(qty), float(price)]
+                )
+        except duckdb.Error as e:  # tables may not exist on a fresh DB
+            logger.warning("DhanMock ledger hydration skipped: %s", e)
+        finally:
+            conn.close()
 
     # ── lifecycle ──
     def connect(self) -> None:
@@ -150,8 +186,11 @@ class DhanMock:
         *,
         as_of_date: date | None = None,
     ) -> OrderResponse:
-        order_id = f"MOCK_{self._next_order_id:08d}"
-        self._next_order_id += 1
+        # Globally unique IDs (UUID hex) so cross-invocation persistence
+        # (submitted_orders PK) doesn't collide on the next paper run. The
+        # earlier MOCK_NNNNNNNN counter restarted at 1 each process and
+        # broke the daily cron's ledger writes on day 2.
+        order_id = f"MOCK_{uuid.uuid4().hex}"
 
         ref_price: float | None = req.price
         if req.order_type == ORDER_TYPE_MARKET:
