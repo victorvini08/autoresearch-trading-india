@@ -39,11 +39,13 @@ from storage.portfolio_db import HALT_FILE_PATH
 
 IST = ZoneInfo("Asia/Kolkata")
 
-# Indian execution window: NSE trades 09:15-15:30 IST; we fire at 10:00
-# (15 min after open lets spreads normalize) and refuse new orders past
-# 15:00 to leave a 30-min buffer before market close. Replaces the US
-# EXECUTION_WINDOW_ET = (10:30, 15:00) ET window.
-EXECUTION_WINDOW_IST: tuple[time, time] = (time(10, 0), time(15, 0))
+# Indian execution window: NSE trades 09:15-15:30 IST. We fire at 10:30,
+# 30 min after premarket_scan @ 10:00 fetches today's NSE open via
+# yfinance (15-min Yahoo delay → today's 09:15 open is reliably published
+# by ~09:30, premarket_scan reads it at 10:00, run_live consumes the JSON
+# at 10:30). Refuse new orders past 15:00 to leave a 30-min buffer before
+# market close.
+EXECUTION_WINDOW_IST: tuple[time, time] = (time(10, 30), time(15, 0))
 
 # launchd may fire late (laptop just woke up). For LIVE modes only,
 # refuse to trade if we're more than this many minutes past the
@@ -174,13 +176,14 @@ def run(
 
     print(f"[run_live] mode={mode} today_ist={today_ist} signal_date={target_date}")
 
-    # Load premarket scan (advisory only; executor still trades unless halt)
+    # Load premarket scan (today's gap signals from yfinance, fired at 10:00)
     premarket_payload = premarket_scan.load(today_ist)
+    skips: set[str] = set()
     if premarket_payload:
         skips = premarket_scan.tickers_to_skip(premarket_payload)
         if skips:
             print(f"[run_live] premarket gap-flagged tickers: {sorted(skips)} "
-                  "(advisory; executor will see these in the discrepancy log)")
+                  "— orders touching these names will be dropped")
         if (premarket_payload.get("vix") or {}).get("flag"):
             print("[run_live] premarket VIX flag set — review report after run")
 
@@ -194,7 +197,7 @@ def run(
             "halt-recommendations"
         )
     try:
-        summary = executor.execute_day(target_date)
+        summary = executor.execute_day(target_date, skips=skips)
     except PreflightSkipped as e:
         skip_summary = ExecutionSummary(
             mode=mode, as_of_date=target_date, fill_date=None,
