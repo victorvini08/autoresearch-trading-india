@@ -25,12 +25,15 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 import sys
 from datetime import date, datetime, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
 from storage import portfolio_db
+
+logger = logging.getLogger(__name__)
 
 # Thresholds — match the spec's risk-gate semantics for consistency.
 GAP_THRESHOLD = 0.05      # 5% pre-open move on a held name → flag
@@ -164,20 +167,62 @@ def _held_tickers(db_path: Path, *, mode: str, as_of: date) -> list[str]:
     return sorted([t for t, q in state.positions.items() if q != 0])
 
 
-def _default_quote_fetch(ticker: str) -> dict | None:
-    """Live quote backend. Returns {prior_close, premarket_price} or None.
+def _default_quote_fetch(ticker: str, today: date | None = None) -> dict | None:
+    """Yahoo Finance backend. Returns {prior_close, premarket_price} or None.
 
-    TODO Phase 6: wire to data.ingest_prices.fetch_pre_open(ticker) which
-    reads from NSE's pre-open session (09:00-09:08 IST). The pre-open
-    "equilibrium price" is what we want for the gap calc, with prior
-    close coming from the latest NSE bhav row in prices.duckdb.
+    yfinance fetches the recent daily candles; we read today's Open (the
+    official 09:15 NSE open) as the 'premarket_price' proxy and the
+    prior trading day's Close as 'prior_close'. NSE symbols use the
+    TICKER.NS form on Yahoo; INDIAVIX uses ^INDIAVIX.
 
-    Until Phase 6 lands this stub returns None so the scan records
-    {"error": "no premarket data"} for every held ticker — the scan
-    file is still written, downstream callers (run_live, daily_report)
-    handle missing data gracefully.
+    Yahoo Finance is roughly 15-min delayed for Indian markets — this
+    backend is reliable only when the scan fires at or after 10:00 IST.
+    The job is scheduled at 10:00 with that delay in mind. If Yahoo
+    hasn't published today's row yet (we ran too early, holiday, or
+    Yahoo glitch), the fetcher returns None and the scan records
+    "no premarket data" for that ticker — downstream (run_live) treats
+    missing data as 'no gap signal, proceed normally'.
+
+    Limitations (documented, accepted for Phase A):
+      - Yahoo Finance is an unofficial scraped feed; the API can break
+        when Yahoo redesigns. The fetcher fails closed (returns None),
+        the scan degrades gracefully, run_live still trades.
+      - Yahoo's Open != NSE bhav's official Open exactly (small
+        adjustment-policy differences). We use Yahoo only for GAP
+        DETECTION (defensive monitoring signal); paper fill pricing
+        continues to use the authoritative NSE bhav archive.
+      - When we go live: Dhan's marketfeed/ltp would be the broker-
+        native replacement, but it is part of Dhan's PAID Data API
+        (₹500/mo) and explicitly out of scope. yfinance remains.
     """
-    return None
+    import yfinance as yf  # local import — keeps import-time light
+
+    today = today or datetime.now(IST).date()
+    yahoo_sym = "^INDIAVIX" if ticker.upper() == "INDIAVIX" else f"{ticker.upper()}.NS"
+    try:
+        hist = yf.Ticker(yahoo_sym).history(
+            period="7d", interval="1d", auto_adjust=False
+        )
+    except Exception as e:  # noqa: BLE001 — best-effort scrape
+        logger.warning("yfinance fetch failed for %s (%s): %s", ticker, yahoo_sym, e)
+        return None
+    if hist is None or hist.empty:
+        return None
+    hist = hist.dropna(subset=["Open", "Close"])
+    if len(hist) < 2:
+        return None
+    # Defensive: the LAST row must be today's data. If Yahoo lags so the
+    # most recent row is yesterday, we have no premarket for today —
+    # return None rather than silently using stale numbers.
+    last_idx = hist.index[-1]
+    last_date = last_idx.date() if hasattr(last_idx, "date") else None
+    if last_date != today:
+        return None
+    last_open = float(hist["Open"].iloc[-1])
+    prior_close = float(hist["Close"].iloc[-2])
+    if not (last_open > 0 and prior_close > 0):
+        return None
+    return {"prior_close": prior_close, "premarket_price": last_open}
 
 
 def _try_fetch_vix(fetch) -> dict:

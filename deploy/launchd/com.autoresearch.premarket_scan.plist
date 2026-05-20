@@ -2,11 +2,13 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
   "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <!--
-  Pre-market scan — 09:00 IST (NSE pre-open 09:00-09:15).
+  Pre-market scan — 10:00 IST (45 min after NSE open at 09:15).
 
-  Checks overnight gaps, India VIX spike, and trading halts before the
-  09:15 daily_update and the 10:00 execution window. Read-only; never
-  places orders.
+  Uses yfinance to pull today's NSE open + India VIX (Yahoo's data for
+  Indian markets is ~15-min delayed; running at 10:00 gives a clean
+  margin over the 09:15 official open). Detects gaps vs prior bhav
+  close and flags names for run_live to skip. Read-only; never places
+  orders.
 
   Install:
     1. Confirm WorkingDirectory + the uv path below match this machine.
@@ -31,7 +33,7 @@
   <key>StartCalendarInterval</key>
   <dict>
     <key>Hour</key>
-    <integer>9</integer>
+    <integer>10</integer>
     <key>Minute</key>
     <integer>0</integer>
   </dict>

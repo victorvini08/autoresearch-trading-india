@@ -53,7 +53,7 @@ def _stub_executor(*, summary: ExecutionSummary = None,
     class Stub:
         mode = "dhan-paper"
 
-        def execute_day(self, as_of_date, *, strategy_module="strategy", source_tag="run_live"):
+        def execute_day(self, as_of_date, *, strategy_module="strategy", source_tag="run_live", skips=None):
             if raise_exc is not None:
                 raise raise_exc
             if summary is not None:
@@ -208,17 +208,20 @@ def test_premarket_scan_payload_loaded_when_present(env, monkeypatch):
 
 
 def test_within_execution_window_helper():
-    """TWEAK: Window is 10:00-15:00 IST in India (was 10:30-15:00 ET in US)."""
-    assert run_live._within_execution_window(
-        datetime(2026, 5, 13, 10, 5)
-    ) is True
-    # Before window
-    assert run_live._within_execution_window(
-        datetime(2026, 5, 13, 9, 30)
-    ) is False
-    # Past late tolerance
+    """Window is 10:30-15:00 IST (was 10:00 before yfinance premarket
+    scan moved to 10:00 — run_live now starts at 10:30 with the same
+    30-min late tolerance)."""
+    # Just inside the window
     assert run_live._within_execution_window(
         datetime(2026, 5, 13, 10, 35)
+    ) is True
+    # Before window (was true under old 10:00 start)
+    assert run_live._within_execution_window(
+        datetime(2026, 5, 13, 10, 5)
+    ) is False
+    # Past late tolerance (10:30 + 30 = 11:00)
+    assert run_live._within_execution_window(
+        datetime(2026, 5, 13, 11, 5)
     ) is False
     # Past official close-of-window
     assert run_live._within_execution_window(
