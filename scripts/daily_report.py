@@ -19,7 +19,7 @@ from __future__ import annotations
 import argparse
 import sys
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 
 from scripts.executors.protocol import ExecutionSummary
@@ -279,9 +279,15 @@ def _footer(s: ExecutionSummary) -> str:
 # ---- CLI for ad-hoc re-rendering ----
 
 def main(argv: list[str] | None = None) -> int:
-    """Re-render a report for an existing ledger row. Used for backfills."""
+    """Re-render a report for an existing ledger row. Defaults to today's
+    IST date (the launchd job at 15:35 IST passes no args)."""
+    from zoneinfo import ZoneInfo
     p = argparse.ArgumentParser(description=__doc__)
-    p.add_argument("--date", type=date.fromisoformat, required=True)
+    p.add_argument(
+        "--date", type=date.fromisoformat,
+        default=datetime.now(ZoneInfo("Asia/Kolkata")).date(),
+        help="report date (YYYY-MM-DD); defaults to today in IST",
+    )
     p.add_argument("--mode", default="dhan-paper")
     args = p.parse_args(argv)
 

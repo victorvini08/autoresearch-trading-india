@@ -44,6 +44,7 @@ from scripts.executors.protocol import (
     PreflightSkipped,
 )
 from scripts.halt import set_halt, show_halt
+from storage import portfolio_db
 
 logger = logging.getLogger(__name__)
 
@@ -133,6 +134,17 @@ class DhanExecutor:
                 skipped=True,
                 skipped_reason=f"halt.json active: {halt_payload.get('reason', '?')}",
             )
+
+        # 1b. EOD-style broker_positions snapshot for today (idempotent
+        #     via upsert). Ensures broker_positions has a row for EVERY
+        #     trading day, not only days where the executor placed orders
+        #     via write_execution_result. Without this, non-rebalance
+        #     days had no snapshot → equity curve missing data points →
+        #     today_pnl had no prior snapshot to diff against → 1D
+        #     returns stuck at ₹0. write_execution_result later in this
+        #     method will upsert again on rebalance days with the same
+        #     mark values; the upsert makes both paths safe.
+        self._write_eod_snapshot(as_of_date)
 
         # 2. Signal extraction (broker state + last-rebalance overlay)
         try:
@@ -352,6 +364,46 @@ class DhanExecutor:
             halt_set=False,
             notes=notes,
         )
+
+    # ──────────────────────────────────────────────────────────
+    # Quiet-day snapshot
+    # ──────────────────────────────────────────────────────────
+
+    def _write_eod_snapshot(self, as_of_date: date) -> None:
+        """Upsert broker_positions for `as_of_date` using current holdings
+        × latest available close. Called at the top of every execute_day
+        (after the halt check) so the equity-curve / today_pnl pipeline
+        has a snapshot for EVERY trading day, not only rebalance days.
+        Idempotent — re-running upserts existing rows."""
+        try:
+            positions = self.broker.get_positions()
+        except Exception as e:  # noqa: BLE001 — best-effort
+            logger.warning("EOD snapshot skipped (broker.get_positions failed): %s", e)
+            return
+        held = [p for p in positions if p.quantity and p.quantity > 0]
+        if not held:
+            return  # no positions to snapshot
+        closes = _load_latest_closes(
+            self.prices_db,
+            tickers={p.ticker for p in held},
+            on_or_before=as_of_date,
+        )
+        with portfolio_db.connect(self.portfolio_db) as conn:
+            for p in held:
+                mark = closes.get(p.ticker)
+                if mark is None or mark <= 0:
+                    continue
+                portfolio_db.upsert_position(
+                    conn,
+                    snapshot_date=as_of_date,
+                    ticker=p.ticker,
+                    quantity=float(p.quantity),
+                    avg_entry_price=float(p.average_price)
+                    if p.average_price is not None else None,
+                    mark_price=float(mark),
+                    mark_value=float(p.quantity) * float(mark),
+                    mode=self.mode,
+                )
 
     # ──────────────────────────────────────────────────────────
     # Order construction
