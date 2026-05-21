@@ -245,13 +245,21 @@ def _query_one_day(conn, *, modes: tuple[str, ...], d: date) -> dict:
         f"WITH latest_per_mode AS ("
         f"  SELECT mode, MAX(snapshot_date) AS snap_d FROM broker_positions "
         f"  WHERE mode IN ({placeholders}) AND snapshot_date <= ? GROUP BY mode "
+        f"), "
+        f"avg_buy AS ("
+        f"  SELECT mode, ticker, "
+        f"         SUM(qty_open * buy_price) / NULLIF(SUM(qty_open), 0) AS avg_buy_price "
+        f"  FROM position_lots WHERE mode IN ({placeholders}) AND qty_open > 0 "
+        f"  GROUP BY mode, ticker "
         f") "
-        f"SELECT bp.ticker, bp.quantity, bp.mark_price, bp.mark_value, bp.mode, bp.snapshot_date "
+        f"SELECT bp.ticker, bp.quantity, bp.mark_price, bp.mark_value, "
+        f"       bp.mode, bp.snapshot_date, ab.avg_buy_price "
         f"FROM broker_positions bp "
         f"JOIN latest_per_mode l ON l.mode = bp.mode AND l.snap_d = bp.snapshot_date "
+        f"LEFT JOIN avg_buy ab ON ab.mode = bp.mode AND ab.ticker = bp.ticker "
         f"WHERE bp.quantity != 0 "
         f"ORDER BY bp.mark_value DESC NULLS LAST",
-        [*modes, d],
+        [*modes, d, *modes],
     ).fetchall()
     positions = [
         {
@@ -261,8 +269,13 @@ def _query_one_day(conn, *, modes: tuple[str, ...], d: date) -> dict:
             "mark_value": float(mv) if mv is not None else None,
             "mode": mode,
             "snapshot_date": sd.isoformat() if sd else None,
+            # Weighted-average buy price across open FIFO lots for this
+            # ticker. Slippage + ref-price baked in (it's the actual fill
+            # price recorded, not the bhav close). Drives the per-position
+            # unrealized P&L column in the positions table.
+            "avg_buy_price": float(ab) if ab is not None else None,
         }
-        for t, q, mp, mv, mode, sd in pos_rows
+        for t, q, mp, mv, mode, sd, ab in pos_rows
     ]
     positions_mark = sum(p["mark_value"] or 0 for p in positions)
     # Invested value = sum of (qty_open × buy_price) across currently open
@@ -757,16 +770,34 @@ function renderDay(bucketEl, bucket, iso) {
     posDiv.innerHTML = '<div class="empty-state">No open positions.</div>';
     snapDateEl.textContent = '';
   } else {
-    const rows = day.positions.map(p => `<tr>
-      <td class="ticker">${p.ticker}</td>
-      <td class="num">${p.qty.toFixed(4)}</td>
-      <td class="num">${p.mark_price !== null ? fmtUSD(p.mark_price) : '—'}</td>
-      <td class="num">${p.mark_value !== null ? fmtUSD(p.mark_value) : '—'}</td>
-    </tr>`).join('');
+    const rows = day.positions.map(p => {
+      const buy = p.avg_buy_price;
+      const mark = p.mark_price;
+      const cost = (buy !== null && p.qty) ? buy * p.qty : null;
+      const upnl = (buy !== null && mark !== null) ? (mark - buy) * p.qty : null;
+      const upnlPct = (buy !== null && buy > 0 && mark !== null) ? (mark - buy) / buy : null;
+      const pnlCls = upnl !== null ? cls(upnl) : '';
+      return `<tr>
+        <td class="ticker">${p.ticker}</td>
+        <td class="num">${p.qty.toFixed(0)}</td>
+        <td class="num">${buy !== null ? fmtUSD(buy) : '—'}</td>
+        <td class="num">${mark !== null ? fmtUSD(mark) : '—'}</td>
+        <td class="num">${cost !== null ? fmtUSD(cost) : '—'}</td>
+        <td class="num">${p.mark_value !== null ? fmtUSD(p.mark_value) : '—'}</td>
+        <td class="num ${pnlCls}">${upnl !== null ? fmtSignedUSD(upnl) : '—'}</td>
+        <td class="num ${pnlCls}">${upnlPct !== null ? fmtPct(upnlPct) : '—'}</td>
+      </tr>`;
+    }).join('');
     posDiv.innerHTML = `<table>
       <thead><tr>
-        <th>Ticker</th><th class="num">Qty</th>
-        <th class="num">Mark</th><th class="num">Value</th>
+        <th>Ticker</th>
+        <th class="num">Qty</th>
+        <th class="num">Avg Buy</th>
+        <th class="num">Current</th>
+        <th class="num">Invested</th>
+        <th class="num">Current value</th>
+        <th class="num">P&L</th>
+        <th class="num">P&L %</th>
       </tr></thead>
       <tbody>${rows}</tbody></table>`;
     const snapDates = [...new Set(day.positions.map(p => p.snapshot_date).filter(Boolean))];
