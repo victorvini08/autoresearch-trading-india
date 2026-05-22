@@ -66,7 +66,7 @@ class DhanExecutor:
     portfolio_db: Path = DEFAULT_PORTFOLIO_DB
     halt_file: Path = Path("halt.json")
     broker: object | None = None          # DhanBroker or DhanMock; constructed lazily
-    initial_cash_inr: float = 50_000.0
+    initial_cash_inr: float = 100_000.0
     fraction_change_threshold: float = FRACTION_CHANGE_THRESHOLD
 
     def __post_init__(self) -> None:

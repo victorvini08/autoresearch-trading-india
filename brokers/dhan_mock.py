@@ -78,7 +78,7 @@ class DhanMock:
     # works in offline tests too. The executor injects the live fetcher at
     # construction; unit tests leave it None (no network, deterministic).
     fill_price_fetcher: Callable[[str], float | None] | None = None
-    initial_cash_inr: float = 50_000.0
+    initial_cash_inr: float = 100_000.0
     slippage_bps: float = DEFAULT_SLIPPAGE_BPS
     mode: str = "dhan-paper"
 
