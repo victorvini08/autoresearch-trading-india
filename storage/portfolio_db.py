@@ -720,9 +720,9 @@ _INITIAL_DEPOSIT_BY_MODE: dict[str, float] = {
     # as the actual balance and displayed it as such — including the
     # dashboard, which surfaced negative cash to the user. Anchor here so
     # the ledger has a single source of truth for "real cash." Paper boots
-    # with ₹50k (DhanExecutor / DhanMock default); dhan-live's real cash
-    # comes from the broker and is not seeded from the ledger.
-    "dhan-paper": 50_000.0,
+    # with ₹1,00,000 (DhanExecutor / DhanMock default); dhan-live's real
+    # cash comes from the broker and is not seeded from the ledger.
+    "dhan-paper": 100_000.0,
     "dhan-live": 0.0,
 }
 
