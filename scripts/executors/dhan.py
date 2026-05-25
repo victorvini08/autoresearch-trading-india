@@ -49,6 +49,15 @@ from storage import portfolio_db
 logger = logging.getLogger(__name__)
 
 FRACTION_CHANGE_THRESHOLD = 0.005   # 0.5pp — US repo learnings §4.2
+# Minimum order notional (₹). Trades below this are SUPPRESSED in
+# _build_orders so the strategy stops churning ₹14.75/scrip DP charges
+# on 1-share tick-overs caused by mark-drift integer rounding. Sized
+# so the DP friction stays under ~1% of trade notional (14.75/1500 ≈
+# 1%). Applies ONLY to the resize / rebalance path; full liquidations
+# (a name dropped from the strategy) are NOT filtered — those must
+# execute regardless of size, otherwise orphan positions could persist.
+# Drift below this floor is left to the next biweekly rebalance.
+MIN_ORDER_INR = 1500.0
 DEFAULT_PRICES_DB = Path("storage/prices.duckdb")
 DEFAULT_PORTFOLIO_DB = Path("storage/portfolio.duckdb")
 
@@ -475,6 +484,19 @@ class DhanExecutor:
             current_qty = positions[ticker].quantity if ticker in positions else 0
             delta = target_qty - current_qty
             if delta == 0:
+                continue
+            # Minimum-order-size filter: a tiny trade can't justify the
+            # ₹14.75/scrip DP charge — skip and let the small qty delta
+            # resolve at the next biweekly rebalance. Primary defense
+            # against daily 1-share-tick-over churn from mark-drift
+            # integer rounding (which the broken FRACTION_CHANGE_THRESHOLD
+            # below failed to suppress).
+            trade_notional = abs(delta) * px
+            if trade_notional < MIN_ORDER_INR:
+                logger.info(
+                    "skip small order %s qty_delta=%d notional=₹%.2f < min ₹%.0f",
+                    ticker, delta, trade_notional, MIN_ORDER_INR,
+                )
                 continue
             # Fraction-change suppression on fraction not qty
             prev = prev_targets.get(ticker, 0.0)
