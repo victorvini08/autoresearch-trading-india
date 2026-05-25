@@ -164,8 +164,11 @@ def test_cash_hydrates_from_ledger(tmp_path: Path, prices_db: Path) -> None:
         conn.close()
     m = DhanMock(prices_db=prices_db, portfolio_db=p,
                  initial_cash_inr=50_000.0, mode="dhan-paper")
-    assert m.get_cash()["availableBalance"] == pytest.approx(
-        50_000.0 - 12_050.0, abs=0.01)
+    # Hydrated cash = mode's initial deposit (from portfolio_db) + ledger sum.
+    # Reference the constant so the test stays correct if the deposit changes.
+    from storage.portfolio_db import _INITIAL_DEPOSIT_BY_MODE
+    expected = _INITIAL_DEPOSIT_BY_MODE["dhan-paper"] - 12_050.0
+    assert m.get_cash()["availableBalance"] == pytest.approx(expected, abs=0.01)
 
 
 # ── Phase B contract: paper MARKET fills priced at today's NSE open ──
