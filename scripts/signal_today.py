@@ -205,6 +205,25 @@ def generate_signals(
     universe = get_universe_at(target_date)
     feeds = _load_feeds(start, target_date, universe)
 
+    # Look-ahead guard: the cerebro feed must NOT include target_date's own
+    # bar — that would let the strategy size today's targets against today's
+    # CLOSE while we're still in the trading session, which is future data.
+    # In normal ops daily_update runs at 09:30 IST and can't ingest today's
+    # bhav (not published until ~6pm IST), so feeds reliably end at T-1.
+    # If a future change ever lands today's row before market close, this
+    # assertion makes the look-ahead loud instead of silently profitable.
+    # NOTE: replay/backfill (target_date in the past) intentionally allows
+    # last_bar == target_date — there is no future to leak into.
+    last_bar = max(df.index.max().date() for df in feeds.values())
+    if last_bar >= target_date and target_date >= date.today():
+        raise RuntimeError(
+            f"signal_today look-ahead guard: feeds contain bar dated "
+            f"{last_bar} but target_date={target_date} is today/future. "
+            "This would let the strategy use future close as a decision input. "
+            "Either run after market close, or roll target_date forward to "
+            "the next trading session."
+        )
+
     capture_cls, captured = _make_capturing_strategy(strategy_cls)
 
     cerebro = bt.Cerebro()
