@@ -66,6 +66,18 @@ def resolve_active_universe(
     return set(universe_by_date[sorted_dates[i]])
 
 
+# Biweekly rebalance parity — FIXED, not derived. The prior derivation
+# ("first Friday in the rolling backtest window") was fragile: as the
+# window slid forward by 1 day each calendar day, its first Friday
+# occasionally crossed into the next week, flipping parity → the
+# strategy silently re-decided which Fridays were rebalance days
+# between runs (see 2026-05-26 Tuesday-rebalance incident). Anchoring
+# to a constant makes "biweekly" reproducibly mean the same calendar
+# set forever. NOT a tunable hyperparameter — it's a calendar choice,
+# the same status as `rebalance_weekday = 4` (Friday).
+_REBALANCE_PARITY = 0
+
+
 class IndiaMomentumQualityRegime(bt.Strategy):
     """Cross-sectional 12-1 momentum + quality + sector cap + regime gate."""
 
@@ -86,7 +98,6 @@ class IndiaMomentumQualityRegime(bt.Strategy):
         # Rebalance cadence (biweekly = every other Friday)
         ("rebalance_weekday", 4),       # Friday
         ("rebalance_period_weeks", 2),
-        ("rebalance_week_parity", 0),   # 0 or 1 — pinned at start of backtest
         # Optional sidecar DB paths (defaults match runtime layout). Backtest
         # / live can override.
         ("universe_db_path", "storage/universe.duckdb"),
@@ -116,9 +127,6 @@ class IndiaMomentumQualityRegime(bt.Strategy):
         self._last_rebalance_date: date | None = None
         self._fund_cache: dict[date, dict] = {}
         self._regime_cache: dict[date, str] = {}
-        # Pin rebalance week parity to the first Friday on or after start
-        # so we don't drift across data-feed start variations.
-        self._week_parity_initialized = False
         # Sorted snapshot dates for the point-in-time universe (Fix B).
         ubd = self.p.universe_by_date
         self._univ_dates: list[date] | None = (
@@ -161,14 +169,12 @@ class IndiaMomentumQualityRegime(bt.Strategy):
         today = self.datas[0].datetime.date(0)
         if today.weekday() != self.p.rebalance_weekday:
             return False
-        iso_week = today.isocalendar().week
-        if not self._week_parity_initialized:
-            # Pin parity to today's parity ⇒ rebalance on this Friday and every
-            # other one. Stable across data-start variations.
-            self._week_parity_initialized = True
-            object.__setattr__(self.params, "rebalance_week_parity", iso_week % 2)
-            return True
-        return iso_week % 2 == self.p.rebalance_week_parity
+        # Biweekly cadence anchored to a FIXED parity constant
+        # (_REBALANCE_PARITY), not derived from "the first Friday in the
+        # rolling backtest window" — that derivation let the chosen
+        # rebalance-Friday set silently flip whenever the rolling window's
+        # start crossed a Friday (see 2026-05-26 Tuesday-rebalance bug).
+        return today.isocalendar().week % 2 == _REBALANCE_PARITY
 
     # ──────────────────────────────────────────────────────────
     # Signals
