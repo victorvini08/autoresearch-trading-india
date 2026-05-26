@@ -360,6 +360,12 @@ class DhanExecutor:
             notes.append(f"ledger write failed: {e}")
             n_disc = -1
 
+        # Re-stamp today's broker_positions snapshot from CURRENT (post-trade)
+        # broker state, so names that were fully sold this run no longer
+        # leave stale rows from the morning's _write_eod_snapshot. This is
+        # the second half of the 2026-05-26 double-count fix.
+        self._write_eod_snapshot(as_of_date)
+
         return ExecutionSummary(
             mode=self.mode,
             as_of_date=as_of_date,
@@ -390,14 +396,26 @@ class DhanExecutor:
             logger.warning("EOD snapshot skipped (broker.get_positions failed): %s", e)
             return
         held = [p for p in positions if p.quantity and p.quantity > 0]
-        if not held:
-            return  # no positions to snapshot
         closes = _load_latest_closes(
             self.prices_db,
             tickers={p.ticker for p in held},
             on_or_before=as_of_date,
-        )
+        ) if held else {}
+        # DELETE-then-INSERT semantics: today's snapshot is ALWAYS a clean
+        # rewrite of the current broker state. Critical because this method
+        # gets called BOTH before signal extraction AND after trades fire —
+        # without the delete, a name that was held in the morning but fully
+        # sold by trades-end leaves a stale row in today's snapshot, causing
+        # the dashboard to double-count positions (sold-name's morning value
+        # + post-trade names' values). Bug discovered 2026-05-26 when the
+        # dashboard showed equity = ₹142k from a ₹100k base after a 5-name
+        # rebalance turnover.
         with portfolio_db.connect(self.portfolio_db) as conn:
+            conn.execute(
+                "DELETE FROM broker_positions "
+                "WHERE snapshot_date = ? AND mode = ?",
+                [as_of_date, self.mode],
+            )
             for p in held:
                 mark = closes.get(p.ticker)
                 if mark is None or mark <= 0:
