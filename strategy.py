@@ -500,6 +500,17 @@ def vol_targeted_gross(
 # -- strictly safer than the old fixed-slot scheme, never concentrated.
 _MAX_NAME_WEIGHT = 0.10
 
+# Biweekly rebalance parity — FIXED, not derived. The prior derivation
+# ("first Friday in the rolling backtest window") was fragile: as the
+# window slid forward by 1 day each calendar day, its first Friday
+# occasionally crossed into the next week, flipping parity → the
+# strategy silently re-decided which Fridays were rebalance days
+# between runs (see 2026-05-26 Tuesday-rebalance incident). Anchoring
+# to a constant makes "biweekly" reproducibly mean the same calendar
+# set forever. NOT a tunable hyperparameter — it's a calendar choice,
+# the same status as `rebalance_weekday = 4` (Friday).
+_REBALANCE_PARITY = 0
+
 
 def construct_gross_targets(
     priority: list[str],
@@ -566,7 +577,6 @@ class IndiaMomentumQualityCarry(bt.Strategy):
         ('sector_cap', 0.25),
         ('rebalance_weekday', 4),
         ('rebalance_period_weeks', 2),
-        ('rebalance_week_parity', 0),
         ('universe_db_path', 'storage/universe.duckdb'),
         ('macro_db_path', 'storage/macro.duckdb'),
         ('enforce_sector_cap', True),
@@ -577,7 +587,6 @@ class IndiaMomentumQualityCarry(bt.Strategy):
         self._data_by_ticker = {self._ticker_of(d): d for d in self.datas}
         self._sector_map = self._load_sector_map()
         self._last_rebalance_date: date | None = None
-        self._week_parity_initialized = False
         ubd = self.p.universe_by_date
         self._univ_dates: list[date] | None = sorted(ubd) if ubd else None
         # Names whose structural-exit order is submitted but not yet filled;
@@ -646,19 +655,15 @@ class IndiaMomentumQualityCarry(bt.Strategy):
         today = self.datas[0].datetime.date(0)
         if today.weekday() != self.p.rebalance_weekday:
             return False
-        iso_week = today.isocalendar().week
-        # Honour rebalance_period_weeks (previously a dead param --
-        # biweekly was hardcoded as iso_week % 2). period=2 is
-        # behaviour-identical to the prior code (committed default
-        # unchanged); period=1 => every rebalance_weekday (weekly).
+        # Biweekly cadence is anchored to a FIXED parity constant
+        # (_REBALANCE_PARITY), not derived from "the first Friday in the
+        # rolling backtest window" — that derivation let the chosen
+        # rebalance-Friday set silently flip whenever the rolling window's
+        # start crossed a Friday (see 2026-05-26 Tuesday-rebalance bug).
+        # With a constant, "biweekly" is reproducibly the same calendar
+        # set across every run, the way it should be.
         period = max(1, int(self.p.rebalance_period_weeks))
-        if not self._week_parity_initialized:
-            self._week_parity_initialized = True
-            object.__setattr__(
-                self.params, 'rebalance_week_parity', iso_week % period
-            )
-            return True
-        return iso_week % period == self.p.rebalance_week_parity
+        return today.isocalendar().week % period == _REBALANCE_PARITY
 
     def _held_positions(self) -> dict[str, float]:
         held = {
