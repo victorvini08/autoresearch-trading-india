@@ -394,6 +394,18 @@ def breadth_scaled_gross(
     return 0.99
 
 
+# Biweekly rebalance parity — FIXED, not derived. The prior derivation
+# ("first Friday in the rolling backtest window") was fragile: as the
+# window slid forward by 1 day each calendar day, its first Friday
+# occasionally crossed into the next week, flipping parity → the
+# strategy silently re-decided which Fridays were rebalance days
+# between runs (see 2026-05-26 Tuesday-rebalance incident). Anchoring
+# to a constant makes "biweekly" reproducibly mean the same calendar
+# set forever. NOT a tunable hyperparameter — it's a calendar choice,
+# the same status as `rebalance_weekday = 4` (Friday).
+_REBALANCE_PARITY = 0
+
+
 class IndiaResidualReversalStatArb(bt.Strategy):
     '''Long-only PIT-universe momentum-quality carry with fixed slots.'''
 
@@ -409,7 +421,6 @@ class IndiaResidualReversalStatArb(bt.Strategy):
         ('sector_cap', 0.25),
         ('rebalance_weekday', 4),
         ('rebalance_period_weeks', 2),
-        ('rebalance_week_parity', 0),
         ('universe_db_path', 'storage/universe.duckdb'),
         ('macro_db_path', 'storage/macro.duckdb'),
         ('enforce_sector_cap', True),
@@ -420,7 +431,6 @@ class IndiaResidualReversalStatArb(bt.Strategy):
         self._data_by_ticker = {self._ticker_of(d): d for d in self.datas}
         self._sector_map = self._load_sector_map()
         self._last_rebalance_date: date | None = None
-        self._week_parity_initialized = False
         ubd = self.p.universe_by_date
         self._univ_dates: list[date] | None = sorted(ubd) if ubd else None
 
@@ -451,14 +461,13 @@ class IndiaResidualReversalStatArb(bt.Strategy):
         today = self.datas[0].datetime.date(0)
         if today.weekday() != self.p.rebalance_weekday:
             return False
-        iso_week = today.isocalendar().week
-        if not self._week_parity_initialized:
-            self._week_parity_initialized = True
-            object.__setattr__(
-                self.params, 'rebalance_week_parity', iso_week % 2
-            )
-            return True
-        return iso_week % 2 == self.p.rebalance_week_parity
+        # Biweekly cadence anchored to a FIXED parity constant
+        # (_REBALANCE_PARITY), not derived from "the first Friday in the
+        # rolling backtest window" — that derivation let the chosen
+        # rebalance-Friday set silently flip whenever the rolling window's
+        # start crossed a Friday (see 2026-05-26 Tuesday-rebalance bug).
+        period = max(1, int(self.p.rebalance_period_weeks))
+        return today.isocalendar().week % period == _REBALANCE_PARITY
 
     def _held_positions(self) -> dict[str, float]:
         held = {
