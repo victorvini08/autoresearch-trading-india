@@ -6,20 +6,22 @@ needed only `EXECUTION_MODE=dhan-live` + a valid `DHAN_ACCESS_TOKEN` —
 no programmatic check enforced the paper-validation pre-requisite.
 
 What this enforces:
-  1. ≥ N clean dhan-paper trading days in the last 30 days
-     (counted as distinct snapshot_dates in `broker_positions`).
-  2. Zero unresolved `discrepancies` in the same window.
-  3. The exact strategy.py that was paper-validated is the one going live
+  1. The exact strategy.py that was consent-granted is the one going live
      (sha256 captured at grant; re-validated by run_live every day).
-  4. Consent has not expired (default 30 days from grant).
+  2. Consent has not expired (default 30 days from grant).
+  3. SEBI_ALGO_ID is set in env (otherwise the broker construction fails
+     anyway — listed here as a reminder).
+
+Paper-day count and unresolved-discrepancy count are RECORDED in the
+consent payload for audit, but they don't gate `grant` — the user
+opted out of the 4-week paper-validation requirement on 2026-05-26.
 
 `run_live.py` calls `check_consent_for_live()` before constructing the
 live broker. Failing any check refuses the live run with a clear reason.
 
 Usage:
-    # Grant consent (after 4+ weeks of paper)
+    # Grant consent (no paper-day requirement; can be run any time)
     uv run python -m scripts.promote_live grant
-    uv run python -m scripts.promote_live grant --force   # bypass gate; manual review
 
     # Show current consent state
     uv run python -m scripts.promote_live show
@@ -44,10 +46,8 @@ CONSENT_PATH = REPO_ROOT / "state" / "live_consent.json"
 STRATEGY_PY = REPO_ROOT / "strategy.py"
 PORTFOLIO_DB = REPO_ROOT / "storage" / "portfolio.duckdb"
 
-# 20 trading days ≈ 4 calendar weeks at 5 sessions/week. Tunable via --min-days.
-PAPER_DAYS_REQUIRED = 20
 CONSENT_VALID_DAYS = 30
-LOOKBACK_DAYS = 60  # window for counting paper days + unresolved discrepancies
+LOOKBACK_DAYS = 60  # window for the audit numbers recorded in the consent payload
 
 
 def _strategy_hash() -> str:
@@ -78,27 +78,15 @@ def _audit_window(db: Path, lookback_days: int = LOOKBACK_DAYS) -> tuple[int, in
     return int(n_days or 0), int(n_disc or 0)
 
 
-def grant_consent(
-    *,
-    force: bool = False,
-    min_paper_days: int = PAPER_DAYS_REQUIRED,
-) -> dict:
-    """Write `state/live_consent.json` if all gates pass. Returns the payload.
+def grant_consent() -> dict:
+    """Write `state/live_consent.json` and return the payload.
 
-    Raises RuntimeError if any gate fails and `force` is False.
+    No data gates: paper-day count and unresolved discrepancies are recorded
+    in the payload (for audit) but don't refuse the grant. The protections
+    that DO matter — strategy.py hash binding, 30-day expiry, and the
+    SEBI_ALGO_ID broker-construction requirement — stay in force.
     """
     n_days, n_disc = _audit_window(PORTFOLIO_DB)
-    if not force and n_days < min_paper_days:
-        raise RuntimeError(
-            f"Refusing consent: only {n_days} clean paper days in the last "
-            f"{LOOKBACK_DAYS} (need ≥ {min_paper_days}). Run dhan-paper more "
-            "before promoting. Override with --force only after manual review."
-        )
-    if not force and n_disc > 0:
-        raise RuntimeError(
-            f"Refusing consent: {n_disc} unresolved discrepancies in the last "
-            f"{LOOKBACK_DAYS} days. Resolve in the dashboard before promoting."
-        )
     now = datetime.now(timezone.utc)
     payload = {
         "granted_at": now.isoformat(timespec="seconds"),
@@ -110,7 +98,6 @@ def grant_consent(
         "valid_until_utc": (
             now + timedelta(days=CONSENT_VALID_DAYS)
         ).isoformat(timespec="seconds"),
-        "forced": bool(force),
     }
     CONSENT_PATH.parent.mkdir(parents=True, exist_ok=True)
     CONSENT_PATH.write_text(json.dumps(payload, indent=2))
@@ -178,27 +165,14 @@ def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(description=__doc__)
     sub = p.add_subparsers(dest="cmd", required=True)
 
-    p_grant = sub.add_parser("grant", help="grant live-mode consent")
-    p_grant.add_argument(
-        "--force", action="store_true",
-        help="bypass paper-days + discrepancies gates (manual review only)",
-    )
-    p_grant.add_argument(
-        "--min-days", type=int, default=PAPER_DAYS_REQUIRED,
-        help=f"clean paper days required (default {PAPER_DAYS_REQUIRED})",
-    )
-
+    sub.add_parser("grant", help="grant live-mode consent (no data gates)")
     sub.add_parser("show", help="print current consent state")
     sub.add_parser("revoke", help="remove consent and re-block live")
 
     args = p.parse_args(argv)
 
     if args.cmd == "grant":
-        try:
-            payload = grant_consent(force=args.force, min_paper_days=args.min_days)
-        except RuntimeError as e:
-            print(f"[promote_live] {e}", file=sys.stderr)
-            return 1
+        payload = grant_consent()
         print(f"[promote_live] granted live consent → {CONSENT_PATH}")
         print(json.dumps(payload, indent=2))
         return 0
@@ -228,7 +202,6 @@ def main(argv: list[str] | None = None) -> int:
 __all__ = [
     "CONSENT_PATH",
     "CONSENT_VALID_DAYS",
-    "PAPER_DAYS_REQUIRED",
     "check_consent_for_live",
     "grant_consent",
     "revoke_consent",

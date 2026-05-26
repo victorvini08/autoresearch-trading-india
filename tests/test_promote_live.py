@@ -1,11 +1,12 @@
 """Tests for the dhan-live promotion gate (`scripts.promote_live`).
 
-The gate's contract:
+The gate's contract (post 2026-05-26 simplification — paper-day requirement
+removed by explicit user decision):
   - No consent file → live is BLOCKED (default-safe).
   - Consent expired → BLOCKED.
   - strategy.py hash drift since grant → BLOCKED.
-  - Force-granted consent works (manual override for explicit operator review).
-  - Refusal when insufficient paper days OR unresolved discrepancies in window.
+  - `grant` always succeeds (no paper-day / discrepancy gates) — the
+    protections that matter are the strategy-hash binding + 30-day expiry.
 
 Tests use an isolated tmp consent path + tmp portfolio DB so they never
 touch real state.
@@ -91,38 +92,28 @@ def test_no_consent_blocks_live(isolated):
     assert "no state/live_consent.json" in reason
 
 
-def test_grant_refuses_insufficient_paper_days(isolated):
-    _seed_portfolio(isolated["portfolio"], n_paper_days=5)  # < required 20
-    with pytest.raises(RuntimeError, match="only 5 clean paper days"):
-        promote_live.grant_consent()
-
-
-def test_grant_refuses_unresolved_discrepancies(isolated):
-    _seed_portfolio(isolated["portfolio"], n_paper_days=25, n_unresolved=3)
-    with pytest.raises(RuntimeError, match="3 unresolved discrepancies"):
-        promote_live.grant_consent()
-
-
-def test_grant_succeeds_with_clean_paper(isolated):
-    _seed_portfolio(isolated["portfolio"], n_paper_days=25)
+def test_grant_succeeds_with_zero_paper_days(isolated):
+    # No paper history at all — grant still succeeds. The audit columns
+    # record the empty state for traceability, but they don't gate.
     payload = promote_live.grant_consent()
-    assert payload["paper_days_validated"] >= 20
-    assert payload["discrepancies_in_window"] == 0
+    assert payload["paper_days_validated"] == 0
     assert payload["consent_token"]
     assert payload["strategy_hash"] == promote_live._strategy_hash()
-    assert not payload["forced"]
-    # The consent file is on disk
     assert isolated["consent"].exists()
-    # And the live gate now allows
     allowed, _reason = promote_live.check_consent_for_live()
     assert allowed
 
 
-def test_grant_force_bypasses_gates(isolated):
-    # No paper days at all — but --force lets us through anyway
-    _seed_portfolio(isolated["portfolio"], n_paper_days=0)
-    payload = promote_live.grant_consent(force=True)
-    assert payload["forced"] is True
+def test_grant_records_audit_numbers_when_paper_exists(isolated):
+    # Paper history present → numbers carry into the payload for audit,
+    # but they still don't gate (the test would have failed with a refusal
+    # under the old contract; here it asserts grant just records them).
+    _seed_portfolio(isolated["portfolio"], n_paper_days=7, n_unresolved=2)
+    payload = promote_live.grant_consent()
+    assert payload["paper_days_validated"] == 7
+    assert payload["discrepancies_in_window"] == 2
+    allowed, _reason = promote_live.check_consent_for_live()
+    assert allowed
 
 
 def test_strategy_hash_drift_blocks_live(isolated):
