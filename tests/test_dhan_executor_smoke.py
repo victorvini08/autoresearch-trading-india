@@ -72,8 +72,12 @@ def halt_file(tmp_path: Path, monkeypatch) -> Path:
     return p
 
 
-def _stub_signals(*, as_of_date, strategy_module, **_kwargs):
-    """Return fixed targets — equal-weighted 6 names at ~₹50k capital."""
+def _stub_signals(*, target_date, strategy_module_name, **_kwargs):
+    """Return fixed targets — equal-weighted 6 names at ~₹50k capital.
+
+    Kwarg names match signal_today.generate_signals' actual signature
+    (target_date / strategy_module_name); the executor passes both by name.
+    """
     target_each = 1.0 / 6.0
     return {
         "targets": {
