@@ -58,7 +58,65 @@ def _query_all(*, db_path: Path | None) -> dict:
         "generated_at": datetime.now().astimezone().isoformat(timespec="seconds"),
         "paper": _query_bucket(modes=PAPER_MODES, db_path=db_path),
         "real": _query_bucket(modes=REAL_MODES, db_path=db_path),
+        "scheduled_jobs": _scheduled_jobs_status(),
     }
+
+
+def _scheduled_jobs_status() -> list[dict]:
+    """Read launchd plists + log mtimes + launchctl exit codes to render a
+    'did today's cron fire?' panel on the dashboard. Pure best-effort —
+    failures fall back to '?' fields, never raise."""
+    import plistlib
+    import subprocess
+    from zoneinfo import ZoneInfo
+
+    IST = ZoneInfo("Asia/Kolkata")
+    deploy_dir = Path("deploy/launchd")
+    if not deploy_dir.exists():
+        return []
+    # Last exit codes from `launchctl list`
+    exits: dict[str, str] = {}
+    try:
+        r = subprocess.run(
+            ["launchctl", "list"], capture_output=True, text=True, timeout=3,
+        )
+        for line in r.stdout.splitlines():
+            if "com.autoresearch." in line:
+                parts = line.split()
+                if len(parts) >= 3:
+                    pid, exit_code, label = parts[0], parts[1], parts[2]
+                    exits[label] = exit_code
+    except Exception:  # noqa: BLE001
+        pass
+    out: list[dict] = []
+    for plist_path in sorted(deploy_dir.glob("com.autoresearch.*.plist")):
+        try:
+            with open(plist_path, "rb") as fh:
+                plist = plistlib.load(fh)
+        except Exception:  # noqa: BLE001
+            continue
+        label = plist.get("Label", plist_path.stem)
+        name = label.replace("com.autoresearch.", "")
+        ci = plist.get("StartCalendarInterval", {})
+        sched = f"{int(ci.get('Hour', 0)):02d}:{int(ci.get('Minute', 0)):02d} IST"
+        out_log = Path(plist.get("StandardOutPath", ""))
+        err_log = Path(plist.get("StandardErrorPath", ""))
+        last_run, last_err_at = "—", "—"
+        if out_log.exists() and out_log.stat().st_size > 0:
+            ts = datetime.fromtimestamp(out_log.stat().st_mtime, tz=IST)
+            last_run = ts.strftime("%Y-%m-%d %H:%M:%S")
+        if err_log.exists() and err_log.stat().st_size > 0:
+            ts = datetime.fromtimestamp(err_log.stat().st_mtime, tz=IST)
+            last_err_at = ts.strftime("%Y-%m-%d %H:%M:%S")
+        out.append({
+            "name": name,
+            "scheduled": sched,
+            "last_run": last_run,
+            "last_err_at": last_err_at,
+            "last_exit": exits.get(label, "?"),
+            "manual_cmd": f"launchctl kickstart -k gui/$(id -u)/{label}",
+        })
+    return out
 
 
 def _query_bucket(*, modes: tuple[str, ...], db_path: Path | None) -> dict:
@@ -507,6 +565,28 @@ _HTML_TEMPLATE = r"""<!doctype html>
     Generated: <span id="generated-at"></span>
   </div>
 
+  <div class="card" style="margin-bottom:20px"><h2>Scheduled Jobs</h2>
+    <div class="metric-sub" style="margin-bottom:8px">
+      Cron status as of dashboard build. "Last run" = stdout-log mtime
+      (last successful fire). "Exit" = most recent launchctl exit code
+      (0 = ok, 78 = blocked by stale TCC xattr on the log files —
+      delete the log + bootstrap to clear; see commit history). Run-now
+      column is a copy-pasteable launchctl command — Phase 1 of
+      manual-trigger; Phase 2 will wire actual buttons via a tiny
+      local server.
+    </div>
+    <table class="jobs-table">
+      <thead><tr>
+        <th>Job</th>
+        <th class="num">Scheduled</th>
+        <th>Last successful run</th>
+        <th class="num">Last exit</th>
+        <th>Run now (copy)</th>
+      </tr></thead>
+      <tbody id="jobs-tbody"></tbody>
+    </table>
+  </div>
+
   <div class="tabs">
     <button class="tab" data-bucket="paper">
       Dhan Paper <span class="count" id="count-paper">0</span>
@@ -918,6 +998,24 @@ function init() {
   document.getElementById('generated-at').textContent = DATA.generated_at;
   document.getElementById('count-paper').textContent = (DATA.paper.dates || []).length;
   document.getElementById('count-real').textContent = (DATA.real.dates || []).length;
+
+  // Scheduled-jobs panel — read-only snapshot of cron status. Exit code 0 = ok;
+  // 78 = the TCC-stale-log-file blockade we hit on 2026-05-26; anything else = real
+  // failure (check the err.log).
+  const jobsBody = document.getElementById('jobs-tbody');
+  if (jobsBody && DATA.scheduled_jobs) {
+    jobsBody.innerHTML = DATA.scheduled_jobs.map(j => {
+      const exitCls = j.last_exit === '0' ? 'positive'
+        : (j.last_exit === '?' ? '' : 'negative');
+      return `<tr>
+        <td><code>${j.name}</code></td>
+        <td class="num">${j.scheduled}</td>
+        <td>${j.last_run}</td>
+        <td class="num ${exitCls}">${j.last_exit}</td>
+        <td><code style="font-size:11px">${j.manual_cmd}</code></td>
+      </tr>`;
+    }).join('');
+  }
 
   const tabs = document.querySelectorAll('.tab');
   const switchTo = (key) => {
