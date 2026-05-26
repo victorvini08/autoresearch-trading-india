@@ -95,6 +95,7 @@ class Fill:
     price: float
     fill_time: datetime
     commission: float          # ₹ (sum of broker fees only; STT/DP captured separately)
+    trade_id: str = ""         # Dhan trade leg ID; unique even when one order produces N fills
     raw: dict = field(default_factory=dict)
 
 
@@ -211,6 +212,17 @@ class DhanBroker:
                 "(set in env or pass to constructor). For paper testing, use "
                 "DhanMock instead."
             )
+        if not self.algo_id:
+            # SEBI retail-algo framework (effective 2026-04-01) mandates every
+            # order carries our registered algo ID via `correlationId`. Fail
+            # fast at broker construction — unstamped orders are non-compliant
+            # and Dhan will reject them anyway. Paper testing uses DhanMock,
+            # which doesn't need this stamp.
+            raise RuntimeError(
+                "DhanBroker requires SEBI_ALGO_ID (env var) — mandatory under "
+                "the 2026-04-01 retail-algo framework. Register a Personal "
+                "Algo at the Dhan portal, then set SEBI_ALGO_ID in .env."
+            )
         self._base = base_url.rstrip("/")
         self._timeout = timeout_sec
         self._sess = requests.Session()
@@ -279,24 +291,80 @@ class DhanBroker:
         return self._request("GET", "/v2/fundlimit") or {}
 
     def get_positions(self) -> list[Position]:
-        raw = self._request("GET", "/v2/positions") or []
-        out: list[Position] = []
-        for r in raw if isinstance(raw, list) else []:
-            out.append(
-                Position(
-                    ticker=(r.get("tradingSymbol") or "").upper(),
-                    quantity=int(r.get("netQty") or 0),
-                    average_price=float(r.get("buyAvg") or 0.0),
-                    realized_pnl=float(r.get("realizedProfit") or 0.0),
-                    unrealized_pnl=float(r.get("unrealizedProfit") or 0.0),
-                )
+        """Return everything we own — intraday positions UNION settled holdings.
+
+        Dhan splits the account view across two endpoints:
+          - `/v2/positions` — today's intraday + unsettled CNC.
+          - `/v2/holdings`  — long-term (T+1 settled) demat holdings.
+
+        Biweekly CNC names settle within T+1 and migrate from /v2/positions
+        into /v2/holdings. Querying only the former misses every name held
+        more than ~1 trading day and would make the executor think the
+        account is flat — sizing buys against cash-only and never selling
+        existing holdings. Merge both, dedup by ticker, sum the quantities
+        (Dhan can in principle surface the same ticker on both sides
+        mid-settlement; treat that as one logical position).
+        """
+        merged: dict[str, Position] = {}
+        for r in self._request("GET", "/v2/positions") or []:
+            if not isinstance(r, dict):
+                continue
+            t = (r.get("tradingSymbol") or "").upper()
+            qty = int(r.get("netQty") or 0)
+            if not t or qty == 0:
+                continue
+            merged[t] = Position(
+                ticker=t,
+                quantity=qty,
+                average_price=float(r.get("buyAvg") or 0.0),
+                realized_pnl=float(r.get("realizedProfit") or 0.0),
+                unrealized_pnl=float(r.get("unrealizedProfit") or 0.0),
             )
-        return out
+        for r in self._request("GET", "/v2/holdings") or []:
+            if not isinstance(r, dict):
+                continue
+            t = (r.get("tradingSymbol") or "").upper()
+            qty = int(r.get("totalQty") or 0)
+            if not t or qty == 0:
+                continue
+            existing = merged.get(t)
+            if existing is None:
+                merged[t] = Position(
+                    ticker=t,
+                    quantity=qty,
+                    average_price=float(r.get("avgCostPrice") or 0.0),
+                    realized_pnl=0.0,
+                    unrealized_pnl=0.0,
+                )
+            else:
+                # Mid-settlement: same ticker on both endpoints. Sum the
+                # quantities; keep the weighted-avg cost. Realised/unrealised
+                # P&L comes from the positions side only (holdings doesn't
+                # expose either).
+                new_qty = existing.quantity + qty
+                if new_qty == 0:
+                    merged.pop(t, None)
+                    continue
+                avg_h = float(r.get("avgCostPrice") or 0.0)
+                blended_avg = (
+                    (existing.average_price * existing.quantity + avg_h * qty)
+                    / new_qty
+                ) if new_qty else 0.0
+                merged[t] = Position(
+                    ticker=t,
+                    quantity=new_qty,
+                    average_price=blended_avg,
+                    realized_pnl=existing.realized_pnl,
+                    unrealized_pnl=existing.unrealized_pnl,
+                )
+        return list(merged.values())
 
     def get_holdings(self) -> list[Position]:
-        """Long-term (T+1 settled) holdings. Different from positions for CNC
-        intraday-bought-not-yet-settled stock; for our biweekly cadence positions
-        are typically already settled.
+        """Raw /v2/holdings view — long-term (T+1 settled) demat holdings only.
+
+        Prefer `get_positions()` for executor logic (it merges this with
+        /v2/positions); this remains exposed for diagnostics and the
+        smoke-test path.
         """
         raw = self._request("GET", "/v2/holdings") or []
         out: list[Position] = []
@@ -391,15 +459,26 @@ class DhanBroker:
                 )
             except ValueError:
                 fill_time = datetime.utcnow()
+            order_id = str(r.get("orderId") or "")
+            # Dhan's /v2/trades may split one order into multiple legs.
+            # The leg's unique ID lives in `exchangeTradeId` (or `tradeId` in
+            # some envelopes); fall back to a (orderId,tradeTime,qty) synthetic
+            # so the ledger PK never collides on partial fills.
+            trade_id = (
+                str(r.get("exchangeTradeId") or "")
+                or str(r.get("tradeId") or "")
+                or f"{order_id}:{r.get('tradeTime') or ''}:{r.get('tradedQuantity') or 0}"
+            )
             out.append(
                 Fill(
-                    order_id=str(r.get("orderId") or ""),
+                    order_id=order_id,
                     ticker=(r.get("tradingSymbol") or "").upper(),
                     side=str(r.get("transactionType") or "").upper(),
                     quantity=int(r.get("tradedQuantity") or 0),
                     price=float(r.get("tradedPrice") or 0.0),
                     fill_time=fill_time,
                     commission=float(r.get("brokerage") or 0.0),
+                    trade_id=trade_id,
                     raw=r,
                 )
             )

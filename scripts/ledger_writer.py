@@ -134,11 +134,18 @@ def write_execution_result(
                 mode=mode,
             )
             portfolio_db.update_order_status(conn, f.order_id, "filled")
+            # CLAUDE.md hard constraint #5: cash-ledger entries are anchored
+            # to the FILL date, not the signal date. For signal-on-T fills-on-T
+            # (our Indian intraday flow) they coincide. They diverge whenever
+            # a fill arrives outside the signal-day boundary (delayed Dhan
+            # acknowledgement near the 15:30 close, GTT, etc.); pinning to
+            # the signal date in that case would mis-date cash and tax lots.
+            fill_date = f.filled_at.date()
             portfolio_db.insert_cash_entry(
                 conn,
                 entry_id=uuid.uuid4().hex,
                 entry_at=_to_naive_utc(f.filled_at),
-                as_of_date=as_of_date,
+                as_of_date=fill_date,
                 kind=f.side,
                 amount_usd=(-f.fill_price * f.quantity) if f.side == "buy" else (f.fill_price * f.quantity),
                 notes=f"{f.ticker} {f.side} {f.quantity} @ {f.fill_price:.4f}",
@@ -148,7 +155,7 @@ def write_execution_result(
                 conn,
                 entry_id=uuid.uuid4().hex,
                 entry_at=_to_naive_utc(f.filled_at),
-                as_of_date=as_of_date,
+                as_of_date=fill_date,
                 kind="commission",
                 amount_usd=-commission,
                 notes=f"{f.ticker} {f.side} {f.quantity} commission",
