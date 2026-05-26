@@ -346,6 +346,7 @@ class DhanMock:
                 price=fill_price,
                 fill_time=fill_time,
                 commission=0.0,  # Dhan brokerage = 0 on delivery; STT/DP applied in ledger writer
+                trade_id=order_id,  # mock: 1 order = 1 fill, so trade_id == order_id is unique
                 raw={"mock": True},
             )
         )

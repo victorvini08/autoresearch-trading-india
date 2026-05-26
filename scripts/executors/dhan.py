@@ -87,6 +87,18 @@ class DhanExecutor:
             self.mode == "dhan-paper"
             or os.environ.get("DHAN_MOCK", "0") in ("1", "true", "True")
         )
+        if not use_mock and not os.environ.get("SEBI_ALGO_ID", ""):
+            # Live mode requires the registered algo ID on every order;
+            # `correlationId=""` would either be rejected by Dhan or pass
+            # silently as a non-compliant order under the 2026-04-01 framework.
+            # Fail at construction so this is caught by run_live's preflight,
+            # not deep inside the order loop.
+            raise RuntimeError(
+                f"EXECUTION_MODE={self.mode!r} but SEBI_ALGO_ID is empty. "
+                "Set SEBI_ALGO_ID in .env (register a Personal Algo at the "
+                "Dhan portal) before going live. For paper testing, set "
+                "DHAN_MOCK=1 or use mode='dhan-paper'."
+            )
         if use_mock:
             from brokers.dhan_mock import DhanMock
             from scripts.premarket_scan import _default_quote_fetch
@@ -174,6 +186,17 @@ class DhanExecutor:
                 if isinstance(signals_result, dict)
                 else getattr(signals_result, "targets", []) or []
             )
+            # Exits are surfaced separately by signal_today (target_fraction=0
+            # rows split off the positives). They MUST flow into _build_orders
+            # so liquidations actually fire — without this merge, an
+            # all-to-cash signal returned `targets=[]` and the executor
+            # short-circuited as "non-rebalance day", leaving real money
+            # invested when the strategy wanted zero exposure.
+            raw_exits = (
+                signals_result.get("exits", [])
+                if isinstance(signals_result, dict)
+                else getattr(signals_result, "exits", []) or []
+            )
             if isinstance(raw_targets, dict):
                 targets = {k: float(v) for k, v in raw_targets.items()}
             elif isinstance(raw_targets, list):
@@ -185,6 +208,16 @@ class DhanExecutor:
                 }
             else:
                 targets = {}
+            if isinstance(raw_exits, list):
+                for r in raw_exits:
+                    if (
+                        isinstance(r, dict)
+                        and "ticker" in r
+                        and "target_fraction" in r
+                    ):
+                        # Exits always carry target_fraction=0; preserve that
+                        # explicitly so _build_orders sizes to zero (= sell all).
+                        targets.setdefault(r["ticker"], float(r["target_fraction"]))
         except PreflightSkipped as e:
             if e.set_halt:
                 set_halt(e.reason, set_by="DhanExecutor")
@@ -203,7 +236,43 @@ class DhanExecutor:
                 as_of_date=as_of_date,
                 fill_date=None,
                 skipped=True,
-                skipped_reason="strategy produced empty target_fractions (non-rebalance day)",
+                skipped_reason="strategy produced no targets or exits (non-rebalance day)",
+            )
+
+        # 2b. Operational risk gates (scripts.risk_check) — daily loss,
+        #     max-DD halt, per-position cap, gross exposure. Runs against
+        #     the most-recent snapshot's mark equity. Bypassing these would
+        #     let a loop-mutated strategy push a 50%-single-name target
+        #     straight through; the halt-only check above does NOT catch that.
+        try:
+            from scripts import risk_check as _risk_check
+            from storage import portfolio_db as _pdb
+
+            with _pdb.connect(self.portfolio_db) as _conn:
+                state = _pdb.load_state(_conn, self.mode, as_of_date)
+            rc_targets = {
+                "targets": [
+                    {"ticker": t, "target_fraction": float(v)}
+                    for t, v in targets.items()
+                    if v > 0
+                ],
+            }
+            risk_passed, risk_reasons = _risk_check.check(rc_targets, state)
+        except Exception as e:  # noqa: BLE001 — risk check must never raise into the loop
+            logger.error("risk_check raised %s: %s", type(e).__name__, e)
+            risk_passed, risk_reasons = False, [f"risk_check raised {type(e).__name__}: {e}"]
+        if not risk_passed:
+            return ExecutionSummary(
+                mode=self.mode,
+                as_of_date=as_of_date,
+                fill_date=None,
+                skipped=True,
+                skipped_reason="risk_check rejected: " + "; ".join(risk_reasons),
+                halt_set=any("halt" in r.lower() for r in risk_reasons),
+                halt_reason=next(
+                    (r for r in risk_reasons if "halt" in r.lower()),
+                    None,
+                ),
             )
 
         # 3. Convert target_fractions → integer share orders
@@ -331,9 +400,16 @@ class DhanExecutor:
                 )
                 for req, resp in placed
             ]
+            # Use the Dhan trade-leg ID for fill_id, not the order_id —
+            # /v2/trades may return N fills for one order (partial fills,
+            # iceberg legs); the order_id repeats across them and collided
+            # on `actual_fills.fill_id` PK, rolling back the ledger
+            # transaction (live data changed, local state unwritten).
+            # DhanMock sets trade_id == order_id (1-to-1), so the mock path
+            # is unchanged; live path now uses Dhan's leg-unique ID.
             ledger_fills = [
                 SimpleNamespace(
-                    fill_id=f.order_id,          # 1 fill/order (mock) → unique
+                    fill_id=(getattr(f, "trade_id", "") or f.order_id),
                     order_id=f.order_id,
                     filled_at=f.fill_time,
                     ticker=f.ticker,
@@ -516,10 +592,25 @@ class DhanExecutor:
                     ticker, delta, trade_notional, MIN_ORDER_INR,
                 )
                 continue
-            # Fraction-change suppression on fraction not qty
-            prev = prev_targets.get(ticker, 0.0)
-            if abs(target_fraction - prev) < self.fraction_change_threshold and target_qty == current_qty:
-                continue
+            # Fraction-change suppression on fraction not qty (US repo
+            # learnings §4.5). The old form gated this on
+            # `target_qty == current_qty`, but that branch is unreachable —
+            # `delta == 0` was already filtered above, so the qty equality
+            # could never be true here, making the entire suppressor dead
+            # code (Codex finding B5). Drop the qty clause so the
+            # fraction-change guard actually fires on small fraction deltas
+            # that round to a 1-share change from mark drift.
+            #
+            # Liquidations (target_fraction == 0 with a held position) MUST
+            # bypass this guard — exits always fire. Without the bypass, an
+            # exit with no prior captured target_fraction (e.g., a name we
+            # hold from a stale rebalance whose row was pruned, or a manually
+            # seeded position) would be suppressed by the no-change math
+            # (prev=0, target=0).
+            if target_fraction > 0:
+                prev = prev_targets.get(ticker, 0.0)
+                if abs(target_fraction - prev) < self.fraction_change_threshold:
+                    continue
             if delta > 0:
                 gross_buy += delta * px
                 order_reqs.append(
