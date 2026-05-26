@@ -9,11 +9,18 @@
   Extends prices/macro, pulls 24h news, refreshes the earnings calendar.
   Idempotent (upsert / LLM-cache short-circuit) — safe to re-run.
 
-  LLM classification is SKIPPED here (--skip-classify; also the code
-  default as of 2026-05-18): the committed momentum-quality strategy
-  consumes only prices/universe/sectors, so daily classify is wasted
-  cost and would add noise to the 4-week paper-validation logs. To
-  re-enable, drop the flag / pass --no-skip-classify.
+  LLM classification is SKIPPED here (the skip-classify flag is passed;
+  it is also the code default as of 2026-05-18): the committed
+  momentum-quality strategy consumes only prices/universe/sectors, so
+  daily classify is wasted cost and would add noise to the 4-week
+  paper-validation logs. To re-enable, drop the flag from the command
+  below, or pass the no-skip-classify flag.
+
+  NOTE: XML comments cannot contain a double-hyphen literal ("- -" with
+  no space); strict plist parsers (Python plistlib, the dashboard's
+  jobs panel) reject the whole file when they see one. macOS launchctl
+  is lenient but the dashboard isn't — that's why this paragraph
+  paraphrases instead of pasting the actual flag names.
 
   Install:
     1. Confirm WorkingDirectory + the uv path below match this machine.
