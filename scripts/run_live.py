@@ -121,6 +121,27 @@ def run(
     mode = mode or os.environ.get("EXECUTION_MODE", "dhan-paper")
     today_ist = today_ist or datetime.now(IST).date()
 
+    # Pre-flight: live-mode promotion consent. CLAUDE.md hard constraint #1
+    # ("Never enable dhan-live without 4 weeks of clean paper") was
+    # previously documentation-only; promote_live.check_consent_for_live
+    # turns it into a real gate. Refuses live execution if no consent file,
+    # consent expired, or strategy.py drifted since consent was granted.
+    if mode == "dhan-live":
+        from scripts.promote_live import check_consent_for_live
+
+        allowed, consent_reason = check_consent_for_live()
+        if not allowed:
+            skip_summary = ExecutionSummary(
+                mode=mode,
+                as_of_date=today_ist,
+                fill_date=None,
+                skipped=True,
+                skipped_reason=f"dhan-live consent gate: {consent_reason}",
+            )
+            _log_skip_summary(skip_summary)
+            _safe_report(skip_summary, premarket_payload=None)
+            return 1, skip_summary
+
     # Pre-flight: halt.json
     halt = _halt_payload()
     if halt is not None:
