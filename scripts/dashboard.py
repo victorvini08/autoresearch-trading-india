@@ -403,7 +403,57 @@ def _query_one_day(conn, *, modes: tuple[str, ...], d: date) -> dict:
         "realized_pnl_today_usd": float(realized_pnl_today),
         "realized_tax_today_usd": float(realized_tax_today),
         "reconciliation": _reconciliation_for_day(modes, d),
+        "safety_state": _safety_state_for_day(modes, d, conn),
     }
+
+
+def _safety_state_for_day(
+    modes: tuple[str, ...], d: date, conn,
+) -> dict | None:
+    """Step 2.d — re-run the pure state machine on equity history up to `d`
+    so the dashboard shows the state THAT day, not today's persisted state.
+    This makes the per-date slider meaningful for the safety state too.
+
+    The persisted state/safety_state.json is what the executor actually
+    consumed; this is a retrospective view for the user.
+    """
+    if not modes:
+        return None
+    try:
+        from data.safety_state import evaluate_state
+        from storage import portfolio_db as _pdb
+
+        mode = modes[0]
+        df = _pdb.get_equity_curve(conn, mode=mode)
+        if df.empty:
+            return None
+        # Filter to dates ≤ d, walk the state machine day-by-day so the
+        # transitioned_today / days_in_state / recovery accounting reflect
+        # what the controller actually saw at this date.
+        history: list = []
+        prior = None
+        for row in df.itertuples(index=False):
+            if row.snapshot_date > d:
+                break
+            history.append((row.snapshot_date, float(row.mark_equity)))
+            prior = evaluate_state(history, prior_state=prior)
+        if prior is None:
+            return None
+        return {
+            "state": prior.state,
+            "as_of": prior.as_of.isoformat(),
+            "today_equity": float(prior.today_equity),
+            "peak_equity": float(prior.peak_equity),
+            "dd_pct": float(prior.dd_pct),
+            "risk_multiplier": float(prior.risk_multiplier),
+            "halted": bool(prior.halted),
+            "transitioned_today": bool(prior.transitioned_today),
+            "entered_state_at": prior.entered_state_at.isoformat(),
+            "days_in_state": int(prior.days_in_state),
+            "reason": prior.reason,
+        }
+    except Exception as e:  # noqa: BLE001 — never crash the dashboard
+        return {"error": f"{type(e).__name__}: {e}"}
 
 
 def _reconciliation_for_day(modes: tuple[str, ...], d: date) -> dict | None:
@@ -565,6 +615,25 @@ _HTML_TEMPLATE = r"""<!doctype html>
     .recon-row .recon-detail { grid-column: 2; }
   }
 
+  /* Safety state card (Step 2.d) */
+  .safety-section { display: flex; flex-direction: column; gap: 10px; }
+  .safety-summary {
+    display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+  }
+  .safety-badge {
+    display: inline-block; padding: 4px 12px; border-radius: 6px;
+    font-weight: 700; font-size: 13px; letter-spacing: 0.04em;
+  }
+  .safety-badge.NORMAL { background: #14532d; color: #4ade80; }
+  .safety-badge.WATCH { background: #422006; color: #fbbf24; }
+  .safety-badge.RISK_REDUCED { background: #4c1d05; color: #fb923c; }
+  .safety-badge.HALTED_REVIEW { background: #4c0519; color: #f87171; }
+  .safety-stat { color: var(--muted); font-size: 13px; }
+  .safety-stat strong { color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; }
+  .safety-reason { color: var(--muted); font-size: 13px; line-height: 1.4; }
+  .safety-card.transitioned { border-color: #fbbf24; }
+  .safety-empty { color: var(--muted); font-size: 13px; }
+
   table { width: 100%; border-collapse: collapse; font-size: 13px; }
   thead th {
     text-align: left; font-weight: 500; color: var(--muted);
@@ -696,8 +765,12 @@ _HTML_TEMPLATE = r"""<!doctype html>
     <div class="card"><h2>Targets</h2>
       <div class="targets-section"></div></div>
   </div>
+  <div class="card safety-card" style="margin-top:20px">
+    <h2>Safety State <span class="recon-subtitle">— deterministic risk controller</span></h2>
+    <div class="safety-section"></div>
+  </div>
   <div class="card" style="margin-top:20px">
-    <h2>Reconciliation <span class="recon-subtitle">— five mechanical checks for this date</span></h2>
+    <h2>Reconciliation <span class="recon-subtitle">— mechanical checks for this date</span></h2>
     <div class="reconciliation-section"></div>
   </div>
 </template>
@@ -892,7 +965,41 @@ function renderDay(bucketEl, bucket, iso) {
       <tbody>${rows}</tbody></table>`;
   }
 
-  // Reconciliation — five mechanical checks for this date
+  // Safety State (Step 2.d) — the deterministic controller. Shown above
+  // reconciliation so the user sees the action signal first.
+  const safetyDiv = bucketEl.querySelector('.safety-section');
+  const safetyCard = bucketEl.querySelector('.safety-card');
+  const safety = day.safety_state;
+  if (!safety) {
+    safetyDiv.innerHTML = '<div class="safety-empty">No equity history yet — state machine has not run.</div>';
+  } else if (safety.error) {
+    safetyDiv.innerHTML = '<div class="safety-empty">Safety state error: ' + escapeHtml(safety.error) + '</div>';
+  } else {
+    const dd = (safety.dd_pct * 100).toFixed(2);
+    const mult = safety.risk_multiplier;
+    const days = safety.days_in_state;
+    const stateClass = safety.state;
+    // Decorate the parent card border on day-of-transition (yellow band)
+    if (safety.transitioned_today) {
+      safetyCard.classList.add('transitioned');
+    } else {
+      safetyCard.classList.remove('transitioned');
+    }
+    const transitionTag = safety.transitioned_today
+      ? ' <span class="safety-stat" style="color:#fbbf24">· transitioned today</span>'
+      : '';
+    safetyDiv.innerHTML =
+      '<div class="safety-summary">'
+        + '<span class="safety-badge ' + stateClass + '">' + escapeHtml(safety.state) + '</span>'
+        + '<span class="safety-stat">multiplier <strong>' + mult.toFixed(2) + '×</strong></span>'
+        + '<span class="safety-stat">DD <strong>' + dd + '%</strong> from peak ' + fmtINR(safety.peak_equity) + '</span>'
+        + '<span class="safety-stat">day <strong>' + days + '</strong> in state</span>'
+        + transitionTag
+      + '</div>'
+      + '<div class="safety-reason">' + escapeHtml(safety.reason) + '</div>';
+  }
+
+  // Reconciliation — mechanical checks for this date
   const reconDiv = bucketEl.querySelector('.reconciliation-section');
   const recon = day.reconciliation;
   if (!recon) {

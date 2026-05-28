@@ -306,6 +306,10 @@ def test_renders_tab_strip_and_critical_elements(seeded_both_buckets, tmp_path):
     # Discrepancies card removed in Step 1.b — superseded by Reconciliation.
     assert "reconciliation-section" in body
     assert "chart.umd.min.js" in body
+    # Step 2.d: safety state card.
+    assert "safety-card" in body
+    assert "safety-section" in body
+    assert "safety-badge" in body
 
 
 def test_cli_main_runs(seeded_both_buckets, tmp_path, monkeypatch, capsys):
