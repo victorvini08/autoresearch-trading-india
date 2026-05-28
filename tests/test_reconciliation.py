@@ -289,6 +289,116 @@ def test_q1_all_traded_clean(db):
     assert "all filled as intended" in q1["detail"]
 
 
+# === Q7: FY tax reserve (Step 1.e) ========================================
+
+def _insert_realized_trade(
+    conn, *, sell_date, ticker, pnl, holding_days, buy_date=None, mode=MODE,
+):
+    """Insert a synthetic realized_trade row. buy_date defaults to
+    sell_date - holding_days."""
+    if buy_date is None:
+        buy_date = sell_date - timedelta(days=holding_days)
+    from storage.portfolio_db import compute_tax
+    tax_paid = compute_tax(pnl, holding_days)
+    conn.execute(
+        "INSERT INTO realized_trades (trade_id, sell_fill_id, buy_lot_id, "
+        "ticker, buy_date, sell_date, qty, buy_price, sell_price, "
+        "realized_pnl_usd, holding_days, tax_paid_usd, mode) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        [uuid.uuid4().hex, uuid.uuid4().hex, uuid.uuid4().hex, ticker,
+         buy_date, sell_date, 1.0, 0.0, 0.0, pnl, holding_days,
+         tax_paid, mode],
+    )
+
+
+def test_q7_no_trades_returns_ok_zero(db):
+    d = date(2026, 5, 28)
+    out = compute_reconciliation_for_date(d, MODE, db)
+    q7 = out["tax_reserve"]
+    assert q7["status"] == "ok"
+    assert q7["total_reserve_inr"] == 0.0
+    assert q7["n_trades"] == 0
+    assert q7["fy_label"] == "FY27"  # 2026-05-28 → FY ends 2027-03-31
+
+
+def test_q7_stcg_only_under_threshold(db):
+    """Two STCG winners total ₹20k gain → reserve ₹3k = 15% × ₹20k."""
+    d = date(2026, 5, 28)
+    with portfolio_db.connect(db) as c:
+        _insert_realized_trade(c, sell_date=d - timedelta(days=10),
+                               ticker="A", pnl=12_000.0, holding_days=20)
+        _insert_realized_trade(c, sell_date=d - timedelta(days=5),
+                               ticker="B", pnl=8_000.0, holding_days=15)
+    out = compute_reconciliation_for_date(d, MODE, db)
+    q7 = out["tax_reserve"]
+    assert abs(q7["stcg_reserve_inr"] - 3_000.0) < 1.0
+    assert q7["ltcg_reserve_inr"] == 0.0
+    assert q7["n_trades"] == 2
+
+
+def test_q7_stcg_losses_offset_gains_within_bucket(db):
+    """₹20k STCG gain − ₹5k STCG loss = ₹15k net → reserve ₹2,250."""
+    d = date(2026, 5, 28)
+    with portfolio_db.connect(db) as c:
+        _insert_realized_trade(c, sell_date=d - timedelta(days=10),
+                               ticker="A", pnl=20_000.0, holding_days=20)
+        _insert_realized_trade(c, sell_date=d - timedelta(days=5),
+                               ticker="B", pnl=-5_000.0, holding_days=15)
+    out = compute_reconciliation_for_date(d, MODE, db)
+    q7 = out["tax_reserve"]
+    assert abs(q7["stcg_reserve_inr"] - 2_250.0) < 1.0  # 0.15 × 15k
+
+
+def test_q7_ltcg_below_threshold_yields_zero_ltcg_reserve(db):
+    """LTCG gain ₹80k < ₹1L exemption → zero LTCG reserve."""
+    d = date(2026, 5, 28)
+    with portfolio_db.connect(db) as c:
+        _insert_realized_trade(c, sell_date=d - timedelta(days=10),
+                               ticker="A", pnl=80_000.0, holding_days=400)
+    out = compute_reconciliation_for_date(d, MODE, db)
+    q7 = out["tax_reserve"]
+    assert q7["ltcg_reserve_inr"] == 0.0
+    assert q7["stcg_reserve_inr"] == 0.0
+
+
+def test_q7_ltcg_above_threshold_taxes_excess_only(db):
+    """LTCG gain ₹2L → taxable excess ₹1L × 10% = ₹10k reserve."""
+    d = date(2026, 5, 28)
+    with portfolio_db.connect(db) as c:
+        _insert_realized_trade(c, sell_date=d - timedelta(days=10),
+                               ticker="A", pnl=200_000.0, holding_days=400)
+    out = compute_reconciliation_for_date(d, MODE, db)
+    q7 = out["tax_reserve"]
+    assert abs(q7["ltcg_reserve_inr"] - 10_000.0) < 1.0
+    assert q7["stcg_reserve_inr"] == 0.0
+
+
+def test_q7_prior_fy_trades_excluded(db):
+    """A trade sold on 2026-03-31 (FY26) does NOT count toward FY27."""
+    fy27_date = date(2026, 5, 28)
+    fy26_close = date(2026, 3, 31)
+    with portfolio_db.connect(db) as c:
+        _insert_realized_trade(c, sell_date=fy26_close, ticker="A",
+                               pnl=50_000.0, holding_days=20)
+    out = compute_reconciliation_for_date(fy27_date, MODE, db)
+    q7 = out["tax_reserve"]
+    assert q7["n_trades"] == 0
+    assert q7["total_reserve_inr"] == 0.0
+
+
+def test_q7_flag_when_reserve_above_15pct_of_equity(db):
+    """Build a high-tax-reserve scenario to verify the 15% flag fires.
+    Initial deposit ₹1L; ₹100k STCG win → ₹15k reserve = 15% of equity ₹100k."""
+    d = date(2026, 5, 28)
+    with portfolio_db.connect(db) as c:
+        _insert_realized_trade(c, sell_date=d - timedelta(days=10),
+                               ticker="A", pnl=100_000.0, holding_days=20)
+    out = compute_reconciliation_for_date(d, MODE, db)
+    q7 = out["tax_reserve"]
+    assert q7["status"] == "flag"
+    assert q7["reserve_pct"] >= 15.0
+
+
 # === Module-level constants exposed ========================================
 
 def test_thresholds_match_spec():

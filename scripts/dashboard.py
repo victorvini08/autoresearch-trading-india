@@ -908,6 +908,7 @@ function renderDay(bucketEl, bucket, iso) {
       ['Buys funded only by settled cash?', recon.t1_cash_math],
       ['Drawdown threshold?', recon.drawdown_threshold],
       ['Corporate actions today?', recon.corporate_actions],
+      ['FY tax reserve / deployable?', recon.tax_reserve],
     ];
     reconDiv.innerHTML = rowsToRender.map(([label, q]) => {
       if (!q) return '';

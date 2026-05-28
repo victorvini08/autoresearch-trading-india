@@ -638,6 +638,67 @@ def get_ytd_tax_estimate(
     }
 
 
+def compute_fy_tax_reserve(
+    conn: duckdb.DuckDBPyConnection,
+    mode: str,
+    as_of: date,
+) -> dict:
+    """Step 1.e — FY-to-date tax reserve, split correctly STCG vs LTCG.
+
+    Improves on get_ytd_tax_estimate by:
+      - splitting realized_trades by holding_days (< 365 → STCG, ≥ 365 → LTCG),
+      - netting losses within each bucket before applying the rate,
+      - applying the ₹1 lakh LTCG annual exemption per FY per SEBI rules.
+
+    Returns:
+        fy_start            — start of the current Indian FY (Apr 1)
+        fy_label            — e.g. "FY26" (year of the Mar 31 end)
+        as_of               — evaluation date
+        stcg_net_pnl        — net realised PnL on trades held < 12 months
+        ltcg_net_pnl        — net realised PnL on trades held ≥ 12 months
+        stcg_reserve_inr    — max(0, stcg_net_pnl) × 15%
+        ltcg_reserve_inr    — max(0, ltcg_net_pnl − ₹1L) × 10%
+        total_reserve_inr   — stcg_reserve_inr + ltcg_reserve_inr
+        n_trades            — total realised trades in the FY window
+    """
+    fy_start = _fy_start_for(as_of)
+    # FY ends Mar 31 of (fy_start.year + 1); "FY26" labels the year whose
+    # 31-Mar end-date is in 2026.
+    fy_label = f"FY{(fy_start.year + 1) % 100:02d}"
+
+    row = conn.execute(
+        """
+        SELECT
+          COALESCE(SUM(CASE WHEN holding_days < ? THEN realized_pnl_usd ELSE 0 END), 0) AS stcg_net,
+          COALESCE(SUM(CASE WHEN holding_days >= ? THEN realized_pnl_usd ELSE 0 END), 0) AS ltcg_net,
+          COUNT(*) AS n
+        FROM realized_trades
+        WHERE mode = ? AND sell_date >= ? AND sell_date <= ?
+        """,
+        [LTCG_HOLDING_DAYS, LTCG_HOLDING_DAYS, mode, fy_start, as_of],
+    ).fetchone()
+    stcg_net = float(row[0])
+    ltcg_net = float(row[1])
+    n_trades = int(row[2])
+
+    stcg_reserve = max(0.0, stcg_net) * STCG_RATE
+    ltcg_taxable = max(0.0, ltcg_net - LTCG_THRESHOLD_INR)
+    ltcg_reserve = ltcg_taxable * LTCG_RATE
+    total_reserve = stcg_reserve + ltcg_reserve
+
+    return {
+        "fy_start": fy_start,
+        "fy_label": fy_label,
+        "as_of": as_of,
+        "stcg_net_pnl": stcg_net,
+        "ltcg_net_pnl": ltcg_net,
+        "stcg_reserve_inr": stcg_reserve,
+        "ltcg_reserve_inr": ltcg_reserve,
+        "total_reserve_inr": total_reserve,
+        "n_trades": n_trades,
+    }
+
+
 def get_cumulative_tax_paid(
     conn: duckdb.DuckDBPyConnection, mode: str, as_of: date | None = None
 ) -> float:

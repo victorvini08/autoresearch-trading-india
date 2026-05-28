@@ -1,9 +1,9 @@
-"""Reconciliation: the five mechanical questions about live paper trading.
+"""Reconciliation: the seven mechanical questions about live paper trading.
 
 Pure read-only computation against portfolio.duckdb. Returns a structured
 dict ready for JSON or dashboard rendering. No LLM, no opinions, no writes.
 
-The five questions, per (date, mode):
+The questions, per (date, mode):
 
 1. Did we hold what we intended?
        Compare submitted_orders status counts + flag any order where filled
@@ -25,6 +25,15 @@ The five questions, per (date, mode):
        8% = WATCH, 12% = RISK_REDUCED, 16% = HALTED_REVIEW. Thresholds
        calibrated to our backtest (aggregate max DD 12.2%, worst-fold 7.2%).
 
+6. Corporate actions on held / recently-traded names today?
+       Reads storage/corporate_actions.json — warns when an ex-date hits
+       a name on the book so PnL/drift isn't misattributed.
+
+7. FY tax reserve and deployable equity.
+       Step 1.e: STCG (<12mo, 15%) + LTCG (≥12mo, 10% above ₹1L exemption),
+       FY-to-date. Surfaces "FY26 tax reserve: ₹X (Y% of equity); deployable
+       ₹Z" so paper-PnL isn't mistaken for compounding capital.
+
 Each answer is `{"status": "ok" | "warn" | "flag", "detail": <str>, ...}`.
 """
 from __future__ import annotations
@@ -37,6 +46,7 @@ import duckdb
 
 from storage.portfolio_db import (
     DEFAULT_DB_PATH,
+    compute_fy_tax_reserve,
     connect,
     get_cash_balance,
     load_state,
@@ -76,6 +86,7 @@ def compute_reconciliation_for_date(
             "t1_cash_math": _q4_t1_cash_math(conn, d, mode),
             "drawdown_threshold": _q5_drawdown(conn, d, mode),
             "corporate_actions": _q6_corporate_actions(conn, d, mode),
+            "tax_reserve": _q7_tax_reserve(conn, d, mode),
         }
     finally:
         conn.close()
@@ -412,6 +423,63 @@ def _q5_drawdown(
         "peak_equity": float(state.peak_equity),
         "today_equity": float(state.mark_equity),
         "threshold_crossed": crossed,
+    }
+
+
+# === Q7: FY-to-date tax reserve (deployable equity) =======================
+
+def _q7_tax_reserve(
+    conn: duckdb.DuckDBPyConnection, d: date, mode: str
+) -> dict[str, Any]:
+    """FY-to-date STCG+LTCG reserve. The reserve is the amount of equity
+    we should NOT count as deployable, since it's owed to the tax authority
+    at FY end. Surfaces a single line: deployable = equity − reserve.
+
+    Status semantics:
+      ok    — reserve <  5% of equity (small)
+      warn  — reserve in [5%, 15%) — material but not large
+      flag  — reserve ≥ 15% (large; deployable is meaningfully constrained)
+    """
+    reserve = compute_fy_tax_reserve(conn, mode=mode, as_of=d)
+
+    try:
+        state = load_state(conn, mode, d)
+        equity = float(state.mark_equity)
+    except Exception:
+        equity = 0.0
+
+    reserve_inr = float(reserve["total_reserve_inr"])
+    deployable = max(0.0, equity - reserve_inr)
+    reserve_pct = (reserve_inr / equity * 100) if equity > 0 else 0.0
+
+    if reserve_pct >= 15.0:
+        status = "flag"
+    elif reserve_pct >= 5.0:
+        status = "warn"
+    else:
+        status = "ok"
+
+    if reserve["n_trades"] == 0:
+        detail = (
+            f"{reserve['fy_label']}: no realised trades yet; tax reserve ₹0."
+        )
+    else:
+        detail = (
+            f"{reserve['fy_label']} tax reserve ₹{reserve_inr:,.0f} "
+            f"({reserve_pct:.1f}% of equity); deployable ₹{deployable:,.0f}."
+        )
+
+    return {
+        "status": status,
+        "detail": detail,
+        "fy_label": reserve["fy_label"],
+        "total_reserve_inr": reserve_inr,
+        "stcg_reserve_inr": float(reserve["stcg_reserve_inr"]),
+        "ltcg_reserve_inr": float(reserve["ltcg_reserve_inr"]),
+        "equity_inr": equity,
+        "deployable_inr": deployable,
+        "reserve_pct": reserve_pct,
+        "n_trades": int(reserve["n_trades"]),
     }
 
 
