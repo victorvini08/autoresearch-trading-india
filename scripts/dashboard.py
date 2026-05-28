@@ -402,7 +402,25 @@ def _query_one_day(conn, *, modes: tuple[str, ...], d: date) -> dict:
         "total_commission_usd": float(total_commission),
         "realized_pnl_today_usd": float(realized_pnl_today),
         "realized_tax_today_usd": float(realized_tax_today),
+        "reconciliation": _reconciliation_for_day(modes, d),
     }
+
+
+def _reconciliation_for_day(modes: tuple[str, ...], d: date) -> dict | None:
+    """Compute the 5 reconciliation answers for the first mode in the bucket.
+
+    Wrapped in try/except: if the reconciliation module raises, surface a
+    structured error so the bucket render still succeeds. For v1 each
+    bucket has exactly one mode so picking modes[0] is correct.
+    """
+    if not modes:
+        return None
+    try:
+        from scripts.reconciliation import compute_reconciliation_for_date
+
+        return compute_reconciliation_for_date(d, mode=modes[0])
+    except Exception as e:  # noqa: BLE001 — never crash the dashboard
+        return {"error": f"{type(e).__name__}: {e}"}
 
 
 # --------- rendering ---------
@@ -523,6 +541,29 @@ _HTML_TEMPLATE = r"""<!doctype html>
 
   .chart-card { padding: 16px 20px 20px; margin-bottom: 20px; }
   .chart-card canvas { width: 100% !important; height: 260px !important; }
+  /* Reconciliation card — 5 mechanical questions per date, status + detail */
+  .recon-subtitle { font-weight: 400; color: var(--muted); font-size: 13px; }
+  .recon-row {
+    display: grid;
+    grid-template-columns: 28px 250px 1fr;
+    gap: 12px;
+    padding: 8px 0;
+    border-bottom: 1px solid #1a2030;
+    align-items: baseline;
+  }
+  .recon-row:last-child { border-bottom: none; }
+  .recon-icon { font-size: 16px; font-weight: 700; text-align: center; }
+  .recon-icon.ok { color: #4ade80; }
+  .recon-icon.warn { color: #fbbf24; }
+  .recon-icon.flag { color: #f87171; }
+  .recon-label { font-weight: 600; color: var(--text); }
+  .recon-detail { color: var(--muted); font-size: 13px; }
+  .recon-row.flag .recon-detail { color: #fca5a5; }
+  .recon-row.warn .recon-detail { color: #fcd34d; }
+  @media (max-width: 700px) {
+    .recon-row { grid-template-columns: 28px 1fr; }
+    .recon-row .recon-detail { grid-column: 2; }
+  }
 
   table { width: 100%; border-collapse: collapse; font-size: 13px; }
   thead th {
@@ -655,8 +696,10 @@ _HTML_TEMPLATE = r"""<!doctype html>
     <div class="card"><h2>Targets</h2>
       <div class="targets-section"></div></div>
   </div>
-  <div class="card" style="margin-top:20px"><h2>Discrepancies</h2>
-    <div class="discrepancies-section"></div></div>
+  <div class="card" style="margin-top:20px">
+    <h2>Reconciliation <span class="recon-subtitle">— five mechanical checks for this date</span></h2>
+    <div class="reconciliation-section"></div>
+  </div>
 </template>
 
 <template id="empty-template">
@@ -695,6 +738,12 @@ const cls = (v) => v >= 0 ? 'positive' : 'negative';
 // names; defining them here lets the swap stay surgical.
 const fmtUSD = fmtINR;
 const fmtSignedUSD = fmtSignedINR;
+
+// HTML escaping for any string interpolated into innerHTML. Required for
+// reconciliation/audit text that comes from python-side detail strings.
+const escapeHtml = (s) => String(s == null ? '' : s)
+  .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+  .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 
 // One Chart.js instance per bucket, reused across slider moves.
 const _charts = {};
@@ -843,6 +892,34 @@ function renderDay(bucketEl, bucket, iso) {
       <tbody>${rows}</tbody></table>`;
   }
 
+  // Reconciliation — five mechanical checks for this date
+  const reconDiv = bucketEl.querySelector('.reconciliation-section');
+  const recon = day.reconciliation;
+  if (!recon) {
+    reconDiv.innerHTML = '<div class="empty-state">Reconciliation not available for this date.</div>';
+  } else if (recon.error) {
+    reconDiv.innerHTML = '<div class="empty-state">Reconciliation error: ' + escapeHtml(recon.error) + '</div>';
+  } else {
+    const iconFor = (s) => s === 'ok' ? '✓' : (s === 'warn' ? '⚠' : '✗');
+    const rowsToRender = [
+      ['Did orders fill as intended?', recon.held_what_intended],
+      ['Execution matched assumptions?', recon.execution_matched_assumptions],
+      ['Did the book match strategy intent?', recon.construction_drag],
+      ['Buys funded only by settled cash?', recon.t1_cash_math],
+      ['Drawdown threshold?', recon.drawdown_threshold],
+      ['Corporate actions today?', recon.corporate_actions],
+    ];
+    reconDiv.innerHTML = rowsToRender.map(([label, q]) => {
+      if (!q) return '';
+      const s = q.status || 'ok';
+      return '<div class="recon-row ' + s + '">'
+        + '<span class="recon-icon ' + s + '">' + iconFor(s) + '</span>'
+        + '<span class="recon-label">' + escapeHtml(label) + '</span>'
+        + '<span class="recon-detail">' + escapeHtml(q.detail || '') + '</span>'
+        + '</div>';
+    }).join('');
+  }
+
   // Positions
   const posDiv = bucketEl.querySelector('.positions-section');
   const snapDateEl = bucketEl.querySelector('.positions-snap-date');
@@ -898,21 +975,10 @@ function renderDay(bucketEl, bucket, iso) {
       <tbody>${rows}</tbody></table>`;
   }
 
-  // Discrepancies
-  const discDiv = bucketEl.querySelector('.discrepancies-section');
-  if (day.discrepancies.length === 0) {
-    discDiv.innerHTML = '<div class="empty-state">No discrepancies.</div>';
-  } else {
-    const rows = day.discrepancies.map(d => `<tr>
-      <td>${d.kind}</td>
-      <td class="ticker">${d.ticker || '—'}</td>
-      <td>${d.resolution || '—'}</td>
-      <td>${d.notes || ''}</td>
-    </tr>`).join('');
-    discDiv.innerHTML = `<table>
-      <thead><tr><th>Kind</th><th>Ticker</th><th>Resolution</th><th>Notes</th></tr></thead>
-      <tbody>${rows}</tbody></table>`;
-  }
+  // (Discrepancies card removed — superseded by Reconciliation card.
+  //  The discrepancies table is retained in portfolio.duckdb but no code
+  //  has ever written to it; reconciliation answers the same questions
+  //  systematically.)
 }
 
 function renderChart(bucketEl, bucket, highlightIso, bucketKey) {

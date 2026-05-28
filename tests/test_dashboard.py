@@ -303,7 +303,8 @@ def test_renders_tab_strip_and_critical_elements(seeded_both_buckets, tmp_path):
     assert "equity-chart" in body
     assert "orders-section" in body
     assert "positions-section" in body
-    assert "discrepancies-section" in body
+    # Discrepancies card removed in Step 1.b — superseded by Reconciliation.
+    assert "reconciliation-section" in body
     assert "chart.umd.min.js" in body
 
 
