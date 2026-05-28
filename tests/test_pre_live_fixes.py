@@ -4,7 +4,9 @@ Each block locks in one Codex/Claude finding from the pre-live review:
   - B2: exit-only signal days liquidate held positions (not skipped).
   - B5: FRACTION_CHANGE_THRESHOLD actually suppresses small-delta resizes.
   - B6: Fill.trade_id uniquely keys ledger rows when one order produces N fills.
-  - B7: DhanBroker refuses to construct when SEBI_ALGO_ID is empty.
+  - B7 (relaxed 2026-05-28): DhanBroker WARNS but does not refuse when
+    SEBI_ALGO_ID is empty. Dhan's API accepts correlationId="" and the
+    Personal-Algo registration form doesn't exist in the portal.
   - signal_today: look-ahead guard refuses today's bar at runtime.
 """
 
@@ -24,24 +26,34 @@ from scripts.executors.dhan import DhanExecutor
 
 
 # ──────────────────────────────────────────────────────────
-# B7: SEBI_ALGO_ID hard-fail at broker construction
+# B7 (relaxed 2026-05-28): DhanBroker warns, does not refuse, when
+# SEBI_ALGO_ID is empty. correlationId is OPTIONAL per Dhan's API
+# contract; the SEBI 2026-04-01 framework is enforced (if at all) at the
+# broker portal level, not in the order request body.
 # ──────────────────────────────────────────────────────────
 
 
-def test_dhan_broker_refuses_when_sebi_algo_id_empty(monkeypatch) -> None:
+def test_dhan_broker_warns_but_constructs_when_sebi_algo_id_empty(
+    monkeypatch, caplog,
+) -> None:
     monkeypatch.setenv("DHAN_ACCESS_TOKEN", "fake")
     monkeypatch.setenv("DHAN_CLIENT_ID", "1000001234")
     monkeypatch.delenv("SEBI_ALGO_ID", raising=False)
     from brokers.dhan import DhanBroker
-    with pytest.raises(RuntimeError, match="SEBI_ALGO_ID"):
-        DhanBroker()
+    import logging
+    with caplog.at_level(logging.WARNING, logger="brokers.dhan"):
+        broker = DhanBroker()
+    assert broker.algo_id == ""
+    assert any("SEBI_ALGO_ID is unset" in r.message for r in caplog.records)
 
 
-def test_dhan_executor_refuses_live_when_sebi_unset(monkeypatch) -> None:
-    monkeypatch.delenv("DHAN_MOCK", raising=False)
-    monkeypatch.delenv("SEBI_ALGO_ID", raising=False)
-    with pytest.raises(RuntimeError, match="SEBI_ALGO_ID is empty"):
-        DhanExecutor(mode="dhan-live")
+def test_dhan_broker_stamps_correlation_id_when_present(monkeypatch) -> None:
+    monkeypatch.setenv("DHAN_ACCESS_TOKEN", "fake")
+    monkeypatch.setenv("DHAN_CLIENT_ID", "1000001234")
+    monkeypatch.setenv("SEBI_ALGO_ID", "ALGO_VOLUNTARY")
+    from brokers.dhan import DhanBroker
+    broker = DhanBroker()
+    assert broker.algo_id == "ALGO_VOLUNTARY"
 
 
 # ──────────────────────────────────────────────────────────

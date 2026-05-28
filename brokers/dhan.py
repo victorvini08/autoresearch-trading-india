@@ -16,9 +16,12 @@ Endpoints used:
 
 Auth: `access-token: <DHAN_ACCESS_TOKEN>` header + `dhanClientId` in body.
 
-Order tag: every order carries `correlationId` populated with the SEBI algo
-identifier (`SEBI_ALGO_ID` env var). This is mandatory under the 2026-04-01
-retail algo framework.
+Order tag: every order carries `correlationId` populated with `SEBI_ALGO_ID`
+when set (used for traceability). `correlationId` is OPTIONAL per Dhan's API
+contract — orders are accepted without it. Earlier versions of this file
+asserted otherwise based on a stricter reading of the 2026-04-01 retail-algo
+framework; relaxed 2026-05-28 after the user found no Personal-Algo
+registration form in the Dhan portal.
 
 Rate-limit: Dhan publishes 20 req/sec; we cap at 10 to leave headroom. Calls
 are pipelined through a simple token-bucket guard.
@@ -213,15 +216,21 @@ class DhanBroker:
                 "DhanMock instead."
             )
         if not self.algo_id:
-            # SEBI retail-algo framework (effective 2026-04-01) mandates every
-            # order carries our registered algo ID via `correlationId`. Fail
-            # fast at broker construction — unstamped orders are non-compliant
-            # and Dhan will reject them anyway. Paper testing uses DhanMock,
-            # which doesn't need this stamp.
-            raise RuntimeError(
-                "DhanBroker requires SEBI_ALGO_ID (env var) — mandatory under "
-                "the 2026-04-01 retail-algo framework. Register a Personal "
-                "Algo at the Dhan portal, then set SEBI_ALGO_ID in .env."
+            # `correlationId` is OPTIONAL per Dhan's POST /v2/orders contract
+            # (see https://dhanhq.co/docs/v2/orders/). The SEBI 2026-04-01
+            # retail-algo framework asks for algo registration with the broker
+            # at the portal level, but Dhan's API does NOT enforce a per-order
+            # algo-id field — orders submitted with correlationId="" are
+            # accepted. Earlier versions of this code hard-failed here based
+            # on a stricter reading; relaxed 2026-05-28 after the user
+            # confirmed no Personal-Algo registration form exists in their
+            # Dhan portal. Warn so you know you're trading unstamped, but
+            # don't block construction.
+            logger.warning(
+                "SEBI_ALGO_ID is unset — orders will be sent with "
+                "correlationId='' (Dhan accepts this; algo registration at "
+                "the broker portal is currently a separate concern). To stamp "
+                "orders for traceability, set SEBI_ALGO_ID in .env."
             )
         self._base = base_url.rstrip("/")
         self._timeout = timeout_sec
