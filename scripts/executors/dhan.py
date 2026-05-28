@@ -87,18 +87,11 @@ class DhanExecutor:
             self.mode == "dhan-paper"
             or os.environ.get("DHAN_MOCK", "0") in ("1", "true", "True")
         )
-        if not use_mock and not os.environ.get("SEBI_ALGO_ID", ""):
-            # Live mode requires the registered algo ID on every order;
-            # `correlationId=""` would either be rejected by Dhan or pass
-            # silently as a non-compliant order under the 2026-04-01 framework.
-            # Fail at construction so this is caught by run_live's preflight,
-            # not deep inside the order loop.
-            raise RuntimeError(
-                f"EXECUTION_MODE={self.mode!r} but SEBI_ALGO_ID is empty. "
-                "Set SEBI_ALGO_ID in .env (register a Personal Algo at the "
-                "Dhan portal) before going live. For paper testing, set "
-                "DHAN_MOCK=1 or use mode='dhan-paper'."
-            )
+        # NOTE: earlier this method hard-failed on missing SEBI_ALGO_ID for
+        # live mode. Relaxed 2026-05-28 — Dhan's API treats `correlationId`
+        # as optional (per /docs/v2/orders), and the user confirmed no
+        # Personal-Algo registration form exists in the Dhan portal. The
+        # DhanBroker constructor logs a warning if SEBI_ALGO_ID is unset.
         if use_mock:
             from brokers.dhan_mock import DhanMock
             from scripts.premarket_scan import _default_quote_fetch
