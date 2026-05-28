@@ -322,6 +322,24 @@ def main(argv: list[str] | None = None) -> int:
     )
     path = generate(summary)
     print(f"[daily_report] wrote {path}")
+
+    # Step 2.b: deterministic safety-state evaluation. Non-fatal — a
+    # hiccup here must never block the daily report. Folded in here so
+    # we don't need a separate launchd job.
+    try:
+        from scripts.safety_evaluator import evaluate_and_persist
+        s = evaluate_and_persist(mode=args.mode)
+        if s is None:
+            print("[safety] no equity history yet; state not written.")
+        else:
+            tag = " [TRANSITION]" if s.transitioned_today else ""
+            print(
+                f"[safety]{tag} state={s.state} dd={s.dd_pct*100:.2f}% "
+                f"mult={s.risk_multiplier} (day {s.days_in_state} in state)"
+            )
+    except Exception as e:  # noqa: BLE001 — cron must not abort on safety eval
+        print(f"[safety] FAILED (non-fatal): {type(e).__name__}: {e}")
+
     return 0
 
 
