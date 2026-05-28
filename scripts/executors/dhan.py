@@ -232,6 +232,28 @@ class DhanExecutor:
                 skipped_reason="strategy produced no targets or exits (non-rebalance day)",
             )
 
+        # Step 2.c: apply the safety-state risk multiplier to every target
+        # fraction BEFORE we persist desired_targets or build orders. Without
+        # this read, the deterministic safety state machine (Step 2) would
+        # be decorative — the spec calls this out explicitly. Fail-open on
+        # a missing risk_multiplier.json (default=1.0) so a fresh
+        # installation behaves identically to NORMAL.
+        try:
+            from scripts.safety_evaluator import read_risk_multiplier
+            multiplier = read_risk_multiplier()
+        except Exception as e:  # noqa: BLE001 — read must never raise
+            logger.warning(
+                "risk_multiplier read failed: %s: %s; defaulting to 1.0",
+                type(e).__name__, e,
+            )
+            multiplier = 1.0
+        if multiplier != 1.0:
+            logger.info(
+                "applying safety risk_multiplier=%.2f to all %d targets",
+                multiplier, len(targets),
+            )
+            targets = {t: float(v) * multiplier for t, v in targets.items()}
+
         # Persist desired_targets — strategy's recorded intent for this date.
         # Without this, reconciliation/attribution can't compare "what we said"
         # vs "what we did". Full-replacement semantics: clear and re-upsert so

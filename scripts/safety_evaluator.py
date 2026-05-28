@@ -23,12 +23,15 @@ from pathlib import Path
 
 from data.safety_state import SafetyState, evaluate_state
 from storage import portfolio_db
+from storage.portfolio_db import HALT_FILE_PATH
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 STATE_DIR = REPO_ROOT / "state"
 SAFETY_STATE_PATH = STATE_DIR / "safety_state.json"
 RISK_MULTIPLIER_PATH = STATE_DIR / "risk_multiplier.json"
-HALT_PATH = REPO_ROOT / "halt.json"  # consistent with scripts/halt.py
+# Canonical halt path (state/halt.json) per storage.portfolio_db — same file
+# scripts/halt.py / risk_check / run_live read.
+HALT_PATH = HALT_FILE_PATH
 
 
 # === SafetyState ↔ JSON =====================================================
@@ -57,32 +60,64 @@ def _safety_state_from_json(raw: dict) -> SafetyState:
     )
 
 
-def load_prior_state(path: Path = SAFETY_STATE_PATH) -> SafetyState | None:
-    if not path.exists():
+def load_prior_state(path: Path | None = None) -> SafetyState | None:
+    # path=None resolves to SAFETY_STATE_PATH at call time so tests can
+    # monkeypatch the module attribute and have it take effect.
+    p = path if path is not None else SAFETY_STATE_PATH
+    if not p.exists():
         return None
     try:
-        return _safety_state_from_json(json.loads(path.read_text()))
+        return _safety_state_from_json(json.loads(p.read_text()))
     except (json.JSONDecodeError, KeyError, ValueError):
         # Corrupt file → treat as no prior state. The next evaluation
         # bootstraps from history. This avoids a stuck-bad-state on disk.
         return None
 
 
-def save_state(s: SafetyState, path: Path = SAFETY_STATE_PATH) -> None:
+def save_state(s: SafetyState, path: Path | None = None) -> None:
     """Atomic write: tmp file + rename, so a crash mid-write doesn't
     corrupt the on-disk state."""
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_suffix(path.suffix + ".tmp")
+    p = path if path is not None else SAFETY_STATE_PATH
+    p.parent.mkdir(parents=True, exist_ok=True)
+    tmp = p.with_suffix(p.suffix + ".tmp")
     tmp.write_text(json.dumps(_safety_state_to_json(s), indent=2) + "\n")
-    tmp.replace(path)
+    tmp.replace(p)
+
+
+def read_risk_multiplier(
+    path: Path | None = None,
+    default: float = 1.0,
+) -> float:
+    """Read the executor-side multiplier. Returns `default` (=1.0) when the
+    file doesn't exist or is unreadable — fail-open semantics for the read
+    side (a missing safety eval shouldn't accidentally halve gross). The
+    write side is fail-closed (HALTED_REVIEW writes halt.json which is the
+    actual stop, not this multiplier).
+
+    Used by scripts/executors/dhan.py (Step 2.c) right before order
+    construction. Without this read, the safety state machine is decorative.
+    """
+    p = path if path is not None else RISK_MULTIPLIER_PATH
+    if not p.exists():
+        return default
+    try:
+        payload = json.loads(p.read_text())
+        m = float(payload.get("multiplier", default))
+        # Clamp to [0.0, 1.0] — values outside this range would mean
+        # leverage (>1) or sign-flips (<0), neither is supported by the
+        # current strategy contract.
+        return max(0.0, min(1.0, m))
+    except (json.JSONDecodeError, ValueError, TypeError):
+        return default
 
 
 def write_risk_multiplier(
-    s: SafetyState, path: Path = RISK_MULTIPLIER_PATH
+    s: SafetyState, path: Path | None = None,
 ) -> None:
     """The executor reads this. Always write it (idempotent), so a manual
     delete or filesystem hiccup self-heals on the next safety eval."""
-    path.parent.mkdir(parents=True, exist_ok=True)
+    p = path if path is not None else RISK_MULTIPLIER_PATH
+    p.parent.mkdir(parents=True, exist_ok=True)
     payload = {
         "multiplier": s.risk_multiplier,
         "state": s.state,
@@ -90,22 +125,23 @@ def write_risk_multiplier(
         "reason": s.reason,
         "written_at": datetime.now().astimezone().isoformat(timespec="seconds"),
     }
-    path.write_text(json.dumps(payload, indent=2) + "\n")
+    p.write_text(json.dumps(payload, indent=2) + "\n")
 
 
-def write_halt(s: SafetyState, path: Path = HALT_PATH) -> None:
+def write_halt(s: SafetyState, path: Path | None = None) -> None:
     """Write halt.json with halted=true on HALTED_REVIEW. Does NOT auto-clear:
     once the safety machine halts, the user must explicitly resume (per the
     absorbing-state design)."""
     if not s.halted:
         return  # safety eval never clears halt — manual user action only
-    path.parent.mkdir(parents=True, exist_ok=True)
+    p = path if path is not None else HALT_PATH
+    p.parent.mkdir(parents=True, exist_ok=True)
     payload = {
         "halted": True,
         "reason": f"safety_state={s.state}: {s.reason}",
         "set_at": datetime.now().astimezone().isoformat(timespec="seconds"),
     }
-    path.write_text(json.dumps(payload, indent=2) + "\n")
+    p.write_text(json.dumps(payload, indent=2) + "\n")
 
 
 # === Equity history loader ==================================================

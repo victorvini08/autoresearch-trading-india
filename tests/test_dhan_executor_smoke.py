@@ -146,6 +146,118 @@ def test_dhan_executor_respects_halt(
         clear_halt(force=True)
 
 
+@pytest.fixture
+def risk_multiplier_file(tmp_path: Path, monkeypatch) -> Path:
+    """Reroute scripts.safety_evaluator.RISK_MULTIPLIER_PATH to a temp file so
+    Step 2.c tests don't touch the real state/ directory."""
+    import scripts.safety_evaluator as se
+    p = tmp_path / "risk_multiplier.json"
+    monkeypatch.setattr(se, "RISK_MULTIPLIER_PATH", p)
+    return p
+
+
+def test_executor_halves_orders_when_risk_multiplier_is_half(
+    prices_db: Path,
+    portfolio_db: Path,
+    halt_file: Path,
+    risk_multiplier_file: Path,
+    monkeypatch,
+) -> None:
+    """Step 2.c regression: writing risk_multiplier.json = {"multiplier": 0.5}
+    must produce orders at half the target weight. Without this wiring the
+    safety state machine is decorative."""
+    import json
+    monkeypatch.setenv("DHAN_MOCK", "1")
+    risk_multiplier_file.write_text(
+        json.dumps({"multiplier": 0.5, "state": "RISK_REDUCED", "as_of": "2026-05-13",
+                    "reason": "test"})
+    )
+    mock = DhanMock(prices_db=prices_db, initial_cash_inr=50_000.0, slippage_bps=0.0)
+    executor = DhanExecutor(
+        mode="dhan-paper",
+        prices_db=prices_db,
+        portfolio_db=portfolio_db,
+        broker=mock,
+        initial_cash_inr=50_000.0,
+    )
+    with patch("scripts.signal_today.generate_signals", side_effect=_stub_signals):
+        result = executor.execute_day(date(2026, 5, 13))
+
+    # Half-targets → roughly half the gross_buy of the baseline test.
+    # Baseline (mult=1.0) at ₹50k equity: ≈₹45-50k gross buy.
+    # With mult=0.5: ≈₹19-25k gross buy. Wide tolerance because per-name
+    # integer-share rounding eats a few percent at ₹4k/name targets.
+    # The key assertion: 0.5× is clearly < 0.7× baseline.
+    assert not result.skipped, f"unexpected skip: {result.skipped_reason}"
+    assert 15_000 <= result.gross_buy_usd <= 30_000, (
+        f"expected roughly-half gross_buy at 0.5×, got ₹{result.gross_buy_usd:,.0f}"
+    )
+
+
+def test_executor_skips_when_risk_multiplier_is_zero(
+    prices_db: Path,
+    portfolio_db: Path,
+    halt_file: Path,
+    risk_multiplier_file: Path,
+    monkeypatch,
+) -> None:
+    """multiplier=0 (HALTED_REVIEW path) → all targets become 0 → no buys.
+    Note: even at HALTED_REVIEW the safety machine ALSO writes halt.json
+    which would early-exit earlier; this test specifically covers the
+    multiplier-arithmetic safety net."""
+    import json
+    monkeypatch.setenv("DHAN_MOCK", "1")
+    risk_multiplier_file.write_text(
+        json.dumps({"multiplier": 0.0, "state": "HALTED_REVIEW",
+                    "as_of": "2026-05-13", "reason": "test"})
+    )
+    mock = DhanMock(prices_db=prices_db, initial_cash_inr=50_000.0)
+    executor = DhanExecutor(
+        mode="dhan-paper",
+        prices_db=prices_db,
+        portfolio_db=portfolio_db,
+        broker=mock,
+    )
+    with patch("scripts.signal_today.generate_signals", side_effect=_stub_signals):
+        result = executor.execute_day(date(2026, 5, 13))
+
+    # Either: every order is too small to clear MIN_ORDER_INR (suppressed),
+    # OR gross_buy is 0. Either way no real buys.
+    assert result.gross_buy_usd == 0.0
+
+
+def test_executor_missing_risk_multiplier_file_defaults_to_one(
+    prices_db: Path,
+    portfolio_db: Path,
+    halt_file: Path,
+    risk_multiplier_file: Path,
+    monkeypatch,
+) -> None:
+    """Fail-open: no risk_multiplier.json = treat as 1.0 (NORMAL).
+    Fresh installations and missing-file edge cases must NOT accidentally
+    halve gross."""
+    monkeypatch.setenv("DHAN_MOCK", "1")
+    # risk_multiplier_file fixture sets RISK_MULTIPLIER_PATH but does NOT
+    # create the file — perfect for this test.
+    assert not risk_multiplier_file.exists()
+    mock = DhanMock(prices_db=prices_db, initial_cash_inr=50_000.0, slippage_bps=0.0)
+    executor = DhanExecutor(
+        mode="dhan-paper",
+        prices_db=prices_db,
+        portfolio_db=portfolio_db,
+        broker=mock,
+        initial_cash_inr=50_000.0,
+    )
+    with patch("scripts.signal_today.generate_signals", side_effect=_stub_signals):
+        result = executor.execute_day(date(2026, 5, 13))
+
+    # Should match the baseline test's ≈₹50k gross_buy
+    assert not result.skipped
+    assert result.gross_buy_usd >= 40_000, (
+        f"expected ≈₹50k baseline, got ₹{result.gross_buy_usd:,.0f}"
+    )
+
+
 def test_dhan_executor_empty_targets_skips(
     prices_db: Path,
     portfolio_db: Path,
