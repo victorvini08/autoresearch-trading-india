@@ -165,6 +165,20 @@ def main(argv: list[str] | None = None) -> int:
                 flush=True,
             )
 
+    # Step 4c: corporate actions for held/traded tickers — yfinance, free.
+    # Non-fatal: a yfinance hiccup just means we don't have fresh CA data
+    # this morning; reconciliation will keep using whatever is on disk.
+    try:
+        from scripts.ingest_corporate_actions import update_corporate_actions
+
+        n_ca = update_corporate_actions(mode="dhan-paper", lookback_days=30)
+        print(f"[4c] corporate actions: {n_ca} new", flush=True)
+    except Exception as e:  # noqa: BLE001 — cron must not abort
+        print(
+            f"[4c] corporate actions FAILED (non-fatal): {e}",
+            flush=True,
+        )
+
     if args.skip_classify:
         print("\n[skip-classify] not running classifiers.")
         return 0

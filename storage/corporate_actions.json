@@ -1,0 +1,34 @@
+[
+  {
+    "ex_date": "2026-02-11",
+    "ticker": "CUMMINSIND",
+    "type": "dividend",
+    "value": 20.0,
+    "new_symbol": null,
+    "notes": "yfinance dividend \u20b920.00/share"
+  },
+  {
+    "ex_date": "2026-02-18",
+    "ticker": "BHARATFORG",
+    "type": "dividend",
+    "value": 2.0,
+    "new_symbol": null,
+    "notes": "yfinance dividend \u20b92.00/share"
+  },
+  {
+    "ex_date": "2026-02-18",
+    "ticker": "ONGC",
+    "type": "dividend",
+    "value": 6.25,
+    "new_symbol": null,
+    "notes": "yfinance dividend \u20b96.25/share"
+  },
+  {
+    "ex_date": "2026-05-08",
+    "ticker": "LAURUSLABS",
+    "type": "dividend",
+    "value": 1.2,
+    "new_symbol": null,
+    "notes": "yfinance dividend \u20b91.20/share"
+  }
+]
