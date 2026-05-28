@@ -52,11 +52,13 @@ from storage.portfolio_db import (
     load_state,
 )
 
-# Safety-state DD thresholds — must stay in sync with data/safety_state.py
-# (Step 2). Calibrated to our backtest: aggregate max DD 12.2%, worst-fold 7.2%.
-DD_WATCH = 0.08
-DD_RISK_REDUCED = 0.12
-DD_HALTED_REVIEW = 0.16
+# Safety-state DD thresholds — single source of truth is data/safety_state.py
+# (Step 2.a). Reconciliation Q5 reports the snapshot; the state machine acts.
+from data.safety_state import (  # noqa: E402 — module-level re-export
+    DD_HALTED_REVIEW,
+    DD_RISK_REDUCED,
+    DD_WATCH,
+)
 
 # Execution flagging thresholds — conservative defaults; tune later
 SLIPPAGE_AVG_FLAG_BPS = 50.0
