@@ -232,6 +232,32 @@ class DhanExecutor:
                 skipped_reason="strategy produced no targets or exits (non-rebalance day)",
             )
 
+        # Persist desired_targets — strategy's recorded intent for this date.
+        # Without this, reconciliation/attribution can't compare "what we said"
+        # vs "what we did". Full-replacement semantics: clear and re-upsert so
+        # a rerun with a shrunk signal set doesn't leave orphan rows behind.
+        try:
+            from storage import portfolio_db as _pdb_t
+
+            with _pdb_t.connect(self.portfolio_db) as _t_conn:
+                _pdb_t.delete_targets_for_day(
+                    _t_conn, as_of_date=as_of_date, mode=self.mode,
+                )
+                for _t_ticker, _t_frac in targets.items():
+                    _pdb_t.upsert_target(
+                        _t_conn,
+                        as_of_date=as_of_date,
+                        ticker=_t_ticker,
+                        target_fraction=float(_t_frac),
+                        source="strategy",
+                        mode=self.mode,
+                    )
+        except Exception as e:  # noqa: BLE001 — never block trading on a target-log failure
+            logger.warning(
+                "desired_targets persistence failed: %s: %s",
+                type(e).__name__, e,
+            )
+
         # 2b. Operational risk gates (scripts.risk_check) — daily loss,
         #     max-DD halt, per-position cap, gross exposure. Runs against
         #     the most-recent snapshot's mark equity. Bypassing these would
