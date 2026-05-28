@@ -236,6 +236,59 @@ def test_construction_drag_large_drag_flagged(db):
     assert q3["total_drag_bps"] > 500  # threshold
 
 
+# === Q1: status bucketing (Step 1.d granularity) ==========================
+
+def test_q1_bucketizes_mixed_statuses(db):
+    """3 traded + 1 partial + 1 rejected + 1 pending, mixed casing.
+    The bucket histogram must collapse legacy lowercase 'filled' and
+    new uppercase 'TRADED' into the same `traded` bucket."""
+    d = date(2026, 5, 26)
+    with portfolio_db.connect(db) as c:
+        # 3 fully traded — one legacy lowercase, two new uppercase
+        o1 = _insert_order(c, d=d, ticker="AAA", side="buy", qty=10, status="filled")
+        _insert_fill(c, order_id=o1, d=d, ticker="AAA", side="buy", qty=10, price=100.0)
+        o2 = _insert_order(c, d=d, ticker="BBB", side="buy", qty=10, status="TRADED")
+        _insert_fill(c, order_id=o2, d=d, ticker="BBB", side="buy", qty=10, price=100.0)
+        o3 = _insert_order(c, d=d, ticker="CCC", side="buy", qty=10, status="TRADED")
+        _insert_fill(c, order_id=o3, d=d, ticker="CCC", side="buy", qty=10, price=100.0)
+        # 1 partial
+        o4 = _insert_order(c, d=d, ticker="DDD", side="buy", qty=10, status="PART_TRADED")
+        _insert_fill(c, order_id=o4, d=d, ticker="DDD", side="buy", qty=4, price=100.0)
+        # 1 rejected (zero fills)
+        _insert_order(c, d=d, ticker="EEE", side="buy", qty=10, status="REJECTED")
+        # 1 pending (zero fills, broker still in transit at EOD)
+        _insert_order(c, d=d, ticker="FFF", side="buy", qty=10, status="TRANSIT")
+    out = compute_reconciliation_for_date(d, MODE, db)
+    q1 = out["held_what_intended"]
+    assert q1["status"] == "flag"  # partials + rejects + pending all show as mismatches
+    b = q1["buckets"]
+    assert b["traded"] == 3, b
+    assert b["partial"] == 1, b
+    assert b["rejected"] == 1, b
+    assert b["pending"] == 1, b  # TRANSIT routes to pending
+    # Detail summarises non-zero buckets
+    assert "3 traded" in q1["detail"]
+    assert "1 partial" in q1["detail"]
+    assert "1 rejected" in q1["detail"]
+    assert "1 pending" in q1["detail"]
+
+
+def test_q1_all_traded_clean(db):
+    """All orders fully filled — no mismatch, single 'traded' bucket."""
+    d = date(2026, 5, 26)
+    with portfolio_db.connect(db) as c:
+        for tk in ("AAA", "BBB"):
+            oid = _insert_order(c, d=d, ticker=tk, side="buy", qty=10, status="TRADED")
+            _insert_fill(c, order_id=oid, d=d, ticker=tk, side="buy", qty=10, price=100.0)
+    out = compute_reconciliation_for_date(d, MODE, db)
+    q1 = out["held_what_intended"]
+    assert q1["status"] == "ok"
+    assert q1["buckets"]["traded"] == 2
+    assert q1["buckets"]["partial"] == 0
+    assert "2 traded" in q1["detail"]
+    assert "all filled as intended" in q1["detail"]
+
+
 # === Module-level constants exposed ========================================
 
 def test_thresholds_match_spec():

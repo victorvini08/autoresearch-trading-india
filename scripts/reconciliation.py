@@ -83,6 +83,30 @@ def compute_reconciliation_for_date(
 
 # === Q1: did we hold what we intended? =====================================
 
+# Map raw broker status strings into a normalized 4-bucket histogram so
+# the dashboard reads "5 traded, 1 partial, 0 rejected, 0 pending"
+# regardless of casing / legacy values (the pre-Step-1.d ledger wrote
+# lowercase "filled"; we treat it as "traded").
+_STATUS_BUCKETS = {
+    "TRADED": "traded", "FILLED": "traded", "FILL": "traded",
+    "PART_TRADED": "partial", "PARTIAL": "partial", "PARTIALLY_FILLED": "partial",
+    "REJECTED": "rejected", "REJECT": "rejected",
+    "CANCELLED": "cancelled", "CANCELED": "cancelled",
+    "EXPIRED": "expired",
+    "PENDING": "pending", "TRANSIT": "pending",
+    "TIMEOUT": "pending", "UNKNOWN": "pending",
+}
+
+
+def _bucketize_statuses(raw_counts: dict[str, int]) -> dict[str, int]:
+    out = {"traded": 0, "partial": 0, "rejected": 0, "cancelled": 0,
+           "expired": 0, "pending": 0, "other": 0}
+    for raw, n in raw_counts.items():
+        bucket = _STATUS_BUCKETS.get((raw or "").upper(), "other")
+        out[bucket] += n
+    return out
+
+
 def _q1_held_what_intended(
     conn: duckdb.DuckDBPyConnection, d: date, mode: str
 ) -> dict[str, Any]:
@@ -91,16 +115,19 @@ def _q1_held_what_intended(
         "WHERE as_of_date = ? AND mode = ? GROUP BY status",
         [d, mode],
     ).fetchall()
-    status_counts = {s: c for s, c in statuses}
-    total_orders = sum(status_counts.values())
+    raw_counts = {s: c for s, c in statuses}
+    total_orders = sum(raw_counts.values())
 
     if total_orders == 0:
         return {
             "status": "ok",
             "detail": "No orders submitted today (no rebalance).",
             "status_counts": {},
+            "buckets": _bucketize_statuses({}),
             "mismatches": [],
         }
+
+    buckets = _bucketize_statuses(raw_counts)
 
     # Find orders where the SUM of actual fills doesn't equal requested qty.
     # Captures: partial fills, rejected orders, cancelled orders.
@@ -128,20 +155,38 @@ def _q1_held_what_intended(
         for t, s, req, fil, st in mismatches
     ]
 
+    # Compose a precise summary string. Only mention non-zero buckets so the
+    # common path ("5 traded") stays clean and noteworthy paths
+    # ("3 traded, 1 partial, 1 rejected") stand out.
+    parts = []
+    for label, key in (
+        ("traded", "traded"),
+        ("partial", "partial"),
+        ("rejected", "rejected"),
+        ("cancelled", "cancelled"),
+        ("expired", "expired"),
+        ("pending", "pending"),
+    ):
+        if buckets[key] > 0:
+            parts.append(f"{buckets[key]} {label}")
+    summary = ", ".join(parts) if parts else f"{total_orders} order(s)"
+
     if not mismatch_rows:
         return {
             "status": "ok",
-            "detail": f"All {total_orders} order(s) filled as intended.",
-            "status_counts": status_counts,
+            "detail": f"{summary} — all filled as intended.",
+            "status_counts": raw_counts,
+            "buckets": buckets,
             "mismatches": [],
         }
     return {
         "status": "flag",
         "detail": (
-            f"{len(mismatch_rows)} of {total_orders} order(s) did not "
-            "fill cleanly."
+            f"{summary} — {len(mismatch_rows)} of {total_orders} "
+            "did not fill cleanly."
         ),
-        "status_counts": status_counts,
+        "status_counts": raw_counts,
+        "buckets": buckets,
         "mismatches": mismatch_rows[:10],
     }
 

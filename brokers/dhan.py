@@ -61,14 +61,29 @@ PRODUCT_CNC = "CNC"
 EXCHANGE_NSE_EQ = "NSE_EQ"
 VALIDITY_DAY = "DAY"
 
-# Status constants Dhan returns
+# Status constants Dhan returns. Reachability in CURRENT code paths:
+#   PENDING       — live broker default when /v2/orders POST returns no status
+#   TRANSIT       — live broker during poll (intermediate)
+#   TRADED        — mock + live (terminal); ledger derives on full fill
+#   PART_TRADED   — live broker emits during partial fills; ledger derives
+#                   when sum(actual_fills) < requested qty (Step 1.d)
+#   REJECTED      — mock + live (terminal)
+#   CANCELLED     — live only, rare (user cancels via Dhan app mid-flight)
+#   EXPIRED       — limit/GTC orders only; we send MARKET orders so unreachable
+#                   in current flow. Kept for forward compatibility.
+#   (MODIFIED is intentionally NOT a constant: no code path calls modify_order.)
 STATUS_PENDING = "PENDING"
 STATUS_TRANSIT = "TRANSIT"
 STATUS_TRADED = "TRADED"
+STATUS_PART_TRADED = "PART_TRADED"
 STATUS_REJECTED = "REJECTED"
 STATUS_CANCELLED = "CANCELLED"
 STATUS_EXPIRED = "EXPIRED"
 
+# Terminal states for `wait_for_done` polling. PART_TRADED is NOT terminal —
+# the remaining qty can still fill before market close. End-of-day, an
+# order left in PART_TRADED gets its final status written by the ledger
+# (derived from sum(fills.qty) vs requested qty).
 _TERMINAL_STATES = {STATUS_TRADED, STATUS_REJECTED, STATUS_CANCELLED, STATUS_EXPIRED}
 
 
@@ -580,9 +595,12 @@ __all__ = [
     "EXCHANGE_NSE_EQ",
     "VALIDITY_DAY",
     "STATUS_PENDING",
+    "STATUS_TRANSIT",
     "STATUS_TRADED",
+    "STATUS_PART_TRADED",
     "STATUS_REJECTED",
     "STATUS_CANCELLED",
+    "STATUS_EXPIRED",
     "fetch_scrip_master",
     "parse_scrip_master",
     "cache_scrip_master",

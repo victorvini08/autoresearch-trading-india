@@ -95,6 +95,14 @@ def write_execution_result(
     gross_sell = 0.0
     total_commission = 0.0
 
+    # Aggregate filled qty per order_id so the final status_order_id ->
+    # submitted_orders.status update reflects the actual terminal state:
+    # TRADED (full fill), PART_TRADED (some fills, less than requested),
+    # or whatever the broker reported originally (REJECTED / CANCELLED /
+    # EXPIRED / PENDING for orders that never filled).
+    filled_qty_by_order: dict[str, float] = {}
+    requested_qty_by_order: dict[str, float] = {o.order_id: o.quantity for o in orders}
+
     conn.execute("BEGIN TRANSACTION")
     try:
         # 1. submitted_orders
@@ -133,7 +141,9 @@ def write_execution_result(
                 slippage_bps=DEFAULT_SLIPPAGE_BPS,
                 mode=mode,
             )
-            portfolio_db.update_order_status(conn, f.order_id, "filled")
+            filled_qty_by_order[f.order_id] = (
+                filled_qty_by_order.get(f.order_id, 0.0) + f.quantity
+            )
             # CLAUDE.md hard constraint #5: cash-ledger entries are anchored
             # to the FILL date, not the signal date. For signal-on-T fills-on-T
             # (our Indian intraday flow) they coincide. They diverge whenever
@@ -188,6 +198,27 @@ def write_execution_result(
                     discrepancy_log=discrepancies,
                     as_of_date=as_of_date,
                 )
+
+        # Resolve final submitted_orders.status per order from realised fills.
+        # The original status came from place_order (PENDING / TRANSIT / TRADED /
+        # REJECTED / PART_TRADED), but the truth at end-of-day is the sum of
+        # actual_fills vs requested qty:
+        #   filled == requested  →  TRADED       (clean fill)
+        #   0 < filled < req     →  PART_TRADED  (broker filled some, dropped rest)
+        # Orders with zero fills keep whatever status place_order recorded —
+        # so REJECTED / CANCELLED / EXPIRED / TIMEOUT survive unchanged.
+        # No more lowercase synthetic "filled" string that masks partials.
+        for order_id, filled in filled_qty_by_order.items():
+            requested = requested_qty_by_order.get(order_id, 0.0)
+            if requested <= 0:
+                continue
+            if abs(filled - requested) < 1e-6:
+                final_status = "TRADED"
+            elif filled > 0:
+                final_status = "PART_TRADED"
+            else:
+                continue  # zero-fill order — leave broker-reported status
+            portfolio_db.update_order_status(conn, order_id, final_status)
 
         # 6. broker_positions EOD snapshot
         for ticker, (qty, mark_price) in new_positions.items():
