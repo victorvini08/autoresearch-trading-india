@@ -296,8 +296,57 @@ class DhanBroker:
     def get_cash(self) -> dict:
         """Return Dhan's fund-limit snapshot. Caller picks the field they want
         (`availableBalance`, `sodLimit`, `collateralAmount`, etc.).
+
+        Normalises Dhan's `availabelBalance` typo into the canonical
+        `availableBalance` key while preserving the original. Verified
+        2026-05-28 against live API: Dhan's /v2/fundlimit response
+        consistently misspells the key as `availabelBalance` (no `l`),
+        while every downstream of ours reads `availableBalance`. Without
+        this alias, the executor sized buys against ₹0 even on a funded
+        account.
         """
-        return self._request("GET", "/v2/fundlimit") or {}
+        raw = self._request("GET", "/v2/fundlimit") or {}
+        if (
+            isinstance(raw, dict)
+            and "availabelBalance" in raw
+            and "availableBalance" not in raw
+        ):
+            raw["availableBalance"] = raw["availabelBalance"]
+        return raw
+
+    def _holdings_raw(self) -> list:
+        """Fetch /v2/holdings, treating the empty-account DH-1111 quirk as [].
+
+        Dhan returns HTTP 500 with `errorCode: DH-1111, errorMessage: "No
+        holdings available"` when the account has no settled demat
+        holdings. That's an empty state, not a server error — but it would
+        propagate through `_request` (and its retry decorator) as a real
+        failure, crashing every caller on a fresh/cash-only account.
+        Bypass the retry path here; one direct request, fast-fail on the
+        known empty case, raise on anything else. Verified 2026-05-28
+        against the live API on a zero-holdings account.
+        """
+        self._rate.wait()
+        resp = self._sess.request(
+            "GET", f"{self._base}/v2/holdings", timeout=self._timeout,
+        )
+        if resp.status_code == 500:
+            try:
+                body = resp.json() or {}
+            except ValueError:
+                body = {}
+            if body.get("errorCode") == "DH-1111":
+                return []
+        if resp.status_code >= 400:
+            logger.error(
+                "Dhan GET /v2/holdings -> %d: %s",
+                resp.status_code, resp.text[:500],
+            )
+        resp.raise_for_status()
+        if not resp.text.strip():
+            return []
+        data = resp.json()
+        return data if isinstance(data, list) else []
 
     def get_positions(self) -> list[Position]:
         """Return everything we own — intraday positions UNION settled holdings.
@@ -329,7 +378,7 @@ class DhanBroker:
                 realized_pnl=float(r.get("realizedProfit") or 0.0),
                 unrealized_pnl=float(r.get("unrealizedProfit") or 0.0),
             )
-        for r in self._request("GET", "/v2/holdings") or []:
+        for r in self._holdings_raw():
             if not isinstance(r, dict):
                 continue
             t = (r.get("tradingSymbol") or "").upper()
@@ -373,11 +422,13 @@ class DhanBroker:
 
         Prefer `get_positions()` for executor logic (it merges this with
         /v2/positions); this remains exposed for diagnostics and the
-        smoke-test path.
+        smoke-test path. Uses `_holdings_raw` which gracefully handles the
+        DH-1111 "no holdings" 500 quirk.
         """
-        raw = self._request("GET", "/v2/holdings") or []
         out: list[Position] = []
-        for r in raw if isinstance(raw, list) else []:
+        for r in self._holdings_raw():
+            if not isinstance(r, dict):
+                continue
             out.append(
                 Position(
                     ticker=(r.get("tradingSymbol") or "").upper(),

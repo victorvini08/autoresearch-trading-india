@@ -57,6 +57,138 @@ def test_dhan_broker_stamps_correlation_id_when_present(monkeypatch) -> None:
 
 
 # ──────────────────────────────────────────────────────────
+# Live-API quirks discovered 2026-05-28 against a fresh account
+# ──────────────────────────────────────────────────────────
+
+
+def test_get_cash_aliases_availabel_balance_typo(monkeypatch) -> None:
+    """Dhan's /v2/fundlimit returns `availabelBalance` (missing the second
+    'l'); our entire executor reads `availableBalance`. get_cash() must
+    normalise the typo so the downstream code sees real cash."""
+    monkeypatch.setenv("DHAN_ACCESS_TOKEN", "fake")
+    monkeypatch.setenv("DHAN_CLIENT_ID", "1000001234")
+    monkeypatch.setenv("SEBI_ALGO_ID", "ALGO_TEST")
+    from brokers.dhan import DhanBroker
+    broker = DhanBroker()
+
+    # Live response shape: typo'd key only, no canonical alias.
+    monkeypatch.setattr(
+        broker, "_request",
+        lambda method, path, body=None: {
+            "dhanClientId": "1000001234",
+            "availabelBalance": 12_345.67,
+            "sodLimit": 12_345.67,
+            "collateralAmount": 0.0,
+            "utilizedAmount": 0.0,
+        },
+    )
+    cash = broker.get_cash()
+    assert cash["availableBalance"] == 12_345.67  # the alias we synthesised
+    assert cash["availabelBalance"] == 12_345.67  # original preserved
+
+
+def test_get_cash_does_not_overwrite_existing_canonical_key(monkeypatch) -> None:
+    """If Dhan ever fixes the typo, don't clobber the corrected value."""
+    monkeypatch.setenv("DHAN_ACCESS_TOKEN", "fake")
+    monkeypatch.setenv("DHAN_CLIENT_ID", "1000001234")
+    monkeypatch.setenv("SEBI_ALGO_ID", "ALGO_TEST")
+    from brokers.dhan import DhanBroker
+    broker = DhanBroker()
+    monkeypatch.setattr(
+        broker, "_request",
+        lambda method, path, body=None: {
+            "availableBalance": 99.0,       # canonical present
+            "availabelBalance": 1.0,        # typo also present (defensive)
+        },
+    )
+    cash = broker.get_cash()
+    assert cash["availableBalance"] == 99.0  # canonical wins
+
+
+def test_holdings_raw_treats_dh1111_500_as_empty(monkeypatch) -> None:
+    """Dhan returns HTTP 500 + errorCode DH-1111 when an account has no
+    settled holdings. That's an empty state, not a server error. The
+    helper must return [] without raising."""
+    monkeypatch.setenv("DHAN_ACCESS_TOKEN", "fake")
+    monkeypatch.setenv("DHAN_CLIENT_ID", "1000001234")
+    monkeypatch.setenv("SEBI_ALGO_ID", "ALGO_TEST")
+    from brokers.dhan import DhanBroker
+    broker = DhanBroker()
+
+    class _FakeResp:
+        status_code = 500
+        text = '{"errorType":"HOLDING_ERROR","errorCode":"DH-1111","errorMessage":"No holdings available"}'
+        def json(self):
+            return {
+                "errorType": "HOLDING_ERROR",
+                "errorCode": "DH-1111",
+                "errorMessage": "No holdings available",
+            }
+        def raise_for_status(self):  # not called on the empty path
+            import requests
+            raise requests.HTTPError("500 Server Error: ", response=self)
+
+    monkeypatch.setattr(broker._sess, "request", lambda *a, **kw: _FakeResp())
+    # Both surface paths must return empty without raising
+    assert broker._holdings_raw() == []
+    assert broker.get_holdings() == []
+
+
+def test_holdings_raw_raises_on_other_500s(monkeypatch) -> None:
+    """A genuine server error (not DH-1111) should still raise."""
+    monkeypatch.setenv("DHAN_ACCESS_TOKEN", "fake")
+    monkeypatch.setenv("DHAN_CLIENT_ID", "1000001234")
+    monkeypatch.setenv("SEBI_ALGO_ID", "ALGO_TEST")
+    from brokers.dhan import DhanBroker
+    import requests as _r
+    broker = DhanBroker()
+
+    class _FakeResp:
+        status_code = 500
+        text = '{"errorCode":"SOMETHING_ELSE"}'
+        def json(self):
+            return {"errorCode": "SOMETHING_ELSE"}
+        def raise_for_status(self):
+            raise _r.HTTPError("500 Server Error: ", response=self)
+
+    monkeypatch.setattr(broker._sess, "request", lambda *a, **kw: _FakeResp())
+    with pytest.raises(_r.HTTPError):
+        broker._holdings_raw()
+
+
+def test_get_positions_merge_does_not_crash_on_empty_holdings(monkeypatch) -> None:
+    """The B3 merge calls /v2/holdings; when holdings 500s on DH-1111, the
+    overall get_positions() must still return whatever /v2/positions had,
+    not propagate the holdings error."""
+    monkeypatch.setenv("DHAN_ACCESS_TOKEN", "fake")
+    monkeypatch.setenv("DHAN_CLIENT_ID", "1000001234")
+    monkeypatch.setenv("SEBI_ALGO_ID", "ALGO_TEST")
+    from brokers.dhan import DhanBroker
+    broker = DhanBroker()
+
+    # /v2/positions returns one intraday position
+    monkeypatch.setattr(
+        broker, "_request",
+        lambda method, path, body=None: (
+            [{
+                "tradingSymbol": "RELIANCE",
+                "netQty": 5,
+                "buyAvg": 1200.0,
+                "realizedProfit": 0.0,
+                "unrealizedProfit": 0.0,
+            }] if path == "/v2/positions" else []
+        ),
+    )
+    # /v2/holdings 500s with DH-1111 → _holdings_raw returns []
+    monkeypatch.setattr(broker, "_holdings_raw", lambda: [])
+
+    positions = broker.get_positions()
+    assert len(positions) == 1
+    assert positions[0].ticker == "RELIANCE"
+    assert positions[0].quantity == 5
+
+
+# ──────────────────────────────────────────────────────────
 # B6: Fill.trade_id uniqueness — multi-fill scenario
 # ──────────────────────────────────────────────────────────
 
