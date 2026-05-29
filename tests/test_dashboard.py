@@ -310,6 +310,11 @@ def test_renders_tab_strip_and_critical_elements(seeded_both_buckets, tmp_path):
     assert "safety-card" in body
     assert "safety-section" in body
     assert "safety-badge" in body
+    # Step 3.b: trade outcomes card.
+    assert "trade-context-section" in body
+    assert "Trade Outcomes" in body
+    assert "Currently Held" in body
+    assert "Recently Closed" in body
 
 
 def test_cli_main_runs(seeded_both_buckets, tmp_path, monkeypatch, capsys):

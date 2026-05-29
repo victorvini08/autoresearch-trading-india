@@ -404,7 +404,24 @@ def _query_one_day(conn, *, modes: tuple[str, ...], d: date) -> dict:
         "realized_tax_today_usd": float(realized_tax_today),
         "reconciliation": _reconciliation_for_day(modes, d),
         "safety_state": _safety_state_for_day(modes, d, conn),
+        "trade_context": _trade_context_for_day(modes, d),
     }
+
+
+def _trade_context_for_day(modes: tuple[str, ...], d: date) -> dict | None:
+    """Step 3.b — held-position drift + closed-trade attribution for `d`.
+
+    Wrapped in try/except so a recompute hiccup (e.g. prices DB gap) never
+    crashes the dashboard. For v1 each bucket is one mode → modes[0].
+    """
+    if not modes:
+        return None
+    try:
+        from scripts.trade_context import compute_trade_context_for_date
+
+        return compute_trade_context_for_date(d, mode=modes[0])
+    except Exception as e:  # noqa: BLE001 — never crash the dashboard
+        return {"error": f"{type(e).__name__}: {e}"}
 
 
 def _safety_state_for_day(
@@ -634,6 +651,29 @@ _HTML_TEMPLATE = r"""<!doctype html>
   .safety-card.transitioned { border-color: #fbbf24; }
   .safety-empty { color: var(--muted); font-size: 13px; }
 
+  /* Trade Outcomes card (Step 3.b) */
+  .tc-sub-title {
+    font-weight: 600; color: var(--text); font-size: 13px;
+    margin: 14px 0 6px;
+  }
+  .tc-sub-title:first-child { margin-top: 0; }
+  .tc-empty { color: var(--muted); font-size: 13px; padding: 4px 0; }
+  .tc-flag { font-weight: 700; }
+  .tc-flag.ok { color: #4ade80; }
+  .tc-flag.warn { color: #fbbf24; }
+  .tc-flag.flag { color: #f87171; }
+  .tc-cause {
+    display: inline-block; padding: 2px 8px; border-radius: 4px;
+    font-size: 11px; font-weight: 600;
+  }
+  .tc-cause.clean-alpha { background: #14532d; color: #4ade80; }
+  .tc-cause.beta-only { background: #1e3a5f; color: #93c5fd; }
+  .tc-cause.market-drag { background: #422006; color: #fbbf24; }
+  .tc-cause.signal-was-weak,
+  .tc-cause.signal-failure { background: #4c0519; color: #f87171; }
+  .tc-cause.cost-heavy { background: #3b1d4c; color: #d8b4fe; }
+  .tc-muted { color: var(--muted); }
+
   table { width: 100%; border-collapse: collapse; font-size: 13px; }
   thead th {
     text-align: left; font-weight: 500; color: var(--muted);
@@ -764,6 +804,10 @@ _HTML_TEMPLATE = r"""<!doctype html>
       <div class="positions-section"></div></div>
     <div class="card"><h2>Targets</h2>
       <div class="targets-section"></div></div>
+  </div>
+  <div class="card" style="margin-top:20px">
+    <h2>Trade Outcomes <span class="recon-subtitle">— is each name still a good pick, and did closed trades make alpha?</span></h2>
+    <div class="trade-context-section"></div>
   </div>
   <div class="card safety-card" style="margin-top:20px">
     <h2>Safety State <span class="recon-subtitle">— deterministic risk controller</span></h2>
@@ -963,6 +1007,73 @@ function renderDay(bucketEl, bucket, iso) {
         <th>Signal Date</th><th>Filled At</th><th>Today's Activity</th>
       </tr></thead>
       <tbody>${rows}</tbody></table>`;
+  }
+
+  // Trade Outcomes (Step 3.b) — held-name drift + closed-trade attribution.
+  const tcDiv = bucketEl.querySelector('.trade-context-section');
+  const tc = day.trade_context;
+  if (!tc) {
+    tcDiv.innerHTML = '<div class="tc-empty">Trade context not available for this date.</div>';
+  } else if (tc.error) {
+    tcDiv.innerHTML = '<div class="tc-empty">Trade context error: ' + escapeHtml(tc.error) + '</div>';
+  } else {
+    const pct = (v) => {
+      if (v === null || v === undefined) return '<span class="tc-muted">—</span>';
+      const sign = v > 0 ? '+' : '';
+      return '<span class="' + cls(v) + '">' + sign + v.toFixed(1) + '%</span>';
+    };
+    const rankCell = (rank, size, decile) => {
+      if (rank === null || rank === undefined) return '<span class="tc-muted">—</span>';
+      const d = (decile !== null && decile !== undefined) ? ' · d' + decile : '';
+      return '#' + rank + (size ? ' of ' + size : '') + d;
+    };
+
+    // --- Currently Held (drift) ---
+    let heldHtml = '<div class="tc-sub-title">Currently Held — is each name still a strong pick?</div>';
+    if (!tc.held || tc.held.length === 0) {
+      heldHtml += '<div class="tc-empty">No open positions.</div>';
+    } else {
+      const rows = tc.held.map((h) => {
+        const icon = h.flag === 'ok' ? '✓' : (h.flag === 'warn' ? '⚠' : '✗');
+        return '<tr>'
+          + '<td class="ticker">' + escapeHtml(h.ticker) + '</td>'
+          + '<td>' + rankCell(h.entry_rank, h.entry_universe_size, h.entry_decile) + '</td>'
+          + '<td>' + rankCell(h.current_rank, h.current_universe_size, h.current_decile) + '</td>'
+          + '<td class="num">' + pct(h.unrealized_pct) + '</td>'
+          + '<td class="num">' + (h.holding_days !== null ? h.holding_days + 'd' : '—') + '</td>'
+          + '<td><span class="tc-flag ' + h.flag + '">' + icon + '</span> '
+          + '<span class="tc-muted">' + escapeHtml(h.flag_label || '') + '</span></td>'
+          + '</tr>';
+      }).join('');
+      heldHtml += '<table><thead><tr>'
+        + '<th>Ticker</th><th>Rank at entry</th><th>Rank now</th>'
+        + '<th class="num">Unreal.</th><th class="num">Held</th><th>Drift</th>'
+        + '</tr></thead><tbody>' + rows + '</tbody></table>';
+    }
+
+    // --- Recently Closed (attribution) ---
+    let closedHtml = '<div class="tc-sub-title">Recently Closed — alpha, beta, or cost?</div>';
+    if (!tc.closed || tc.closed.length === 0) {
+      closedHtml += '<div class="tc-empty">No trades closed in the last 30 days.</div>';
+    } else {
+      const rows = tc.closed.map((c) => {
+        return '<tr>'
+          + '<td class="ticker">' + escapeHtml(c.ticker) + '</td>'
+          + '<td class="num">' + pct(c.return_pct) + '</td>'
+          + '<td class="num">' + pct(c.nifty_pct) + '</td>'
+          + '<td class="num">' + pct(c.excess_pct) + '</td>'
+          + '<td>' + rankCell(c.entry_rank, c.entry_universe_size, c.entry_decile) + '</td>'
+          + '<td class="num">' + (c.cost_bps !== null ? c.cost_bps.toFixed(0) + 'bps' : '—') + '</td>'
+          + '<td><span class="tc-cause ' + c.dominant_cause + '">' + escapeHtml(c.dominant_cause) + '</span></td>'
+          + '</tr>';
+      }).join('');
+      closedHtml += '<table><thead><tr>'
+        + '<th>Ticker</th><th class="num">Return</th><th class="num">Nifty</th>'
+        + '<th class="num">Excess</th><th>Entry rank</th><th class="num">Cost</th><th>Cause</th>'
+        + '</tr></thead><tbody>' + rows + '</tbody></table>';
+    }
+
+    tcDiv.innerHTML = heldHtml + closedHtml;
   }
 
   // Safety State (Step 2.d) — the deterministic controller. Shown above
