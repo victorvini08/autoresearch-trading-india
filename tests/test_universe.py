@@ -224,5 +224,36 @@ def test_get_live_universe_returns_latest(tmp_path: Path) -> None:
     assert get_live_universe(universe_db) == ["A"]
 
 
+def test_get_universe_at_filters_etfs_from_stale_snapshot(tmp_path: Path) -> None:
+    """Defense-in-depth (2026-03..04 replay regression): a snapshot built BEFORE
+    a ticker was added to _ETF_EXCLUDE still contains it, and get_universe_at
+    must filter it at READ time so it can't leak into the live universe. Without
+    this, LIQUIDCASE leaked from a stale snapshot and — scoring top-tier on the
+    low-vol/low-drawdown quality factors — climbed to the #1 live holding."""
+    import duckdb
+    from data.universe import _ETF_EXCLUDE
+
+    assert "LIQUIDCASE" in _ETF_EXCLUDE  # precondition: it IS on the exclude list
+    universe_db = tmp_path / "universe.duckdb"
+    snap = date(2026, 5, 13)
+    conn = duckdb.connect(str(universe_db))
+    conn.execute(
+        "CREATE TABLE universe_snapshot (as_of_date DATE, ticker VARCHAR, isin VARCHAR,"
+        " company VARCHAR, industry VARCHAR, free_float_mcap_cr DOUBLE,"
+        " adv_20d_cr DOUBLE, rank_by_adv INTEGER, PRIMARY KEY (as_of_date, ticker))"
+    )
+    # Stale snapshot: a real equity AND a leaked cash ETF.
+    conn.execute("INSERT INTO universe_snapshot VALUES (?,?,?,?,?,?,?,?)",
+                 [snap, "RELIANCE", "INE1", "RELIANCE", "Energy", 0.0, 100.0, 1])
+    conn.execute("INSERT INTO universe_snapshot VALUES (?,?,?,?,?,?,?,?)",
+                 [snap, "LIQUIDCASE", "INE2", "LIQUIDCASE", "ETF", 0.0, 200.0, 2])
+    conn.close()
+
+    tickers = get_universe_at(snap, universe_db)
+    assert "RELIANCE" in tickers
+    assert "LIQUIDCASE" not in tickers, \
+        "ETF on _ETF_EXCLUDE must be filtered from the live universe even if the snapshot carries it"
+
+
 def test_target_universe_size_default_is_200() -> None:
     assert TARGET_UNIVERSE_SIZE == 200

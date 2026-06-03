@@ -454,7 +454,16 @@ def get_universe_at(as_of_date: date, universe_db: Path = DEFAULT_UNIVERSE_DB) -
         ).fetchall()
     finally:
         conn.close()
-    return [r[0] for r in rows]
+    # Defense-in-depth: drop any ETF that leaked into a STALE snapshot built
+    # before that ticker was added to _ETF_EXCLUDE. The exclusion was
+    # historically applied ONLY at snapshot-BUILD time (`build_universe`), so a
+    # snapshot built earlier still carries the name — and a cash/commodity/index
+    # ETF then scores top-tier on the low-vol / low-drawdown quality factors and
+    # gets bought as if it were a momentum name. Observed in the 2026-03..04
+    # replay: LIQUIDCASE leaked from a stale snapshot and climbed to the #1
+    # holding. Filtering at READ time makes the live universe immune to snapshot
+    # vintage (and to future additions to the list), so a rebuild is not required.
+    return [r[0] for r in rows if r[0] not in _ETF_EXCLUDE]
 
 
 def get_live_universe(universe_db: Path = DEFAULT_UNIVERSE_DB) -> list[str]:
