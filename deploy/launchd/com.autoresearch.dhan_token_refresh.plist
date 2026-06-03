@@ -5,9 +5,14 @@
   DhanHQ access-token daily refresh.
 
   DhanHQ self-generated tokens expire after 24h but can be renewed any time
-  while still active (GET /v2/RenewToken). This job runs daily at 08:45 IST
-  — before the 09:00 premarket scan — so the token never lapses as long as
-  the machine is on at least once per 24h.
+  while still active (GET /v2/RenewToken). This job runs TWICE daily at 09:00
+  and 21:00 IST. Running twice (12h apart) keeps a ~12h renewal margin: each
+  renewal sets the new expiry to fire-time + 24h, so a single daily run leaves
+  ~0 margin and normal launchd jitter can push the next fire past expiry and
+  snap the chain (observed 2026-05-31). With two runs 12h apart, each fire only
+  needs the previous run (12h earlier) to have succeeded, so the 24h token
+  cannot lapse between runs as long as the machine is on at least once per 12h.
+  The 09:00 run precedes the premarket scan.
 
   Install:
     1. Edit WorkingDirectory + the uv path below to match your machine.
@@ -33,12 +38,20 @@
   </array>
 
   <key>StartCalendarInterval</key>
-  <dict>
-    <key>Hour</key>
-    <integer>9</integer>
-    <key>Minute</key>
-    <integer>0</integer>
-  </dict>
+  <array>
+    <dict>
+      <key>Hour</key>
+      <integer>9</integer>
+      <key>Minute</key>
+      <integer>0</integer>
+    </dict>
+    <dict>
+      <key>Hour</key>
+      <integer>21</integer>
+      <key>Minute</key>
+      <integer>0</integer>
+    </dict>
+  </array>
 
   <key>StandardOutPath</key>
   <string>/Users/aryanmehta/Desktop/My Work/autoresearch-trading-india/state/logs/dhan_token_refresh.out.log</string>

@@ -164,9 +164,36 @@ class DhanExecutor:
         try:
             from scripts.signal_today import generate_signals
 
+            # Seed the signal from the LIVE account's actual current holdings
+            # so the strategy's held/retention logic runs against reality, not
+            # a from-scratch re-simulation. Without this seed the re-derived
+            # imaginary book drifts from the live account and every rebalance
+            # churns to reconcile the two (the sim-vs-live divergence bug:
+            # on 2026-06-01 it phantom-rotated FEDERALBNK/BHARATFORG →
+            # TITAN/SHRIRAMFIN despite the live book already holding qualifying
+            # names). Fail-soft: a broker read failure falls back to None
+            # (legacy from-scratch replay) rather than blocking the cron.
+            try:
+                live_positions: dict[str, float] | None = {
+                    p.ticker: float(p.quantity)
+                    for p in self.broker.get_positions()
+                    if getattr(p, "quantity", 0) and p.quantity > 0
+                }
+                live_cash: float | None = float(
+                    self.broker.get_cash().get("availableBalance", 0.0)
+                )
+            except Exception as e:  # noqa: BLE001 — never block trading on a read
+                logger.warning(
+                    "live-position seed read failed (%s: %s); falling back "
+                    "to from-scratch signal", type(e).__name__, e,
+                )
+                live_positions, live_cash = None, None
+
             signals_result = generate_signals(
                 target_date=as_of_date,
                 strategy_module_name=strategy_module,
+                current_positions=live_positions,
+                current_cash=live_cash,
             )
             # generate_signals returns {"targets": [{"ticker","target_fraction"},...],
             # "exits":[...]} — a LIST of entry rows. _build_orders expects a
@@ -563,7 +590,11 @@ class DhanExecutor:
 
         - Reads current positions from broker
         - Computes total equity = cash + sum(positions * latest_close)
-        - Computes target_qty = round(target_fraction * total_equity / close)
+        - Computes target_qty = floor(target_fraction * total_equity / close),
+          with a whole-share hold-band: a name we already hold whose raw target
+          rounds (to nearest) back to the held qty is held, not shed — stops
+          sub-share rounding drift from manufacturing a phantom 1-share trade
+          (the expensive-name complement to the MIN_ORDER_INR floor)
         - Applies FRACTION_CHANGE_THRESHOLD on `target_fraction` (not target_qty,
           which drifts daily due to mark-to-market — US repo learnings §4.5)
         - Generates BUY for qty_delta > 0, SELL for qty_delta < 0; MKT orders
@@ -615,8 +646,26 @@ class DhanExecutor:
             if not px or px <= 0:
                 logger.warning("skip target %s: no price", ticker)
                 continue
-            target_qty = int((target_fraction * total_equity) / px)
             current_qty = positions[ticker].quantity if ticker in positions else 0
+            raw_qty = (target_fraction * total_equity) / px
+            target_qty = int(raw_qty)
+            # Whole-share hold-band (integer analogue of FRACTION_CHANGE_THRESHOLD).
+            # floor() sheds a share from a name we ALREADY hold when its
+            # carry-forward target projects to e.g. 0.99999 shares: the round-trip
+            #   fraction = qty*px/equity  ->  qty = fraction*equity/px
+            # is the identity in exact arithmetic, but 6-dp fraction rounding plus a
+            # price/equity snapshot mismatch (signal-time projection vs
+            # execution-time _load_latest_closes) lands raw_qty a hair below the
+            # held integer, and floor() truncates it to held-1 — a phantom sell the
+            # MIN_ORDER_INR floor can't catch for an expensive name (one TITAN share
+            # ~₹4,078 >> ₹1,500). Reproduced 2026-06-03: TITAN raw_qty=0.99999 ->
+            # int()=0 -> sold the last share, having bled 2->1->0 over three
+            # non-rebalance days. If the NEAREST integer to raw_qty equals what we
+            # already hold, hold it. Guarded on current_qty > 0 so it only ever
+            # RETAINS a position — it never rounds a new name up, so it cannot
+            # create an unaffordable buy or disturb rebalance-day sizing.
+            if current_qty > 0 and int(raw_qty + 0.5) == current_qty:
+                target_qty = current_qty
             delta = target_qty - current_qty
             if delta == 0:
                 continue

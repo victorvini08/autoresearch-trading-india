@@ -98,7 +98,13 @@ def _scheduled_jobs_status() -> list[dict]:
         label = plist.get("Label", plist_path.stem)
         name = label.replace("com.autoresearch.", "")
         ci = plist.get("StartCalendarInterval", {})
-        sched = f"{int(ci.get('Hour', 0)):02d}:{int(ci.get('Minute', 0)):02d} IST"
+        # StartCalendarInterval may be a single dict OR a list of dicts (a job
+        # scheduled at multiple times, e.g. the token refresh at 09:00 + 21:00).
+        intervals = ci if isinstance(ci, list) else [ci]
+        sched = ", ".join(
+            f"{int(iv.get('Hour', 0)):02d}:{int(iv.get('Minute', 0)):02d}"
+            for iv in intervals
+        ) + " IST"
         out_log = Path(plist.get("StandardOutPath", ""))
         err_log = Path(plist.get("StandardErrorPath", ""))
         last_run, last_err_at = "—", "—"

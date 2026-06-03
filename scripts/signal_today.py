@@ -103,7 +103,11 @@ def _find_strategy_class(module) -> type:
     return candidates[0]
 
 
-def _make_capturing_strategy(strategy_cls: type) -> tuple[type, dict]:
+def _make_capturing_strategy(
+    strategy_cls: type,
+    live_positions: dict[str, float] | None = None,
+    decision_date: date | None = None,
+) -> tuple[type, dict]:
     """Subclass `strategy_cls`. Lets order_target_percent fill normally
     (super() called) AND tracks each bar's order_target_percent calls so the
     LAST non-empty bar's intents can be combined with broker state in
@@ -129,11 +133,42 @@ def _make_capturing_strategy(strategy_cls: type) -> tuple[type, dict]:
     """
     captured: dict[str, float] = {}
 
+    # Normalise the optional live-position seed to {UPPER ticker: qty>0}.
+    # `live_positions is None`  → legacy from-scratch replay (unchanged).
+    # `live_positions == {}`    → seeded mode with a flat (empty) live book.
+    _seed: dict[str, float] | None = (
+        {
+            str(t).upper(): float(q)
+            for t, q in live_positions.items()
+            if q and float(q) > 0
+        }
+        if live_positions is not None
+        else None
+    )
+
     class _SignalCapture(strategy_cls):
         def __init__(self, *args, **kwargs):
             super().__init__(*args, **kwargs)
             self._calls_this_bar: dict[str, float] = {}
             self._last_rebalance_calls: dict[str, float] = {}
+
+        @staticmethod
+        def _name_of(d) -> str:
+            return str(getattr(d, "_name", "") or "").upper()
+
+        def _seed_live_positions(self) -> None:
+            """Force the in-memory broker to mirror the LIVE account on the
+            decision bar, so held/retention logic runs against reality rather
+            than a re-derived imaginary book (the sim-vs-live divergence fix).
+            """
+            if not _seed:
+                return
+            for d in self.datas:
+                qty = _seed.get(self._name_of(d))
+                if qty:
+                    pos = self.broker.getposition(d)
+                    pos.size = float(qty)
+                    pos.price = float(d.close[0])
 
         def order_target_percent(self, data=None, target=0.0, **kwargs):  # type: ignore[override]
             if data is None:
@@ -144,6 +179,24 @@ def _make_capturing_strategy(strategy_cls: type) -> tuple[type, dict]:
             return super().order_target_percent(data=data, target=target, **kwargs)
 
         def next(self):
+            if _seed is None:
+                # Legacy path: replay every bar (unchanged behaviour).
+                self._calls_this_bar = {}
+                super().next()
+                if self._calls_this_bar:
+                    self._last_rebalance_calls = dict(self._calls_this_bar)
+                return
+            # Seeded path: act ONLY on the final (decision) bar so the seeded
+            # live positions are not traded away by intermediate replay bars.
+            # Earlier bars are warmup-only — indicators read from the preloaded
+            # data lines regardless of whether next() runs on them.
+            d0 = self.datas[0]
+            is_decision = len(d0) >= d0.buflen()
+            if decision_date is not None:
+                is_decision = is_decision or (d0.datetime.date(0) >= decision_date)
+            if not is_decision:
+                return
+            self._seed_live_positions()
             self._calls_this_bar = {}
             super().next()
             if self._calls_this_bar:
@@ -170,16 +223,27 @@ def _project_portfolio(strat, captured: dict[str, float]) -> dict[str, float]:
     The returned dict replaces `captured`'s contents in generate_signals.
     """
     projected: dict[str, float] = {}
-    broker_value = float(strat.broker.get_value())
+
+    # Compute equity EXPLICITLY (cash + marked positions) rather than trusting
+    # the broker's cached get_value(): on the live-seeding path positions are
+    # injected without a fill, so backtrader's cached value reflects cash only
+    # — which would inflate every carry-forward fraction (observed 2026-06-02:
+    # a non-rebalance carry-forward levered the paper book to ~80% gross).
+    # Summing positions at the decision-bar close is correct for BOTH the
+    # seeded path and the from-scratch (filled) path, where cash + positions
+    # already equals get_value().
+    cash = float(strat.broker.get_cash())
+    pos_values: dict[str, float] = {}
+    for d in strat.datas:
+        pos = strat.broker.getposition(d)
+        if pos.size == 0:
+            continue
+        pos_values[d._name] = float(pos.size) * float(d.close[0])
+    broker_value = cash + sum(pos_values.values())
 
     if broker_value > 0:
-        for d in strat.datas:
-            pos = strat.broker.getposition(d)
-            if pos.size == 0:
-                continue
-            close_px = float(d.close[0])
-            pos_value = pos.size * close_px
-            projected[d._name] = round(pos_value / broker_value, 6)
+        for name, pos_value in pos_values.items():
+            projected[name] = round(pos_value / broker_value, 6)
 
     # Overlay the strategy's most recent non-empty rebalance intents
     last_calls = getattr(strat, "_last_rebalance_calls", {}) or {}
@@ -193,6 +257,8 @@ def generate_signals(
     target_date: date,
     strategy_module_name: str = "strategy",
     lookback_days: int = 500,
+    current_positions: dict[str, float] | None = None,
+    current_cash: float | None = None,
 ) -> dict:
     """Generate target positions as of `target_date` from `strategy_module_name`.
 
@@ -224,10 +290,18 @@ def generate_signals(
             "the next trading session."
         )
 
-    capture_cls, captured = _make_capturing_strategy(strategy_cls)
+    capture_cls, captured = _make_capturing_strategy(
+        strategy_cls,
+        live_positions=current_positions,
+        decision_date=last_bar,
+    )
 
     cerebro = bt.Cerebro()
-    cerebro.broker.setcash(100_000.0)
+    # Seed broker cash to the live account's cash (when provided) so the
+    # portfolio projection's carry-forward fractions match the real book.
+    cerebro.broker.setcash(
+        float(current_cash) if current_cash is not None else 100_000.0
+    )
     for ticker, df in feeds.items():
         data = bt.feeds.PandasData(
             dataname=df, name=ticker, fromdate=start, todate=target_date,

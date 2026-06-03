@@ -278,3 +278,182 @@ def test_negative_target_raises(monkeypatch):
             strategy_module_name="fake_short_strategy",
             lookback_days=90,
         )
+
+
+# ---------------------------------------------------------------------------
+# Live-position seeding: the signal must reflect the LIVE account's holdings,
+# not a from-scratch re-simulation (the sim-vs-live divergence fix).
+# ---------------------------------------------------------------------------
+
+def test_current_positions_seed_held_state(monkeypatch):
+    """When `current_positions` is provided, the strategy must see those
+    holdings as its own broker positions on the decision bar — so retention
+    logic runs against the LIVE account, not a re-derived imaginary book.
+
+    The toy strategy only ever RETAINS a name it already holds and never
+    initiates a new one: with no seed it holds nothing (→ no targets); seeded
+    with AAA held it retains AAA. This isolates exactly the held-state input.
+    """
+    import sys
+
+    class _RetainHeldOnly(bt.Strategy):
+        def next(self):
+            for d in self.datas:
+                if self.getposition(d).size > 0:
+                    self.order_target_percent(data=d, target=0.2)
+
+    fake_module = type(sys)("fake_retain_strategy")
+    fake_module.RetainHeld = _RetainHeldOnly
+    sys.modules["fake_retain_strategy"] = fake_module
+
+    fake_feeds = {
+        t: pd.DataFrame(
+            {"open": 100.0, "high": 101.0, "low": 99.0,
+             "close": 100.0, "volume": 1_000_000},
+            index=pd.bdate_range("2025-01-01", "2025-03-31"),
+        )
+        for t in ["AAA", "BBB"]
+    }
+    monkeypatch.setattr("scripts.signal_today._load_feeds", lambda s, e, t: fake_feeds)
+    monkeypatch.setattr("scripts.signal_today.get_universe_at", lambda d: ["AAA", "BBB"])
+
+    # No seed (legacy path) → strategy holds nothing → no targets.
+    res_none = generate_signals(
+        target_date=date(2025, 3, 31),
+        strategy_module_name="fake_retain_strategy",
+        lookback_days=90,
+    )
+    assert res_none["targets"] == []
+
+    # Seed AAA as held → strategy retains AAA at 0.2; BBB (not seeded) untouched.
+    res_seed = generate_signals(
+        target_date=date(2025, 3, 31),
+        strategy_module_name="fake_retain_strategy",
+        lookback_days=90,
+        current_positions={"AAA": 10},
+        current_cash=100_000.0,
+    )
+    assert {r["ticker"] for r in res_seed["targets"]} == {"AAA"}
+    assert res_seed["targets"][0]["target_fraction"] == pytest.approx(0.2)
+
+
+def test_seeding_does_not_trade_on_warmup_bars(monkeypatch):
+    """Seeded mode must let the strategy act ONLY on the final decision bar —
+    a strategy that buys every bar must, when seeded, still produce exactly
+    its single decision-bar target (no accumulation from replayed bars)."""
+    import sys
+
+    class _BuyAAAEveryBar(bt.Strategy):
+        def next(self):
+            self.order_target_percent(data=self.datas[0], target=0.3)
+
+    fake_module = type(sys)("fake_buyaaa_strategy")
+    fake_module.BuyAAA = _BuyAAAEveryBar
+    sys.modules["fake_buyaaa_strategy"] = fake_module
+
+    fake_feeds = {
+        "AAA": pd.DataFrame(
+            {"open": 100.0, "high": 101.0, "low": 99.0,
+             "close": 100.0, "volume": 1_000_000},
+            index=pd.bdate_range("2025-01-01", "2025-03-31"),
+        ),
+    }
+    monkeypatch.setattr("scripts.signal_today._load_feeds", lambda s, e, t: fake_feeds)
+    monkeypatch.setattr("scripts.signal_today.get_universe_at", lambda d: ["AAA"])
+
+    res = generate_signals(
+        target_date=date(2025, 3, 31),
+        strategy_module_name="fake_buyaaa_strategy",
+        lookback_days=90,
+        current_positions={},  # empty live book → seeded mode, picks fresh
+        current_cash=100_000.0,
+    )
+    assert {r["ticker"] for r in res["targets"]} == {"AAA"}
+    assert res["targets"][0]["target_fraction"] == pytest.approx(0.3)
+
+
+def test_live_seeding_retains_held_qualifying_names_real_strategy(monkeypatch):
+    """Regression for the sim-vs-live divergence (issue #3) on the REAL
+    production strategy: any QUALIFYING name the live account already holds
+    must be RETAINED when the signal is seeded from live positions — never
+    rotated out for a from-scratch re-pick. This is the order-level property
+    behind the 2026-06-01 phantom churn (sold FEDERALBNK/BHARATFORG to buy
+    TITAN/SHRIRAMFIN despite the live book already holding qualifying names).
+    """
+    import numpy as np
+
+    # 20 monotonically-rising synthetic names (decreasing slope) → all pass the
+    # momentum-quality gate; the feed ends on a real rebalance Friday.
+    idx = pd.bdate_range("2025-04-01", "2026-05-29")  # >253 bars; ends Fri 2026-05-29
+    names = [f"N{i + 1:02d}" for i in range(20)]
+    fake_feeds = {}
+    for i, t in enumerate(names):
+        close = 100.0 + (len(names) - i) * np.arange(len(idx), dtype=float)
+        fake_feeds[t] = pd.DataFrame(
+            {"open": close, "high": close * 1.001, "low": close * 0.999,
+             "close": close, "volume": 1_000_000},
+            index=idx,
+        )
+    monkeypatch.setattr("scripts.signal_today._load_feeds", lambda s, e, t: fake_feeds)
+    monkeypatch.setattr("scripts.signal_today.get_universe_at", lambda d: list(names))
+
+    tdate = date(2026, 6, 1)  # decision bar = last feed bar = Fri 2026-05-29 (rebalance)
+
+    # From-scratch: the strategy re-picks its own book and (being budget/cap
+    # bounded) does NOT hold every name.
+    scratch = {r["ticker"] for r in generate_signals(target_date=tdate)["targets"]}
+    assert scratch, "from-scratch produced no targets (rebalance did not fire?)"
+    not_held = sorted(set(names) - scratch)
+    assert len(not_held) >= 2, "from-scratch held everything; can't observe rotation"
+
+    # Seed the live book with TWO qualifying names the from-scratch path dropped.
+    seed_names = not_held[:2]
+    seeded = {
+        r["ticker"]
+        for r in generate_signals(
+            target_date=tdate,
+            current_positions={n: 10 for n in seed_names},
+            current_cash=100_000.0,
+        )["targets"]
+    }
+
+    # The fix: those held qualifying names are RETAINED, not phantom-rotated.
+    for n in seed_names:
+        assert n not in scratch, f"{n} should be absent from the from-scratch pick"
+        assert n in seeded, f"{n} (held + qualifying) must be retained when seeded"
+    assert seeded != scratch  # the live seed genuinely changes the outcome
+
+
+def test_carry_forward_fractions_match_live_book_non_rebalance(monkeypatch):
+    """Regression for the 2026-06-02 over-leverage bug: on a NON-rebalance day
+    the live-seeded carry-forward must report each held name at its TRUE equity
+    fraction, not a value inflated by a stale broker total. The bug divided each
+    position by cash-only (seeded positions never filled, so the broker's cached
+    value excluded them), ~doubling every fraction and levering the paper book
+    to ~80% gross. Equity must be cash + marked positions.
+    """
+    idx = pd.bdate_range("2025-05-01", "2026-06-01")  # ends Mon 2026-06-01 (non-rebalance)
+    prices = {"AAA": 100.0, "BBB": 200.0, "CCC": 50.0}
+    fake_feeds = {
+        t: pd.DataFrame(
+            {"open": p, "high": p * 1.001, "low": p * 0.999, "close": p,
+             "volume": 1_000_000},
+            index=idx,
+        )
+        for t, p in prices.items()
+    }
+    monkeypatch.setattr("scripts.signal_today._load_feeds", lambda s, e, t: fake_feeds)
+    monkeypatch.setattr("scripts.signal_today.get_universe_at", lambda d: list(prices))
+
+    # Held book: AAA 100×100=10k, BBB 50×200=10k, CCC 100×50=5k → positions 25k;
+    # cash 75k → equity 100k. True fractions: 0.10 / 0.10 / 0.05 (gross 0.25).
+    live = {"AAA": 100, "BBB": 50, "CCC": 100}
+    res = generate_signals(
+        target_date=date(2026, 6, 2),
+        current_positions=live, current_cash=75_000.0,
+    )
+    frac = {r["ticker"]: r["target_fraction"] for r in res["targets"]}
+    assert frac["AAA"] == pytest.approx(0.10, abs=0.005)   # 10k/100k — NOT 0.133 (the bug)
+    assert frac["BBB"] == pytest.approx(0.10, abs=0.005)
+    assert frac["CCC"] == pytest.approx(0.05, abs=0.005)
+    assert sum(frac.values()) == pytest.approx(0.25, abs=0.01)  # true gross, not ~0.33

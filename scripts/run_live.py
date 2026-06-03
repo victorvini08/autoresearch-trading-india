@@ -162,6 +162,30 @@ def run(
         _safe_report(skip_summary, premarket_payload=None)
         return 1, skip_summary
 
+    # Pre-flight: trading-day guard. NSE is closed on weekends, so neither
+    # dhan-paper nor dhan-live should execute on a Saturday/Sunday. The
+    # launchd plist has NO Weekday restriction, so without this guard the
+    # 10:15 job fires every calendar day — it ran on Saturday 2026-05-30 and
+    # the mock broker "filled" orders against a closed market, churning the
+    # paper validation track record on a non-session. (Holidays are handled
+    # downstream: a non-session never advances the price feed, and the
+    # live-seeded signal re-derives the held book as its own target, so a
+    # stale-feed re-run produces ~0 orders rather than phantom churn.)
+    if today_ist.weekday() >= 5:  # 5 = Saturday, 6 = Sunday
+        skip_summary = ExecutionSummary(
+            mode=mode,
+            as_of_date=today_ist,
+            fill_date=None,
+            skipped=True,
+            skipped_reason=(
+                f"{today_ist.isoformat()} is a weekend "
+                f"({today_ist.strftime('%A')}); NSE is closed — no execution."
+            ),
+        )
+        _log_skip_summary(skip_summary)
+        _safe_report(skip_summary, premarket_payload=None)
+        return 0, skip_summary
+
     # Pre-flight: execution window. Both Indian modes (dhan-paper and
     # dhan-live) are intraday signal-on-T fills-on-T; enforce window on
     # both. (In the US repo this gate was skipped for paper-mode because

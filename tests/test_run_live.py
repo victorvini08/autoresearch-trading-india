@@ -207,6 +207,57 @@ def test_premarket_scan_payload_loaded_when_present(env, monkeypatch):
     assert "gap-flagged" in body
 
 
+def test_weekend_run_is_skipped(env, monkeypatch):
+    """NSE is closed on weekends; run_live must skip Sat/Sun WITHOUT building
+    or invoking the executor. The launchd plist has no Weekday restriction, so
+    this guard is the only thing preventing a Saturday/Sunday run from churning
+    the paper book against a closed market (observed live on 2026-05-30)."""
+    monkeypatch.setattr(run_live, "_within_execution_window", lambda now: True)
+    monkeypatch.setattr(daily_report, "REPORTS_DIR", env["reports_dir"])
+    monkeypatch.setattr(dashboard, "REPORTS_DIR", env["reports_dir"])
+    monkeypatch.setattr(daily_report.portfolio_db, "DEFAULT_DB_PATH", env["db_path"])
+    monkeypatch.setattr(dashboard.portfolio_db, "DEFAULT_DB_PATH", env["db_path"])
+
+    def _must_not_build(mode):
+        raise AssertionError("executor must NOT be built on a weekend")
+    monkeypatch.setattr(run_live, "_build_executor", _must_not_build)
+
+    # 2026-05-30 is a Saturday
+    code, summary = run_live.run(mode="dhan-paper", today_ist=date(2026, 5, 30))
+    assert code == 0
+    assert summary.skipped is True
+    assert "weekend" in summary.skipped_reason.lower()
+    assert "Saturday" in summary.skipped_reason
+
+    # 2026-05-31 is a Sunday
+    _, summary_sun = run_live.run(mode="dhan-paper", today_ist=date(2026, 5, 31))
+    assert summary_sun.skipped is True
+    assert "Sunday" in summary_sun.skipped_reason
+
+
+def test_weekday_passes_trading_day_guard(env, monkeypatch):
+    """A normal weekday (Monday) must NOT be skipped by the weekend guard —
+    it must reach the executor."""
+    monkeypatch.setattr(run_live, "_within_execution_window", lambda now: True)
+    reached = {"executor": False}
+
+    def _exec(mode):
+        reached["executor"] = True
+        return _stub_executor()
+    monkeypatch.setattr(run_live, "_build_executor", _exec)
+    monkeypatch.setattr(run_live, "_resolve_target_date",
+                        lambda mode, today, prices_db=None: date(2026, 6, 1))
+    monkeypatch.setattr(daily_report, "REPORTS_DIR", env["reports_dir"])
+    monkeypatch.setattr(dashboard, "REPORTS_DIR", env["reports_dir"])
+    monkeypatch.setattr(daily_report.portfolio_db, "DEFAULT_DB_PATH", env["db_path"])
+    monkeypatch.setattr(dashboard.portfolio_db, "DEFAULT_DB_PATH", env["db_path"])
+
+    # 2026-06-01 is a Monday
+    code, summary = run_live.run(mode="dhan-paper", today_ist=date(2026, 6, 1))
+    assert reached["executor"] is True
+    assert summary.skipped is False
+
+
 def test_within_execution_window_helper():
     """Window is 10:15-15:00 IST. premarket_scan @ 10:00 publishes the
     yfinance gap-JSON; run_live consumes it 15 min later."""
