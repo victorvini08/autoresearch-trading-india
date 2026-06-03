@@ -30,7 +30,7 @@ from __future__ import annotations
 
 import argparse
 import sys
-from datetime import date
+from datetime import date, datetime, time as dtime
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
@@ -90,6 +90,34 @@ def _isolate_state(sandbox: Path) -> Path:
     return pf
 
 
+def _restamp_ledger_to_sim_date(pf: Path, sim_date: date, real_today: date) -> None:
+    """Re-stamp the cash-ledger rows the executor just wrote so their timestamp
+    is the SIMULATED trading date, not the real wall-clock run time.
+
+    The executor stamps cash_ledger.entry_at with datetime.now() (correct in
+    production, where now ~ the trading day). Under historical replay that makes
+    every entry land on the run date, so get_cash_balance(as_of=<past date>) —
+    which filters CAST(entry_at AS DATE) <= as_of — excludes them and returns
+    the UN-DEBITED initial cash. load_state then reports a phantom equity (cash
+    never spent + position marks), inflating the peak and manufacturing a false
+    drawdown that trips the max-DD halt (observed: a spurious −15.69% halt on a
+    book that was actually ~−3%). Rows from prior days are already re-stamped to
+    their own (past) dates, so matching on the real run date catches only the
+    rows written by THIS execute_day call. (submitted_orders.as_of_date is
+    already stamped with the simulated date by the executor, so it needs no fix.)
+    """
+    conn = portfolio_db.connect(pf)
+    try:
+        ts = datetime.combine(sim_date, dtime(15, 30))
+        conn.execute(
+            "UPDATE cash_ledger SET entry_at = ?, as_of_date = ? "
+            "WHERE mode = 'dhan-paper' AND CAST(entry_at AS DATE) = ?",
+            [ts, sim_date, real_today],
+        )
+    finally:
+        conn.close()
+
+
 def _equity_now(pf: Path, as_of: date) -> tuple[float, float, float]:
     """(cash, invested_mark, equity) from the sandbox at end of `as_of`."""
     cash = portfolio_db.get_cash_balance(portfolio_db.connect(pf), mode="dhan-paper")
@@ -129,6 +157,11 @@ def run_replay(start: date, end: date, sandbox: Path) -> dict:
     for D in days:
         ex = DhanExecutor(mode="dhan-paper", portfolio_db=pf, prices_db=PRICES_DB)
         summary = ex.execute_day(D, skips=set())
+        # Faithful clock: re-stamp the cash-ledger rows just written to the
+        # SIMULATED date so the per-date equity/peak/drawdown (and thus the
+        # max-DD halt) compute correctly under replay. Captured fresh each
+        # iteration so a midnight rollover during a long run is harmless.
+        _restamp_ledger_to_sim_date(pf, D, date.today())
         try:
             daily_report.generate(summary, db_path=pf, reports_dir=reports_dir)
         except Exception as e:  # noqa: BLE001 — report is cosmetic; don't abort the run
