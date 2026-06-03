@@ -168,6 +168,38 @@ def _query_bucket(*, modes: tuple[str, ...], db_path: Path | None) -> dict:
     }
 
 
+def _holdings_summary(positions: list[dict]) -> tuple[float, float]:
+    """(current_value, invested) for the HOLDINGS card, BOTH derived from the
+    SAME positions list so they always cover the identical share set.
+
+    The card's total return is ``current_value − invested``; that subtraction
+    is only meaningful if both operands describe the same shares. Historically
+    ``current_value`` came from the ``broker_positions`` snapshot while
+    ``invested`` came from an independent all-open-lots query over
+    ``position_lots`` — two tables that can momentarily disagree about what's
+    held (a mid-day partial sell, or an out-of-band lot edit). When they
+    desynced the card showed a fabricated double-digit return on a flat
+    account (2026-06-03: a phantom +22% because the snapshot still counted a
+    name whose lots were already sold to zero). Deriving both numbers from
+    this one list makes that class of bug impossible.
+
+    ``avg_buy_price`` is the per-share cost basis joined from the open lots; a
+    displayed position with no matching open lot (cost basis unknown) falls
+    back to its mark price so it contributes 0 return rather than ∞%.
+    """
+    current_value = sum(p["mark_value"] or 0.0 for p in positions)
+    invested = sum(
+        (p.get("qty") or 0.0)
+        * (
+            p["avg_buy_price"]
+            if p.get("avg_buy_price") is not None
+            else (p.get("mark_price") or 0.0)
+        )
+        for p in positions
+    )
+    return float(current_value), float(invested)
+
+
 def _query_one_day(conn, *, modes: tuple[str, ...], d: date) -> dict:
     """All-cells query for one (date, bucket) combo."""
     placeholders = ",".join(["?"] * len(modes))
@@ -341,18 +373,14 @@ def _query_one_day(conn, *, modes: tuple[str, ...], d: date) -> dict:
         }
         for t, q, mp, mv, mode, sd, ab in pos_rows
     ]
-    positions_mark = sum(p["mark_value"] or 0 for p in positions)
-    # Invested value = sum of (qty_open × buy_price) across currently open
-    # lots, for every mode in the bucket. This is what we ACTUALLY PAID for
-    # the still-held shares (slippage + ref-price baked in via buy_price).
-    # Total return = mark - invested; per-position view of execution-cost
-    # drag and mark-to-market P&L without the cash side polluting it.
-    invested_row = conn.execute(
-        f"SELECT COALESCE(SUM(qty_open * buy_price), 0.0) "
-        f"FROM position_lots WHERE mode IN ({placeholders}) AND qty_open > 0",
-        [*modes],
-    ).fetchone()
-    positions_invested = float(invested_row[0] or 0.0)
+    # CURRENT VALUE (mark) and INVESTED (cost basis) are BOTH derived from the
+    # same `positions` list here, so the holdings card's total return
+    # (mark − invested) can never be fabricated by a broker_positions-vs-
+    # position_lots desync. The old form summed invested from an independent
+    # all-open-lots query, which covered a DIFFERENT share set than the
+    # snapshot whenever the two tables disagreed about what's held — producing
+    # a phantom return on a flat account (2026-06-03). See _holdings_summary.
+    positions_mark, positions_invested = _holdings_summary(positions)
 
     # Cash + peak + today-PnL across all modes in the bucket.
     # We sum across modes; the assumption is one bucket = one logical

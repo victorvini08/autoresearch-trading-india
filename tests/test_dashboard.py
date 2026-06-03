@@ -323,3 +323,80 @@ def test_cli_main_runs(seeded_both_buckets, tmp_path, monkeypatch, capsys):
     assert rc == 0
     assert "dashboard" in capsys.readouterr().out.lower()
     assert (tmp_path / "reports" / "dashboard.html").exists()
+
+
+# --------- holdings card: mark/invested same-share-set invariant ---------
+
+def _query_day_isolated(conn, monkeypatch, *, d, modes=("dhan-paper",)):
+    """Call _query_one_day on the seeded conn, stubbing the two helpers that
+    open their OWN db connections (they'd otherwise hit the default DB)."""
+    monkeypatch.setattr(dashboard, "_reconciliation_for_day", lambda *a, **k: None)
+    monkeypatch.setattr(dashboard, "_trade_context_for_day", lambda *a, **k: None)
+    monkeypatch.setattr(dashboard, "_safety_state_for_day", lambda *a, **k: None)
+    return dashboard._query_one_day(conn, modes=modes, d=d)
+
+
+def test_holdings_invested_covers_only_displayed_positions(tmp_path, monkeypatch):
+    """Regression (2026-06-03 phantom +22%): the HOLDINGS card's CURRENT VALUE
+    (broker_positions snapshot) and INVESTED must cover the SAME share set.
+
+    Seed a desync — position_lots holds a name (BBB) the snapshot doesn't — and
+    assert INVESTED reflects ONLY the displayed (snapshot) positions, not the
+    extra lot. The old all-open-lots query summed BBB's cost into invested,
+    so total_return = mark - invested was computed over two different books
+    and fabricated a double-digit return on a flat account.
+    """
+    db_path = tmp_path / "portfolio.duckdb"
+    monkeypatch.setattr(portfolio_db, "HALT_FILE_PATH", tmp_path / "halt.json")
+    conn = portfolio_db.connect(db_path)
+    portfolio_db.init_schema(conn)
+    d = date(2026, 6, 3)
+    conn.execute(
+        "INSERT INTO cash_ledger VALUES (?, ?, ?, ?, ?, ?, ?)",
+        ["dep", datetime(2026, 5, 1), None, "deposit", 100000.0, "seed", "dhan-paper"],
+    )
+    # Snapshot holds ONLY AAA: 10 @ mark 100 = 1000
+    conn.execute(
+        "INSERT INTO broker_positions VALUES (?, ?, ?, ?, ?, ?, ?)",
+        [d, "AAA", 10.0, 90.0, 100.0, 1000.0, "dhan-paper"],
+    )
+    # Lots hold AAA (10 @ 90 = 900 cost) AND BBB (5 @ 200 = 1000 cost).
+    # BBB is NOT in the snapshot — the desync.
+    conn.execute(
+        "INSERT INTO position_lots VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        ["lot_aaa", "AAA", "f_aaa", d, 90.0, 10.0, 10.0, "dhan-paper"],
+    )
+    conn.execute(
+        "INSERT INTO position_lots VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        ["lot_bbb", "BBB", "f_bbb", d, 200.0, 5.0, 5.0, "dhan-paper"],
+    )
+
+    day = _query_day_isolated(conn, monkeypatch, d=d)
+    conn.close()
+
+    assert day["positions_mark_inr"] == pytest.approx(1000.0)
+    # INVESTED = AAA cost basis ONLY (10*90=900), NOT 900 + BBB's 1000.
+    assert day["positions_invested_inr"] == pytest.approx(900.0), (
+        "invested must cover the displayed (snapshot) positions, not all open lots"
+    )
+    # Therefore total return is sane (+100), not the fabricated -900.
+    assert (
+        day["positions_mark_inr"] - day["positions_invested_inr"]
+    ) == pytest.approx(100.0)
+
+
+def test_holdings_summary_self_consistent_and_null_costbasis_fallback():
+    """Unit: _holdings_summary derives both numbers from one list; a position
+    with no cost basis (avg_buy_price None — e.g. a snapshot name whose lots
+    are closed) falls back to its mark, contributing 0 return rather than ∞%."""
+    positions = [
+        {"ticker": "AAA", "qty": 10.0, "mark_price": 100.0,
+         "mark_value": 1000.0, "avg_buy_price": 90.0},
+        {"ticker": "BBB", "qty": 5.0, "mark_price": 200.0,
+         "mark_value": 1000.0, "avg_buy_price": None},
+    ]
+    mark, invested = dashboard._holdings_summary(positions)
+    assert mark == pytest.approx(2000.0)
+    # AAA: 10*90=900 ; BBB: no cost basis -> falls back to mark 5*200=1000 (0 return)
+    assert invested == pytest.approx(1900.0)
+    assert mark - invested == pytest.approx(100.0)  # all from AAA, none fabricated
