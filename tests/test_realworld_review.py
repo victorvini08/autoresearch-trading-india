@@ -190,3 +190,70 @@ def test_output_json_stored_in_audit(tmp_path):
     audit = realworld_db.get_audit(rw, "rev-1")
     assert "observations" in audit["output_json"]
     rw.close()
+
+
+# ---- maybe_run_monthly_review (the gate daily_report calls) --------------
+
+from storage import portfolio_db
+
+
+def _seed_strategy_target(path, d):
+    conn = portfolio_db.connect(path)
+    portfolio_db.upsert_target(conn, as_of_date=d, ticker="RELIANCE",
+                               target_fraction=0.1, source="strategy",
+                               mode="dhan-paper")
+    conn.close()
+
+
+def _maybe(provider, today, tmp_path, **over):
+    kw = dict(
+        d=today,
+        mode="dhan-paper",
+        provider=provider,
+        portfolio_db_path=tmp_path / "p.duckdb",
+        realworld_db_path=tmp_path / "rw.duckdb",
+        journal_path=tmp_path / "j.md",
+        now=datetime(today.year, today.month, today.day, 16, 0, 0),
+        review_id="rev-1",
+        review_input=_ri(n_realized_trades=0),
+    )
+    kw.update(over)
+    return review.maybe_run_monthly_review(**kw)
+
+
+def test_maybe_run_fires_on_trigger_day(tmp_path):
+    # Jun 1 = execution day of May's last rebalance signal (Fri May 29).
+    _seed_strategy_target(tmp_path / "p.duckdb", date(2026, 6, 1))
+    prov = FakeProvider(json.dumps({"observations": ["ok"], "hypotheses": []}))
+    res = _maybe(prov, date(2026, 6, 1), tmp_path)
+    assert res is not None and res.review_id == "rev-1"
+
+
+def test_maybe_run_skips_when_not_rebalanced(tmp_path):
+    portfolio_db.connect(tmp_path / "p.duckdb").close()  # empty ledger
+    prov = FakeProvider()  # zero responses => must not be called
+    assert _maybe(prov, date(2026, 6, 1), tmp_path) is None
+    assert prov.calls == 0
+
+
+def test_maybe_run_skips_on_midmonth_rebalance(tmp_path):
+    _seed_strategy_target(tmp_path / "p.duckdb", date(2026, 6, 15))
+    prov = FakeProvider()
+    assert _maybe(prov, date(2026, 6, 15), tmp_path) is None
+    assert prov.calls == 0
+
+
+def test_maybe_run_skips_when_already_reviewed_today(tmp_path):
+    _seed_strategy_target(tmp_path / "p.duckdb", date(2026, 6, 1))
+    rw = realworld_db.connect(tmp_path / "rw.duckdb")
+    realworld_db.insert_audit(
+        rw, review_id="prev", run_at=datetime(2026, 6, 1, 9, 0, 0),
+        mode="dhan-paper", trigger="monthly", input_snapshot_hash="h",
+        prompt_version="v1", model_id="m", output_json="{}",
+        validator_version="v1", validator_result="passed",
+        validator_failures_json="[]", n_realized_trades=0,
+        safety_state="NORMAL", cold_start=True)
+    rw.close()
+    prov = FakeProvider()
+    assert _maybe(prov, date(2026, 6, 1), tmp_path) is None
+    assert prov.calls == 0

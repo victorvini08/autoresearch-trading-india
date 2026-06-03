@@ -340,6 +340,20 @@ def main(argv: list[str] | None = None) -> int:
     except Exception as e:  # noqa: BLE001 — cron must not abort on safety eval
         print(f"[safety] FAILED (non-fatal): {type(e).__name__}: {e}")
 
+    # Step 4.e: monthly LLM review. Fires ONLY on the month's last
+    # rebalance-execution day (otherwise returns immediately, never touching
+    # the LLM) and at most once per day. Non-fatal and folded in here so we
+    # don't add a launchd job — same pattern as the safety block above.
+    try:
+        from scripts.realworld_review import maybe_run_monthly_review
+        res = maybe_run_monthly_review(d=args.date, mode=args.mode)
+        if res is not None:
+            print(f"[review] {res.review_id} result={res.validator_result} "
+                  f"cold_start={res.cold_start} accepted={res.n_accepted} "
+                  f"rejected={res.n_rejected}")
+    except Exception as e:  # noqa: BLE001 — cron must not abort on the review
+        print(f"[review] FAILED (non-fatal): {type(e).__name__}: {e}")
+
     return 0
 
 

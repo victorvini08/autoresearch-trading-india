@@ -292,6 +292,48 @@ def run_review(
     )
 
 
+def maybe_run_monthly_review(
+    *,
+    d: date,
+    mode: str = "dhan-paper",
+    provider=None,
+    portfolio_db_path: Path | str | None = None,
+    realworld_db_path: Path | str | None = None,
+    journal_path: Path | str | None = None,
+    now: datetime | None = None,
+    review_id: str | None = None,
+    review_input: ReviewInput | None = None,
+) -> ReviewRunResult | None:
+    """The gate daily_report calls each trading day. Runs the review only on
+    the month's last rebalance-execution day, and only once per day. Returns
+    None when it's not the trigger day (and never touches the LLM then)."""
+    from scripts import review_schedule as sched
+    from storage import portfolio_db as pdb
+
+    pconn = pdb.connect(portfolio_db_path) if portfolio_db_path else pdb.connect()
+    try:
+        rebalanced = sched.rebalanced_on(pconn, d, mode)
+    finally:
+        pconn.close()
+    if not sched.is_review_trigger_day(d, rebalanced_today=rebalanced):
+        return None
+
+    rw_path = (Path(realworld_db_path) if realworld_db_path is not None
+               else realworld_db.DEFAULT_DB_PATH)
+    rw = realworld_db.connect(rw_path)
+    try:
+        if sched.already_reviewed_on(rw, mode, d):
+            return None
+    finally:
+        rw.close()
+
+    return run_review(
+        d=d, mode=mode, provider=provider, trigger="monthly",
+        review_input=review_input, realworld_db_path=rw_path,
+        journal_path=journal_path, now=now, review_id=review_id,
+    )
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="Run the monthly LLM review (read-only).")
     ap.add_argument("--date", default=date.today().isoformat())
