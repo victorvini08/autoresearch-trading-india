@@ -2,15 +2,17 @@
 
 LLM-driven autoresearch swing-trading system for Indian equities, delivery (CNC) only, via the Dhan HQ Trading API. Inherits architecture from `autoresearch-trading-us` (archived); the data/broker/strategy/cost layers are India-specific.
 
-**Current phase:** v1 paper-only (`dhan-paper`), built against an in-memory mock Dhan client. Live execution (`dhan-live`) is built but disabled by `halt.json` until 4 weeks of clean paper validation.
+**Current phase:** v1 paper-only (`dhan-paper`), built against an in-memory mock Dhan client (`DHAN_MOCK=1`). Live execution (`dhan-live`) is built but disabled by `state/halt.json` until 4 weeks of clean paper validation. A **real-world paper-trading + self-improving review layer** now sits on top (daily reconciliation, a deterministic safety state machine, a month-end LLM review gated by deterministic policy checks, and a faithful replay harness). The nightly autoresearch loop is **NOT** scheduled — `strategy.py` is locked; any strategy evolution is on-demand only.
 
-> **Branch `mean-reversion-quant-strategy` (parallel experiment):** on this
-> branch `strategy.py` is `IndiaResidualReversalStatArb` — a long-only
-> short-horizon residual mean-reversion stat-arb book, the structural
-> inverse of `main`'s momentum strategy. It runs its own isolated
-> autoresearch loop (own `journal.md`/`program.md`) so the two experiments
-> cannot converge. The locked-decisions table below documents `main`'s
-> momentum rationale and is intentionally left intact for reference.
+> **Branch state (2026-06-03 consolidation):** `main` is the **SOLE canonical
+> branch**. The locked strategy is **`IndiaMomentumQualityCarry`** in
+> `strategy.py` (cross-sectional 12-1 momentum-quality; see the locked-decisions
+> table). The parallel experiment branches (`mean-reversion-quant-strategy`,
+> `realworld-autoresearch`, `production-strategy`) have been merged/deleted —
+> all of that work is now on `main`. NOTE: `strategy.py`'s *module docstring*
+> still carries the obsolete "Strategy B / Branch: mean-reversion-quant-strategy"
+> label from that experiment; the class on `main` is `IndiaMomentumQualityCarry`
+> (the label is cosmetic/stale, not the actual signal).
 
 ---
 
@@ -37,12 +39,12 @@ LLM-driven autoresearch swing-trading system for Indian equities, delivery (CNC)
 | Broker | **Dhan HQ Trading API** (free brokerage on delivery) | docs/superpowers/specs/2026-05-14-india-autoresearch-trading-design.md §3 |
 | Price data | **NSE bhav archive** (free public ZIPs) | Dhan Data API is paid ₹500/mo — we don't use it |
 | Universe | **Top 200 by 20-day ADV, point-in-time from the full NSE EQ bhav** (survivorship-free; the current Nifty 500 list is sector/ISIN enrichment only, NOT the membership gate) | 2026-05-15 audit: using today's Nifty 500 list historically censored 293 delisted names → inflated momentum backtest. PIT membership from price history fixes it with data we already have |
-| Strategy shape | Cross-sectional 12-1 momentum-quality **selection** → **bounded gross-targeting** construction (deploy intended gross down the ranked list, per-name ≤ `_MAX_NAME_WEIGHT`=10% AND per-sector ≤25%) → **volatility-targeted gross** (`clip(0.12/realised_mkt_vol_ann, 0, 0.99)`). KEPT 2026-05-18 (Improvement GH). | Theory-backed (Jegadeesh-Titman / Asness / Novy-Marx selection; Barroso–Santa-Clara 2015 & Moreira–Muir 2017 vol-managed momentum). Replaces the old fixed-slot `gross/n_positions` + 4-step `breadth_scaled_gross`, which only ever deployed ~24% (see sector-wiring row). Held-out sealed +12.07% vs Nifty −1.94%, scale-robust at ₹5L. |
+| Strategy shape | Class **`IndiaMomentumQualityCarry`**. Cross-sectional 12-1 momentum-quality **selection** → **bounded gross-targeting** construction (deploy intended gross down the ranked list, per-name ≤ `_MAX_NAME_WEIGHT`=10% AND per-sector ≤25%) → **downside-vol-targeted gross** (`clip(0.12/downside_vol_ann, 0, 0.99)`, where the risk input is the **MAX of a slow ~6m and fast ~1m downside semi-deviation** of the held book — `vol_targeted_gross`/`_dual_horizon_realised_vol`) → a between-rebalance **structural MA exit** (`_apply_structural_exit`: sell a held name once it closes below its ~190-day trend MA). KEPT 2026-05-18 (Improvement GH) + 2026-05-19 (downside-vol estimator). | Theory-backed (Jegadeesh-Titman / Asness / Novy-Marx selection; Barroso–Santa-Clara 2015 & Moreira–Muir 2017 downside-vol-managed momentum; Daniel-Moskowitz 2016 crash precursor → fast/slow MAX). Replaces the old fixed-slot `gross/n_positions` + `breadth_scaled_gross` (deployed only ~24%; see sector-wiring row). **Sealed reveal correction:** the original "+12.07% vs Nifty −1.94%" was later found to be a GOLD/SILVER **ETF leak** (SILVERBEES/GOLDBEES rode the 2025-26 risk-off); the de-leaked equity-only sealed is ≈ **−2.8% vs Nifty −1.94%**, maxDD **9.2% < 14.8%**. The genuine, robust edge is **drawdown protection, NOT return alpha** (the book runs ~46% deployed with ~symmetric ~0.28 up/down capture and lags sustained bulls by design; ≥5 alpha levers tested + rejected as non-robust). Scale-robust at ₹5L. |
 | **Sector-wiring fix** (root cause) | `_load_sector_map` sources per-ticker industry from the **PIT universe DB** (point-in-time-safe enrichment), NOT the feed attribute. | The backtest/live `bt.feeds.PandasData` never carried an industry attr, so every name was 'OTHER' → the 25% sector cap was a hidden **25% whole-book net-exposure ceiling** in EVERY pre-2026-05-18 backtest AND live. **All pre-2026-05-18 results, gates, and A–F reverts are VOID** — re-test any "burned" idea on the corrected engine. |
-| Anti-overfit gates | Sealed 2024-26 test, Bonferroni p-correction, RW Monte Carlo, parsimony budget, sub-period stationarity, cost-aware Sortino | **NEW for India**; addresses US multi-strategy overfit failure |
-| Rebalance cadence | **Biweekly** (alternate Fridays) | User-specified |
-| Starting capital | ₹50,000 paper. Position count is now an *outcome* of bounded gross-targeting (~10–15 names when fully invested at the 10% per-name cap), not a fixed 5–6. | DP-charge optimization, now subordinate to the 10% concentration limit |
-| LLM stack | Claude Code SDK: **Opus 4.7** for autoresearch loop, **Sonnet 4.6** for classifiers; Qwen3 fallback | Subscription-bounded cost; cache keyed by `(date, ticker, prompt_hash, model_id)` |
+| Anti-overfit gates | Sealed **2025-01-01 → 2026-05-14** test, Bonferroni p-correction, RW Monte Carlo, parsimony budget, sub-period stationarity, cost-aware Sortino | **NEW for India**; addresses US multi-strategy overfit failure |
+| Rebalance cadence | **Biweekly** (alternate Fridays), anchored to a fixed parity constant `_REBALANCE_PARITY=0` so the rebalance-Friday set is reproducible across runs (fixes the 2026-05-26 parity-drift incident — NOT a tunable knob) | User-specified |
+| Starting capital | **₹1,00,000** paper account (`dhan-paper`; raised from ₹50k). NOTE: the `prepare.py` walk-forward evaluator still uses **₹50k** as its `INITIAL_CASH` base, and variants are additionally validated at ≥10× (₹5L). Position count is an *outcome* of bounded gross-targeting (~10–15 names when fully invested at the 10% per-name cap), not a fixed 5–6. | DP-charge optimization, now subordinate to the 10% concentration limit |
+| LLM stack | Claude Code SDK: **Opus** for the (now on-demand, **unscheduled**) autoresearch loop, **Sonnet** for classifiers; Qwen3 fallback. Current models: Opus 4.8 / Sonnet 4.6. NOTE: the locked `strategy.py` is **purely price-derived** — it does NOT read the LLM classifier features; those feed the research loop and the monthly review, not the live signal. | Subscription-bounded cost; cache keyed by `(date, ticker, prompt_hash, model_id)` |
 | Live mode | Built but disabled (`halt.json` defaults to halted=true for `dhan-live`) | 4-week paper validation gate |
 | News sources | **5 trusted free**: MoneyControl, Pulse RSS, NSE filings, RBI press, SEBI press | No paid APIs |
 
@@ -51,14 +53,14 @@ LLM-driven autoresearch swing-trading system for Indian equities, delivery (CNC)
 ## Hard constraints (real money risk if violated)
 
 1. **Never enable `dhan-live` mode without explicit user approval AND a successful 4-week `dhan-paper` validation run** logged in `iterations/log.csv` and `journal.md`. The `halt.json` mechanism is the gate.
-2. **All orders must carry the SEBI algo ID stamp** (`$SEBI_ALGO_ID` env var) per the 2026-04-01 retail algo framework. Orders without it are non-compliant.
+2. **SEBI algo-ID stamp is OPTIONAL** (confirmed 2026-06-04). When `$SEBI_ALGO_ID` is set, every order carries it (per the 2026-04-01 retail algo framework); a missing stamp does **not** block orders — the executor treats it as optional (commit `80f77fe` relaxed the old B7 hard-fail). Set it if you have one; it is not required to paper- or live-trade at our OPS level.
 3. **Strategy uses `order_target_percent` only** (no `self.buy()` / `self.close()`). Required by `scripts/signal_today.py`'s capture logic.
 4. **FRACTION_CHANGE_THRESHOLD = 0.005** on `target_fraction` (not `target_qty`) suppresses mark-drift churn. Do not remove.
 5. **Cash-ledger entries write on `fill_date`, not `signal_date`** (US repo learnings §4.3 — get_cash over-counts if we use signal_date).
 6. **Journal parser uses literal-line match for `**Decision:** KEPT`** — never substring (US repo learnings §4.4).
 7. **LLM cache rows are still WRITTEN keyed by `model_id`** (audit/ablation provenance preserved). But as of 2026-05-15 (explicit user decision) the precompute cache-SKIP lookup is **model-agnostic by default**: a cell already classified by ANY provider is reused, so a Codex-filled half-cache is *continued* by a later Claude run instead of recomputed. This matches `llm.features` reading the cache model-agnostically (these coarse 4-class/[-1,1]/7-flag outputs are treated as model-interchangeable). Set `LLM_STRICT_MODEL_CACHE=1` to restore strict per-model isolation for a clean single-model ablation. (Supersedes the original "swapping models invalidates the slice" rule.)
 8. **Anti-overfit gates are atomic.** A variant that fails ANY gate is REJECTED, not partially accepted.
-9. **Sealed test set (2024-01 → 2026-05) is revealed ONCE per promotion** — no retries on the same variant.
+9. **Sealed test set (2025-01-01 → 2026-05-14, per `prepare.py`) is revealed ONCE per promotion** — no retries on the same variant. The sealed reveal has **already been SPENT** on the locked book, so a genuinely new finalist needs fresh out-of-sample confirmation (forward paper), not a sealed re-reveal.
 10. **Concentration is bounded by `construct_gross_targets`, not by `len(selected)` sizing.** The §-old "never size from `len(selected)`" blow-up rule is now *enforced structurally*: deployment walks the ranked list bounded by per-name ≤ `_MAX_NAME_WEIGHT` (10%) AND per-sector ≤ 25%, so a 1-name regime puts ≤10% in that name (rest stays cash) — strictly safer than the old scheme. Do not reintroduce naive `gross/len(selected)` or unbounded per-name weight.
 11. **Validate every variant at ≥10× capital (₹5L), not just ₹50k.** ₹50k sealed wins are routinely small-capital whole-share/concentration lumpiness that collapse at scale (variants E, G). Capital-scale robustness is a mandatory check alongside the atomic gates and the sealed reveal.
 12. **Pre-2026-05-18 backtest numbers and KEEP/REVERT decisions are void** (produced by the sector-wiring bug = accidental 25% whole-book cap). Baseline e745434 / Improvement B are obsolete; their headline metrics were the bug. The "downside protection" of that era was ~75% forced cash, not strategy skill.
@@ -86,9 +88,10 @@ Default on for new accounts. (F&O / commodities are not used; do not enable.)
   need to copy it — the refresher reads it from `/v2/profile` and writes
   `DHAN_CLIENT_ID` into `.env` automatically on first run.
 
-### 4. Register the algo with Dhan (SEBI compliance, mandatory from 2026-04-01)
+### 4. (Optional) Register the algo with Dhan (SEBI algo framework, 2026-04-01)
+This step is **optional** — the system places orders with or without the stamp. Do it only if you want the algo ID on your orders.
 - In the Dhan API portal, register a new "Personal Algo" (NOT "Trading Provider").
-- You'll receive a unique `SEBI_ALGO_ID`. This will be stamped on every order our system places.
+- You'll receive a unique `SEBI_ALGO_ID`, stamped on every order when it is set.
 - Confirm your home IP is static (most ISPs are; check at `whatismyip.com` over 24h). If dynamic, a cheap cloud bastion (Hetzner CX22, ~₹500/mo) is the workaround.
 
 ### 5. Populate `.env`
@@ -115,8 +118,8 @@ uv run python -m scripts.dhan_token_refresh            # validate + renew + rewr
 uv run python -m scripts.dhan_token_refresh --check-only  # just print expiry
 ```
 
-Install the launchd job so it runs daily at 08:45 IST (before the 09:00
-premarket scan):
+Install the launchd job so it runs at **09:00 and 21:00 IST** (the 09:00 run
+precedes the 09:30 daily update and 10:00 premarket scan):
 
 ```
 cp deploy/launchd/com.autoresearch.dhan_token_refresh.plist ~/Library/LaunchAgents/
@@ -135,13 +138,15 @@ https://web.dhan.co and the cron resumes automatically. Verified live
 
 ### Cron / launchd schedule (IST)
 
-| Job | Time | Plist file | What it does |
+| Job | Time (IST) | Plist file | What it does |
 |---|---|---|---|
-| Premarket scan | 09:00 | `deploy/launchd/com.autoresearch.premarket_scan.plist` | Check overnight gaps, India VIX spike, halts |
-| Daily update | 09:15 | `deploy/launchd/com.autoresearch.daily_update.plist` | Ingest yesterday's bhav, news, macro deltas |
-| Run live (rebalance days only) | 10:00 | `deploy/launchd/com.autoresearch.run_live.plist` | Signal → orders → fills → ledger writes |
-| Risk check + daily report | 15:35 | `deploy/launchd/com.autoresearch.daily_report.plist` | Post-close summary |
-| Autoresearch loop | 22:00 | Manual or `deploy/launchd/com.autoresearch.run_overnight.plist` | LLM proposes strategy edit; backtest; KEEP/REVERT |
+| Dhan token refresh | 09:00 & 21:00 | `deploy/launchd/com.autoresearch.dhan_token_refresh.plist` | Validate + renew the 24h Dhan token; rewrite `.env` |
+| Daily update | 09:30 | `deploy/launchd/com.autoresearch.daily_update.plist` | Ingest yesterday's bhav, macro, earnings deltas (runs `--skip-classify`) |
+| Premarket scan | 10:00 | `deploy/launchd/com.autoresearch.premarket_scan.plist` | Check overnight gaps, India VIX spike, halts |
+| Run live | 10:15 | `deploy/launchd/com.autoresearch.run_live.plist` | Signal → orders → fills → ledger writes (no-op on non-rebalance days) |
+| Risk check + daily report | 15:35 | `deploy/launchd/com.autoresearch.daily_report.plist` | Post-close summary; also folds in the daily safety-state eval and the month-end LLM review |
+
+The nightly autoresearch loop is **NOT scheduled** — there is no `run_overnight` plist. `strategy.py` is locked and the system is paper-only; strategy evolution is on-demand (`scripts/loop.py` / `scripts/run_overnight.py` are run manually). All five plists above run via `uv run python -m scripts.<job>`.
 
 NSE trading hours: 09:15 – 15:30 IST. Our execution window for biweekly rebalance is **10:00–15:00 IST** (avoids open-spread chaos and close-auction overlap).
 
@@ -175,23 +180,35 @@ open state/reports/dashboard.html
 ```
 .
 ├── prepare.py            # IMMUTABLE walk-forward evaluator + anti-overfit gates
-├── strategy.py           # LOOP-EDITABLE: 12-1 momentum-quality selection → bounded gross-targeting → vol-targeted gross (sector-fixed)
+├── strategy.py           # LOOP-EDITABLE: IndiaMomentumQualityCarry — 12-1 momentum-quality selection
+│                         #   → bounded gross-targeting → downside-vol-targeted gross + structural MA exit
 ├── program.md            # Goal + constraints (read by autoresearch loop)
-├── journal.md            # Append-only memory of every iteration
+├── journal.md            # Append-only iteration memory (pre-2026-05-16 in journal_pre-2026-05-16_archive.md)
 ├── learnings.md          # Compounding domain insights
+├── PRODUCTION_STRATEGY.md        # Canonical locked-strategy definition + honest caveats
+├── STRATEGY_DEVELOPMENT_PLAN.md  # Goal + guardrails for on-demand strategy development
+├── AGENTS.md             # Mirror of this file (kept byte-identical to CLAUDE.md)
 ├── backtest/             # engine, metrics, risk, costs (Dhan), anti_overfit
 ├── brokers/              # dhan (Trading API), dhan_mock (paper)
-├── data/                 # universe, sectors, quality_screen, ingest_{prices,news,macro,earnings,corp_actions}
+├── data/                 # universe, sectors, quality_screen, safety_state, pead, news_filter, bse,
+│                         #   ingest_{prices,news,macro,earnings,fundamentals,fii_dii_history,corporate_actions,gdelt},
+│                         #   fundamentals_xbrl, realworld_review_validator
 ├── llm/                  # provider, classify, features, cache, prompts (India)
-├── scripts/              # loop, run_live, run_overnight, executors/dhan, sebi_compliance, ...
-├── storage/              # *.duckdb generated (gitignored)
+├── scripts/              # operational + research entrypoints:
+│                         #   run_live, daily_update, premarket_scan, daily_report, dashboard, halt, risk_check, signal_today
+│                         #   reconciliation, safety_evaluator, trade_context            (real-world paper layer)
+│                         #   realworld_context, realworld_review, realworld_validator, review_schedule  (monthly LLM review)
+│                         #   replay_paper (faithful paper replay); eval_variant, capture_ratio, blend_frontier (research instruments)
+│                         #   loop, run_overnight (autoresearch loop — UNSCHEDULED); promote_live; dhan_token_refresh, dhan_smoke
+├── storage/              # portfolio_db.py (paper/real ledger), realworld_db.py (review store); *.duckdb generated (gitignored)
 ├── tests/                # pytest tree
-├── deploy/launchd/       # macOS plists (IST schedules)
+├── deploy/launchd/       # macOS plists (IST schedules — see Daily operation)
 └── docs/
     ├── handoff-india-pivot.md     # carried from US repo (historical)
     ├── learnings-from-us-build.md # carried from US repo (historical)
+    ├── strategy-candidates.md     # parking lot of rigorously-tested-but-not-promoted ideas
     └── superpowers/
-        ├── specs/                 # design spec (this rebuild)
+        ├── specs/                 # design specs (incl. 2026-05-28 realworld-autoresearch)
         └── plans/                 # implementation plans
 ```
 
@@ -207,7 +224,7 @@ open state/reports/dashboard.html
   - FY runs Apr 1 → Mar 31
   - No LRS / Schedule FA / Form 67 / TCS overhead (those are foreign-asset concerns only)
 - **DP charge:** ₹14.75 per scrip per sell (flat). Dominant cost component at our trade size — strategy caps positions to limit total DP drag.
-- **SEBI retail algo framework** (effective 2026-04-01): every order must carry our algo ID; >10 OPS triggers empanelment requirement (we're at ~0.001 OPS, easy).
+- **SEBI retail algo framework** (effective 2026-04-01): the algo-ID stamp is **optional** at our scale — orders carry it when `SEBI_ALGO_ID` is set; >10 OPS triggers the empanelment requirement (we're at ~0.001 OPS, easy).
 
 ---
 

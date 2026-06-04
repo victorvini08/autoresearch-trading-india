@@ -1,10 +1,17 @@
-'''Strategy B - long-only cross-sectional momentum-quality carry.
+'''IndiaMomentumQualityCarry - long-only cross-sectional momentum-quality carry.
 
-Branch: mean-reversion-quant-strategy. This variant deliberately changes the
-entry thesis away from residual falling-knife reversion: it owns liquid NSE
-names with persistent 12-1 style relative strength, smooth downside behavior,
-segment-level trend consistency, and limited drawdown, then keeps the book
-diversified with fixed risk slots and a whole-book sector cap.
+The locked production strategy on ``main`` (the sole canonical branch since the
+2026-06-03 consolidation). It owns liquid NSE names with persistent 12-1 style
+relative strength, smooth downside behavior, segment-level trend consistency,
+and limited drawdown; sizes them by bounded gross-targeting down the ranked list
+under per-name and per-sector caps; scales total gross to a downside-volatility
+target (dual-horizon MAX of a slow ~6m and fast ~1m semi-deviation); and exits a
+held name between rebalances once its ~190-day trend MA breaks.
+
+(Historical label note: this file was developed on the experiment branch once
+named ``mean-reversion-quant-strategy`` and tagged "Strategy B" with "fixed risk
+slots" -- all three labels are obsolete. The signal here is momentum-quality
+with bounded gross-targeting, not residual reversion and not fixed slots.)
 
 Rebalance: biweekly (every other Friday). On non-rebalance bars the strategy
 returns early; every position change goes through ``order_target_percent``.
