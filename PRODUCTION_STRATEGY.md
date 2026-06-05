@@ -165,3 +165,78 @@ recommendation. **The 2025-01→2026-05 window's contamination is now total
 and final** — it must NEVER again be run or used as a signal for any
 derivative of this strategy. Forward `dhan-paper` remains the only arbiter;
 no future change will be tuned against this number.
+
+---
+
+## 7. Production decision — 2026-06-05: LOCKED = momentum + cash floor
+
+After an exhaustive on-demand strategy search (this session), the production
+book is **`IndiaMomentumQualityCarry` (unchanged `strategy.py`) PLUS a
+cash-floor overlay**: idle, un-deployed gross is parked in a liquid /
+overnight fund earning ~6.5%/yr. The cash floor is the **only** robust,
+gate-independent improvement found — it is deterministic (not a strategy
+change), so it does not need to clear the anti-overfit gates.
+
+### 7.1 The search that was run and closed (do NOT re-litigate)
+
+Seven engines + a 500-name universe were built and run through the REAL
+`prepare.py` gates at ₹5L. ALL failed the **sub-period stationarity** gate
+except the locked momentum book. The unifying finding: **deployment, not the
+factor, is the robustness knob** — every variant that out-returned momentum
+did so by deploying 60-90% (vs momentum's ~47%), which concentrates the book
+into the prior regime's winners and produces a *losing* 18-month regime
+(FY25). Detail in `memory/project_lowvol_engine_found.md` and
+`experiments/{lowvol_engine,defmom_engine,qualmom_engine,value_spike,
+test_top500}.py`.
+
+| Variant | CAGR | maxDD | Stationarity @₹5L |
+|---|--:|--:|---|
+| **Momentum + cash floor (LOCKED)** | **+8.1%** | **−13.5%** | **+0.49 PASS** |
+| Low-vol engine | +7.8% | −21.1% | −0.48 FAIL |
+| Momentum+low-vol blend | +8.3% | −16.3% | 0.02 FAIL |
+| Defensive-momentum | +9.3% | −23.6% | −0.45 FAIL |
+| Quality-momentum (ROE tilt) | +3.7% | −26.5% | −0.12 FAIL |
+| Momentum on top-500 (mid/small-cap) | +4.6% | −21.8% | −0.04 FAIL |
+| Value (E/P) | — | — | spike: corr to mom −0.05, no edge |
+
+Conclusion: **for long-only CNC Indian equities at our capital and data,
+no robust strategy beats the momentum book on return.** "Beat the Nifty
+robustly" is unreachable for this defensive archetype — the only higher
+returns available are regime bets (fail live) or pure index beta (throws away
+the crash protection that is the book's edge).
+
+### 7.2 Locked production returns (₹5L, cost-aware, PIT, ~47% deployed)
+
+| Financial Year | Nifty 50 | Mom (raw) | **Mom + cash floor** |
+|---|--:|--:|--:|
+| FY23 (flat/bear) | −1.8% | +0.8% | **+6.7%** |
+| FY24 (bull) | +28.3% | +19.3% | **+22.0%** |
+| FY25 (neutral) | +4.7% | +2.2% | **+5.8%** |
+| FY26p (risk-off, partial) | +2.3% | −3.0% | **−0.2%** |
+| **Cumulative (FY23-FY26p)** | +50.4% | +19.2% | **+35.3%** |
+| **CAGR** | +11.1% | +4.6% | **+8.1%** |
+| **max drawdown** | −15.8% | −14.9% | **−13.5%** |
+
+The book is **competitive in flat/neutral/bear years (beats the Nifty in FY23
+and FY25)** and **trails only in strong bulls (FY24) and the FY26 risk-off** —
+the textbook defensive-book profile. The cash floor adds ~+3.5pp/yr on the
+~53% idle cash at zero added risk.
+
+### 7.3 The one remaining build (deferred — live is halted)
+
+The cash floor's *live realisation* (placing real orders into a liquid/
+overnight fund with idle cash, redeeming when equity needs capital) is an
+**executor feature not yet built** — appropriately, since `dhan-live` is
+halted behind `state/halt.json` pending 4-week clean paper validation. Until
+then the cash floor is a recorded policy + a reporting assumption (6.5%/yr on
+idle), not a live order path. Building it (paper-accounting first, then the
+live leg) is the next concrete task when live is enabled.
+
+### 7.4 The arbiter remains forward paper
+
+No more historical backtesting as "proof" — the 2025-26 window is contaminated
+and the search is exhausted. Forward `dhan-paper` validation is the only
+honest test of the locked book. Optional: run **defensive-momentum**
+(`experiments/defmom_engine.py`, +9.3% CAGR but regime-dependent) as a small
+paper *satellite* to see, out-of-sample, whether its higher return is real or
+FY24 luck — never as the core book.
