@@ -45,6 +45,17 @@ HYPOTHESIS_CATEGORIES = frozenset(
 )
 CONFIDENCE_LEVELS = frozenset({"low", "medium", "high"})
 
+# Step 5 challenger lifecycle. A candidate the validator vets is a CHALLENGER
+# snapshot — it does NOT swap live strategy.py. It earns its way in:
+#   CHALLENGER     — passed the atomic gates + ₹5L scale; awaiting shadow run.
+#   SHADOW_ACTIVE  — trading on the shadow paper book (no real orders),
+#                    accruing a genuinely out-of-sample live track record.
+#   PROMOTED       — manually swapped into live strategy.py after shadow.
+#   RETIRED        — superseded by a later promotion or failed its shadow run.
+STRATEGY_VERSION_STATES = frozenset(
+    {"CHALLENGER", "SHADOW_ACTIVE", "PROMOTED", "RETIRED"}
+)
+
 
 def connect(db_path: Path | str = DEFAULT_DB_PATH) -> duckdb.DuckDBPyConnection:
     """Open (or create) the realworld duckdb file, ensuring the schema exists.
@@ -91,6 +102,27 @@ def init_schema(conn: duckdb.DuckDBPyConnection) -> None:
             n_realized_trades       INTEGER   NOT NULL,
             safety_state            VARCHAR   NOT NULL,
             cold_start              BOOLEAN   NOT NULL
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS strategy_versions (
+            version_hash         VARCHAR   PRIMARY KEY,
+            created_at           TIMESTAMP NOT NULL,
+            mode                 VARCHAR   NOT NULL,
+            hypothesis_id        VARCHAR,
+            parent_version_hash  VARCHAR,
+            status               VARCHAR   NOT NULL DEFAULT 'CHALLENGER',
+            status_updated_at    TIMESTAMP,
+            snapshot_path        VARCHAR   NOT NULL,
+            unified_diff         VARCHAR   NOT NULL,
+            gate_results_json    VARCHAR   NOT NULL,
+            scale_robustness_json VARCHAR  NOT NULL,
+            sealed_status        VARCHAR   NOT NULL,
+            sealed_metrics_json  VARCHAR,
+            validator_version    VARCHAR   NOT NULL,
+            journal_excerpt      VARCHAR
         )
         """
     )
@@ -161,6 +193,20 @@ def insert_hypothesis(
     )
 
 
+def get_hypothesis(
+    conn: duckdb.DuckDBPyConnection, hypothesis_id: str
+) -> dict | None:
+    """One hypothesis row by id (or None). Used by the Step 5 validator to
+    load the single PENDING hypothesis it was asked to evaluate."""
+    cur = conn.execute(
+        "SELECT * FROM hypotheses WHERE hypothesis_id = ?", [hypothesis_id])
+    row = cur.fetchone()
+    if row is None:
+        return None
+    cols = [d[0] for d in cur.description]
+    return dict(zip(cols, row))
+
+
 def update_hypothesis_state(
     conn: duckdb.DuckDBPyConnection,
     hypothesis_id: str,
@@ -199,3 +245,83 @@ def get_burned_hypothesis_hashes(conn: duckdb.DuckDBPyConnection, mode: str) -> 
         [mode, *sorted(BURNED_STATES)],
     )
     return {r[0] for r in cur.fetchall()}
+
+
+# ── strategy_versions DAO (Step 5.a) ──────────────────────────────────────
+
+
+def insert_strategy_version(
+    conn: duckdb.DuckDBPyConnection,
+    *,
+    version_hash: str,
+    created_at: datetime,
+    mode: str,
+    hypothesis_id: str | None,
+    parent_version_hash: str | None,
+    unified_diff: str,
+    gate_results_json: str,
+    scale_robustness_json: str,
+    sealed_status: str,
+    sealed_metrics_json: str | None,
+    validator_version: str,
+    journal_excerpt: str | None,
+    snapshot_path: str,
+    status: str = "CHALLENGER",
+) -> None:
+    """Record a vetted challenger. status defaults to CHALLENGER — promotion to
+    SHADOW_ACTIVE / PROMOTED is an explicit status transition, never implicit on
+    insert. status_updated_at is seeded to created_at so the lifecycle always
+    has a timestamp."""
+    conn.execute(
+        "INSERT INTO strategy_versions (version_hash, created_at, mode, "
+        " hypothesis_id, parent_version_hash, status, status_updated_at, "
+        " snapshot_path, unified_diff, gate_results_json, scale_robustness_json, "
+        " sealed_status, sealed_metrics_json, validator_version, journal_excerpt) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        [version_hash, created_at, mode, hypothesis_id, parent_version_hash,
+         status, created_at, snapshot_path, unified_diff, gate_results_json,
+         scale_robustness_json, sealed_status, sealed_metrics_json,
+         validator_version, journal_excerpt],
+    )
+
+
+def get_strategy_version(
+    conn: duckdb.DuckDBPyConnection, version_hash: str
+) -> dict | None:
+    cur = conn.execute(
+        "SELECT * FROM strategy_versions WHERE version_hash = ?", [version_hash])
+    row = cur.fetchone()
+    if row is None:
+        return None
+    cols = [d[0] for d in cur.description]
+    return dict(zip(cols, row))
+
+
+def update_strategy_version_status(
+    conn: duckdb.DuckDBPyConnection,
+    version_hash: str,
+    new_status: str,
+    *,
+    updated_at: datetime,
+) -> None:
+    conn.execute(
+        "UPDATE strategy_versions SET status = ?, status_updated_at = ? "
+        "WHERE version_hash = ?",
+        [new_status, updated_at, version_hash],
+    )
+
+
+def get_strategy_versions(
+    conn: duckdb.DuckDBPyConnection, mode: str, status: str | None = None
+) -> list[dict]:
+    if status is None:
+        cur = conn.execute(
+            "SELECT * FROM strategy_versions WHERE mode = ? ORDER BY created_at",
+            [mode])
+    else:
+        cur = conn.execute(
+            "SELECT * FROM strategy_versions WHERE mode = ? AND status = ? "
+            "ORDER BY created_at",
+            [mode, status])
+    cols = [d[0] for d in cur.description]
+    return [dict(zip(cols, r)) for r in cur.fetchall()]

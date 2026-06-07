@@ -151,3 +151,90 @@ def test_burned_hashes_scoped_by_mode(conn):
         conn, "h-1", "OBSOLETE", updated_at=datetime(2026, 7, 1))
     assert realworld_db.get_burned_hypothesis_hashes(conn, "dhan-live") == set()
     assert realworld_db.get_burned_hypothesis_hashes(conn, "dhan-paper") == {"hash-1"}
+
+
+# ── strategy_versions: challenger lineage (Step 5.a) ──────────────────────
+#
+# Every candidate the Step 5 validator vets becomes a CHALLENGER snapshot here
+# — NOT a live strategy.py swap. The promotion chain is a status lifecycle:
+#   CHALLENGER -> SHADOW_ACTIVE (running on the shadow paper book)
+#             -> PROMOTED (manually swapped into live strategy.py)
+#             -> RETIRED (superseded or failed shadow).
+# The row is the SEBI "material-change" defensibility artifact: it stores the
+# unified diff, the atomic-gate results, the ₹5L scale re-run, and the sealed
+# status (DEFERRED_TO_SHADOW when no fresh out-of-sample window exists yet).
+
+
+def _insert_version(conn, **over):
+    kw = dict(
+        version_hash="v-abc123",
+        created_at=datetime(2026, 7, 1, 12, 0, 0),
+        mode="dhan-paper",
+        hypothesis_id="rev-1-h0",
+        parent_version_hash="v-incumbent",
+        unified_diff="--- a/strategy.py\n+++ b/strategy.py\n@@ ...",
+        gate_results_json='{"passed": true, "gates": []}',
+        scale_robustness_json='{"capital": 500000, "robust": true}',
+        sealed_status="DEFERRED_TO_SHADOW",
+        sealed_metrics_json=None,
+        validator_version="v1",
+        journal_excerpt="Implements late-decile entry filter.",
+        snapshot_path="state/strategy_versions/v-abc123.py",
+    )
+    kw.update(over)
+    realworld_db.insert_strategy_version(conn, **kw)
+
+
+def test_connect_creates_strategy_versions_table(conn):
+    tables = {r[0] for r in conn.execute("SHOW TABLES").fetchall()}
+    assert "strategy_versions" in tables
+
+
+def test_insert_and_read_strategy_version_defaults_challenger(conn):
+    _insert_version(conn)
+    row = realworld_db.get_strategy_version(conn, "v-abc123")
+    assert row is not None
+    assert row["status"] == "CHALLENGER"
+    assert row["hypothesis_id"] == "rev-1-h0"
+    assert row["parent_version_hash"] == "v-incumbent"
+    assert row["sealed_status"] == "DEFERRED_TO_SHADOW"
+    assert row["sealed_metrics_json"] is None
+    assert row["snapshot_path"] == "state/strategy_versions/v-abc123.py"
+
+
+def test_get_strategy_version_missing_returns_none(conn):
+    assert realworld_db.get_strategy_version(conn, "nope") is None
+
+
+def test_update_strategy_version_status(conn):
+    _insert_version(conn)
+    realworld_db.update_strategy_version_status(
+        conn, "v-abc123", "SHADOW_ACTIVE", updated_at=datetime(2026, 7, 2))
+    row = realworld_db.get_strategy_version(conn, "v-abc123")
+    assert row["status"] == "SHADOW_ACTIVE"
+    assert row["status_updated_at"] == datetime(2026, 7, 2)
+
+
+def test_get_strategy_versions_filter_by_status(conn):
+    _insert_version(conn, version_hash="v-1")
+    _insert_version(conn, version_hash="v-2")
+    realworld_db.update_strategy_version_status(
+        conn, "v-2", "PROMOTED", updated_at=datetime(2026, 7, 3))
+    challengers = realworld_db.get_strategy_versions(
+        conn, "dhan-paper", status="CHALLENGER")
+    promoted = realworld_db.get_strategy_versions(
+        conn, "dhan-paper", status="PROMOTED")
+    assert [r["version_hash"] for r in challengers] == ["v-1"]
+    assert [r["version_hash"] for r in promoted] == ["v-2"]
+
+
+def test_get_strategy_versions_scoped_by_mode(conn):
+    _insert_version(conn, version_hash="v-paper", mode="dhan-paper")
+    _insert_version(conn, version_hash="v-live", mode="dhan-live")
+    rows = realworld_db.get_strategy_versions(conn, "dhan-paper")
+    assert [r["version_hash"] for r in rows] == ["v-paper"]
+
+
+def test_strategy_version_states_constant():
+    assert realworld_db.STRATEGY_VERSION_STATES == frozenset(
+        {"CHALLENGER", "SHADOW_ACTIVE", "PROMOTED", "RETIRED"})
