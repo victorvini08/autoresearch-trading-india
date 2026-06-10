@@ -189,6 +189,30 @@ class DhanExecutor:
                 )
                 live_positions, live_cash = None, None
 
+            # Cash-floor seed handling (2026-06-10): the floor ETF is an
+            # EXECUTOR-level policy holding — the strategy must never see it.
+            # If it leaked into the seed, the strategy would treat it as an
+            # off-universe held name and liquidate it every rebalance. Strip
+            # it from the seeded positions and fold its market value into
+            # seeded cash so gross is sized on true deployable equity.
+            from scripts.cash_floor import (
+                CASH_FLOOR_ENABLED,
+                CASH_FLOOR_TICKER,
+            )
+            if (
+                CASH_FLOOR_ENABLED
+                and live_positions
+                and CASH_FLOOR_TICKER in live_positions
+            ):
+                _floor_qty = live_positions.pop(CASH_FLOOR_TICKER)
+                _floor_px = _load_latest_closes(
+                    self.prices_db,
+                    tickers={CASH_FLOOR_TICKER},
+                    on_or_before=as_of_date,
+                ).get(CASH_FLOOR_TICKER)
+                if _floor_px and live_cash is not None:
+                    live_cash += _floor_qty * _floor_px
+
             signals_result = generate_signals(
                 target_date=as_of_date,
                 strategy_module_name=strategy_module,
@@ -341,6 +365,86 @@ class DhanExecutor:
                     (r for r in risk_reasons if "halt" in r.lower()),
                     None,
                 ),
+            )
+
+        # 2d. Cash-floor injection (2026-06-10): park idle capital in the
+        #     liquid floor ETF. Runs AFTER risk_check (the floor is policy
+        #     cash, not an equity position — a ~40% floor holding must not
+        #     trip per-name/gross gates) and only on rebalance days (empty
+        #     targets short-circuit above, so the floor is never churned
+        #     between rebalances). The floor ALWAYS appears in `targets`
+        #     when enabled — _build_orders liquidates any held name absent
+        #     from targets, so omission would dump the floor. The banded
+        #     target returns the CURRENT fraction inside the band → ~zero
+        #     delta → no order → the ₹14.75 DP charge fires only a few
+        #     times a year. Ordering: floor-first when shrinking (the SELL
+        #     frees cash before equity BUYS), floor-last when growing
+        #     (park the residual after equity is funded).
+        try:
+            from scripts.cash_floor import (
+                CASH_FLOOR_ENABLED as _CF_ON,
+                CASH_FLOOR_TICKER as _CF_TKR,
+                banded_floor_target,
+            )
+            if _CF_ON:
+                _eq_sum = sum(v for v in targets.values() if v > 0)
+                _cur_frac = 0.0
+                try:
+                    _pos = {
+                        p.ticker: float(p.quantity)
+                        for p in self.broker.get_positions()
+                        if getattr(p, "quantity", 0) and p.quantity > 0
+                    }
+                    _cash = float(
+                        self.broker.get_cash().get("availableBalance", 0.0)
+                    )
+                    _pxm = _load_latest_closes(
+                        self.prices_db,
+                        tickers={_CF_TKR} | set(_pos),
+                        on_or_before=as_of_date,
+                    )
+                    _eqty = _cash + sum(
+                        q * _pxm.get(t, 0.0) for t, q in _pos.items()
+                    )
+                    if _eqty > 0:
+                        _cur_frac = (
+                            _pos.get(_CF_TKR, 0.0) * _pxm.get(_CF_TKR, 0.0)
+                        ) / _eqty
+                except Exception as e:  # noqa: BLE001 — fall back to 0 (fresh park)
+                    logger.warning(
+                        "cash-floor current-fraction read failed: %s: %s",
+                        type(e).__name__, e,
+                    )
+                _f_target = banded_floor_target(_eq_sum, _cur_frac)
+                if _f_target < _cur_frac:
+                    targets = {_CF_TKR: _f_target, **targets}
+                else:
+                    targets = {**targets, _CF_TKR: _f_target}
+                notes.append(
+                    f"cash_floor[{_CF_TKR}]: equity={_eq_sum:.3f} "
+                    f"cur={_cur_frac:.3f} target={_f_target:.3f}"
+                )
+                try:
+                    from storage import portfolio_db as _pdb_cf
+
+                    with _pdb_cf.connect(self.portfolio_db) as _cf_conn:
+                        _pdb_cf.upsert_target(
+                            _cf_conn,
+                            as_of_date=as_of_date,
+                            ticker=_CF_TKR,
+                            target_fraction=float(_f_target),
+                            source="cash_floor",
+                            mode=self.mode,
+                        )
+                except Exception as e:  # noqa: BLE001 — log-only
+                    logger.warning(
+                        "cash-floor target persistence failed: %s: %s",
+                        type(e).__name__, e,
+                    )
+        except Exception as e:  # noqa: BLE001 — the floor must never block equity
+            logger.warning(
+                "cash-floor injection failed: %s: %s — proceeding without",
+                type(e).__name__, e,
             )
 
         # 3. Convert target_fractions → integer share orders

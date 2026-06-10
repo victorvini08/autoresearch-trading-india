@@ -41,13 +41,18 @@ from backtest.risk import validate as validate_risk
 from data.ingest_prices import read_prices
 from data.universe import get_universe_at, snapshot_dates
 
-BACKTEST_START = date(2020, 1, 1)
-# India rebuild: NSE bhav archive starts cleanly in late 2019; 2020-01-01 is
-# the first month with dense data across the Nifty 500. Train+val spans
-# 2020-01 → 2024-12 (~5y, walk-forward folds with 2y train / 6m val / 3m slide);
-# sealed test = 2025-01 → 2026-05-14 (~16 months, covers the Jan-26 → Mar-26
-# drawdown which is an adversarial regime for momentum strategies — passing
-# sealed test here is a meaningful signal). Per spec §6.1.
+BACKTEST_START = date(2017, 7, 1)
+# 2026-06-10 window extension (user-approved): the PIT universe rebuild
+# (109 monthly 200-name snapshots from 2017-06, survivorship-verified) plus
+# the 2016+ bhav price backfill make validation folds honest from ~2018-11.
+# The extended window adds the regimes the old 2020-01 start could never
+# see — the 2019 chop, the COVID crash, the FY21 V-recovery and the 2021-22
+# bull — giving the sub-period stationarity gate ~5 disjoint 18-month
+# buckets instead of 2 (it was structurally underpowered before; see
+# journal 2026-06-10). MIN_FOLD_UNIVERSE still auto-skips any fold whose
+# PIT universe is degenerate, so a missing early snapshot can never
+# fabricate membership. Old value: date(2020, 1, 1).
+# Sealed test UNCHANGED: 2025-01 → 2026-05-14 (already spent; never reused).
 BACKTEST_END = date(2026, 5, 14)
 TEST_BOUNDARY = date(2025, 1, 1)
 TRAIN_DAYS = 504
@@ -63,7 +68,7 @@ SLIDE_DAYS = 63
 # inflated by the pre-2026-05-16 5-name-universe folds) is auto-discarded on
 # every branch the moment it picks up this evaluator, with no journal surgery.
 # Bump this whenever a change here would alter a prior iteration's score.
-EVALUATOR_VERSION = "2026-05-16-univfloor"
+EVALUATOR_VERSION = "2026-06-10-extwindow"
 
 # Minimum point-in-time universe size for a walk-forward fold to be SCORED.
 # The PIT universe is ~5 names until 2022-07 (broad NSE coverage starts
@@ -129,7 +134,19 @@ def _load_feeds(
             f"No price data with >= {_MIN_BARS_PER_FEED} bars in [{start}, {end}]. "
             "Run data.ingest_prices first."
         )
-    return feeds
+    # CLOCK SAFETY (2026-06-10): the strategy reads its calendar from
+    # datas[0] (_is_rebalance_today / next), and feeds insertion order
+    # becomes cerebro data order. Alphabetical order can put a late-listing
+    # name first (e.g. 360ONE, first bar 2023-01-23), leaving datas[0]
+    # empty early in the window — every rebalance before its first bar is
+    # then SILENTLY skipped (no crash; the book just never trades).
+    # Order feeds deepest-history-first so datas[0] always spans the window.
+    return dict(
+        sorted(
+            feeds.items(),
+            key=lambda kv: (kv[1].index[0], -len(kv[1]), kv[0]),
+        )
+    )
 
 
 # Identity sentinel: the load-once-then-slice optimization is numerically
@@ -357,7 +374,15 @@ def _slice_feeds(
             f"No price data with >= {_MIN_BARS_PER_FEED} bars in "
             f"[{start}, {end}]. Run data.ingest_prices first."
         )
-    return feeds
+    # Same CLOCK SAFETY ordering as _load_feeds (see comment there): members
+    # arrive alphabetical, which can put a late-listing name at datas[0] and
+    # silently disable rebalances until its first bar.
+    return dict(
+        sorted(
+            feeds.items(),
+            key=lambda kv: (kv[1].index[0], -len(kv[1]), kv[0]),
+        )
+    )
 
 
 def _run_one_fold(payload: dict) -> tuple[int, dict]:

@@ -1,0 +1,82 @@
+{
+  "anti_overfit": {
+    "sortino_val_mean": 1.580012983167082,
+    "sortino_val_pvalue": 0.0069965017491254375,
+    "rw_mc_null_pct": 0.9935,
+    "sub_period_sortinos": [
+      1.0949666666666669,
+      1.816577777777778,
+      0.40340000000000015,
+      3.03615
+    ],
+    "n_hyperparameters": 6,
+    "n_trades": 242,
+    "aggregate_dd": 0.29584925231914955,
+    "universe_respected": true
+  },
+  "evaluator_version": "2026-06-10-extwindow",
+  "validation_sortino_mean": 1.580012983167082,
+  "validation_folds": 34,
+  "per_fold_sortinos": [
+    2.8849,
+    1.4439,
+    -3.2663,
+    -0.4482,
+    4.3886,
+    6.2408,
+    -2.0037,
+    -3.3137,
+    3.9284,
+    3.2021,
+    1.9661,
+    1.0194,
+    -0.2664,
+    0.7154,
+    8.3598,
+    1.9016,
+    -0.5225,
+    -0.0263,
+    -1.7939,
+    -3.0191,
+    1.1353,
+    0.5108,
+    -1.2836,
+    -1.0126,
+    1.7783,
+    6.912,
+    5.6384,
+    0.2906,
+    5.1914,
+    5.6447,
+    2.8884,
+    1.3939,
+    2.6896,
+    0.5522
+  ],
+  "side_panel": {
+    "calmar_mean": 2.7206090764425053,
+    "max_dd_worst": 0.1688394666586462,
+    "hit_rate_mean": 0.40347911892029537,
+    "profit_factor_mean": 10.722851324588447,
+    "turnover_mean": 0.5286694708174062,
+    "trade_count_total": 242,
+    "pre_tax_return_mean": 0.03487114205278935,
+    "post_tax_return_mean_stcg15": 0.027161012940502095
+  },
+  "risk": {
+    "passed": true,
+    "violations": []
+  },
+  "risk_signals": {
+    "aggregate_max_dd": 0.29584925231914955,
+    "worst_fold_max_dd": 0.1688394666586462,
+    "max_position_frac_peak": 0.13125959492533862,
+    "lower_quartile_fold_calmar": -0.4525504447234342,
+    "mean_calmar": 2.7206090764425053,
+    "n_negative_folds": 11,
+    "n_folds": 34
+  },
+  "_module": "experiments.variant_lowvolfilter",
+  "_cash": 500000.0,
+  "_evaluator_version": "2026-06-10-extwindow"
+}

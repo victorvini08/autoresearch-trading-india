@@ -3120,3 +3120,101 @@ working, not failure.
 **Learning:** The book's bear defence is delivered by the momentum-quality selection + the slope-confirmed structural exit, NOT by the symmetric vol cap — which was a direction-blind drag. A downside-aware estimator lifts the worst sub-period (+22%) and regime-stationarity (0.65->0.84) with flat DD/turnover and zero added parameters: a robustness/scale upgrade, not a return amplifier (training mean fold return and Calmar are modestly lower — an accepted trade per the real-world objective priority stack). The original "lags strong rallies" framing was substantially a cap-weight (Nifty-500) vs equal-weight (the tape the book actually trades) benchmark artifact. This is the new committed baseline; do not re-propose symmetric total-vol targeting.
 
 ---
+
+## Human-directed promotion 2026-06-10 — KEPT (low-vol pre-filter + cash-floor wiring) + DATA-LAYER OVERHAUL
+
+**Context:** Not a loop iteration. User-directed "find one improvement" campaign
+that turned into the most consequential session in the repo: the search for a
+strategy-level edge kept terminating in the DATA layer. Four independent silent
+corruptions were found, each only ever SUBTRACTING phantom returns from a
+long-only momentum book:
+
+1. **22 five-ticker gap days** (failed ingests masked by a fallback writing only
+   HDFCBANK/ICICIBANK/INFY/RELIANCE/TCS), incl. a 7-session July-2023 gap that
+   froze the whole held book at stale marks → phantom gross >100% "leverage"
+   breaches. Repaired by re-ingesting the full bhav.
+2. **daily_update starved daily_bars to ~200 rows/day since 2026-05-15** (it
+   passed the live universe as a ticker filter; masked earlier by backfills).
+   Breaks future PIT universe rebuilds (ADV ranks need the full cross-section).
+   Fixed: full-bhav ingest.
+3. **EQ-only series filter erased every Trade-to-Trade stint** (65 universe
+   members, e.g. SUZLON 2023-24) — held names froze mid-fold. Fixed:
+   series_filter EQ+BE + full re-ingest.
+4. **Prices were NEVER split/bonus-adjusted** (TATASTEEL prints −89.5% across
+   its 10:1 split; IRCTC −78%): held names booked fake crash losses + forced
+   structural exits, and every post-split winner was momentum-vetoed for ~a
+   year. ingest_corporate_actions' docstring CLAIMED the backtester adjusts —
+   it never did, and the CA store was never built. Fixed in read_prices via an
+   open-gap rational-snap detector (prev_close(t)/open(t) ≥1.29 — circuit bands
+   cap legit gaps at 1.25×; crashes gap intraday, ex-dates gap at the open —
+   snapped to the nearest small rational: 5.055→5, 1.999→2; backward-adjusted,
+   volume inverse-scaled; prev_close newly captured at ingest, full 2016→2026
+   re-ingest). NOTE: NSE's bhav PREV_CLOSE is the RAW prior close even on
+   ex-dates — the "exchange publishes the adjusted base" assumption was tested
+   and found FALSE; the open-gap detector replaced it.
+
+Also fixed: **datas[0] dead-clock bug** (alphabetical feed order put 360ONE,
+first bar 2023-01-23, at datas[0] → _is_rebalance_today silently false before
+that date in union-universe runs; feeds now ordered deepest-history-first in
+_load_feeds/_slice_feeds). **Evaluator window extended** (user-approved):
+BACKTEST_START 2020-01-01 → 2017-07-01 (the rebuilt 2017-06+ PIT snapshots make
+folds honest from 2018-11; the stationarity gate now has 4 buckets instead of
+2). EVALUATOR_VERSION → 2026-06-10-extwindow; sealed boundary untouched.
+
+**Phantom-loss magnitude:** the split fix alone was worth ~+0.44 validation
+Sortino and ~+5pp/yr continuous to the unfiltered book. On honestly-measured
+data the locked book was NEVER return-poor: continuous 2019-2026 @₹50k with
+cash floor = +14.5%/yr, maxDD −13.5% vs Nifty +11.1%/−38.4%. The
+"defensive-only, trails Nifty ~10pp, alpha exhausted" era conclusions were
+substantially data artifacts.
+
+**Change (promotion):** `low_vol_eligible` pre-filter into strategy.py — drop
+the higher-vol half of candidates (median split by trailing-252d realized vol,
+beta_window reused, held names grandfathered) before momentum-quality ranking.
+Zero new hyperparameters (6→6). Exactly the ⭐ candidate from
+docs/strategy-candidates.md (2026-05-28), whose documented revisit condition
+(≥1 extra full cycle incl. crash) was met by the window extension + repairs.
+Recovery-release family tested same-day and CLOSED (4 variants: fast-vol-only,
+veto-relax, combo, breadth-conditional release — all bracket the
+deployment-timing frontier; the locked MAX ratchet sits ON it).
+
+**Decision:** KEPT @ ₹50k deployment scale (user-stated capital), adjusted
+data, extended window, 34 folds:
+- FILTER: val Sortino 1.9953; sub-periods [+0.83,+1.95,+1.85,+3.50] →
+  stationarity 0.236 PASS; Bonferroni p=0.0005; RW-MC 1.000; risk clean;
+  universe ✓ — ALL FIVE ATOMIC GATES PASS.
+- UNFILTERED baseline: val Sortino 2.0878 but stationarity 0.169 FAIL
+  (weak 2019-chop/COVID bucket +0.55 vs best +3.23) — higher mean, uneven
+  regimes; rejected per robustness-over-Sortino.
+- Continuous 2019-2026 @₹50k (+floor): filter +13.4%/yr, maxDD −17.9%,
+  Sortino 1.10 (FY24 +76.5%, FY26p +3.9%); baseline +14.5%/yr, −13.5%, 1.26
+  (single-path; its FY22 strength is fold-fragile per bucket +0.55).
+- Scale note: at ₹5L the stationarity verdicts MIRROR-FLIP (baseline passes
+  0.331, filter fails 0.133) — re-adjudicate before ever scaling past ~₹2-3L.
+
+**Cash floor wired (executor-level policy, NOT strategy code):** idle cash →
+LIQUIDCASE (growth-NAV liquid ETF; NOT LIQUIDBEES whose return arrives as
+daily dividend units at a pinned ~₹1000 price — invisible to price series;
+NOT NIFTYBEES — idle cash peaks in crashes, an index instrument there is the
+anti-defensive idle-overlay rejected 2026-06-04). scripts/cash_floor.py +
+DhanExecutor: floor stripped from the signal seed (else the strategy
+liquidates an off-universe holding) with value folded into seeded cash;
+banded target (±5%) so DP ₹14.75 fires only a few times/yr; floor-first
+ordering when shrinking (sell funds equity buys), floor-last when growing;
+persisted to desired_targets with source='cash_floor'; injected AFTER
+risk_check (policy cash must not trip per-name/gross gates).
+
+**Next:** (a) forward dhan-paper validation — the true arbiter, never yet
+started; (b) dividend total-return layer (panel-vetted: ~+0.8-1.0pp measured,
++0.2-0.3pp live-new via momentum-veto fixes; dedupe vs the snap detector is
+naturally satisfied — regular dividends gap <29%); (c) sealed set remains
+SPENT and untouched.
+
+**Learning:** For a long-only momentum book, data corruption is not noise —
+it is a systematic SHORT position against your own strategy: phantom crashes
+eject winners, fake losses land on held names, and frozen marks corrupt vol
+estimates. Audit the data layer to exhaustion BEFORE concluding "no alpha
+exists". Every prior-era performance conclusion must cite whether it predates
+the 2026-06-10 repairs.
+
+---

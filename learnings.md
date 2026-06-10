@@ -275,3 +275,44 @@ max-drawdown and hit-rate all worse, hit-rate 41%→23%. Durable lessons:
 3. **Infra earned along the way is kept regardless of the strategy
    verdict** (robust-SUE estimator; Integrated-Filing fetch fix). A
    correct, current PIT pipeline has standalone value.
+
+## 8. The data layer was the alpha (2026-06-10)
+
+A month of strategy-level search ("no robust higher-return strategy exists")
+terminated in the discovery that the PRICE DATA was systematically biased
+against the strategy. Four independent silent corruptions, all one-directional
+phantom LOSSES for a long-only momentum book:
+
+| Corruption | Symptom | Fix |
+|---|---|---|
+| 22 failed-ingest days (5-ticker fallback rows) | held book frozen at stale marks; phantom gross >100% | re-ingest full bhav (detection: per-day row counts vs rolling median) |
+| daily_update filtered ingest to universe members (~200/day since 2026-05-15) | future PIT/ADV rebuilds impossible | ingest full cross-section always |
+| EQ-only series filter | every Trade-to-Trade stint = data hole (65 universe names; SUZLON's 2023-24 run) | series_filter EQ+BE |
+| NO split/bonus adjustment, ever | −89.5% phantom bars; winners momentum-vetoed post-split; fake losses on held names; vol mis-sorts | open-gap rational-snap detector in read_prices (prev_close/open ≥1.29 → snap to small rational; backward-adjust) |
+
+Magnitudes: the split fix alone ≈ +0.44 validation Sortino / +5pp-yr continuous.
+Honestly measured, the locked book was +14.5%/yr @ −13.5% maxDD (₹50k, +floor)
+— it was never return-poor; the measurement was.
+
+Meta-lessons:
+1. **Phantom losses are asymmetric.** Long-only momentum cannot benefit from a
+   data error that prints a crash: it sells, books the loss, and bans the name.
+   Any unexplained underperformance vs the index deserves a data audit BEFORE a
+   strategy autopsy.
+2. **NSE bhav PREV_CLOSE is the RAW prior close even on ex-dates** (verified on
+   3 events). The "exchange publishes the adjusted base" assumption is false —
+   but prev_close/open IS the perfect ex-date detector because circuit bands cap
+   legitimate overnight gaps at 1.25× and crashes unfold intraday.
+3. **Docstrings lie; wiring is truth.** ingest_corporate_actions.py claimed
+   "the backtester adjusts historical bars" — no consumer ever existed.
+4. **backtrader's clock = datas[0].** Sorted feed unions put late-listing names
+   first → every rebalance silently skipped until their first bar (no crash, no
+   log). Order feeds deepest-history-first; pair with prenext→next for ragged
+   unions.
+5. **Dividends remain uncounted** (price-only closes; NSE does not re-base for
+   regular dividends). A calm-large-cap book's real-world return runs
+   ~1.5-2pp/yr ABOVE backtest. The momentum vetoes are also ~yield-biased
+   against high payers — the next measurement increment, not a strategy change.
+6. **Gate verdicts inherit data quality.** The same two books flipped pass/fail
+   across three data states in one day. A gate result is meaningless without a
+   data-integrity fingerprint next to it.

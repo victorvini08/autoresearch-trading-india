@@ -1,30 +1,17 @@
-'''IndiaMomentumQualityCarry - long-only LOW-VOL-FILTERED momentum-quality carry.
+'''IndiaMomentumQualityCarry - long-only cross-sectional momentum-quality carry.
 
-The locked production strategy on ``main``. PROMOTED 2026-06-10: a
-low-volatility universe pre-filter now precedes the momentum-quality ranking
-(``low_vol_eligible``: keep the calmer HALF of candidates by trailing-252d
-realized vol — a parameter-free median split reusing ``beta_window``; held
-names are grandfathered so turnover and the ₹14.75/scrip DP drag stay flat).
-Selection then owns liquid calm NSE names with persistent 12-1 style relative
-strength, smooth downside behavior, segment-level trend consistency, and
-limited drawdown; sizes them by bounded gross-targeting down the ranked list
+The locked production strategy on ``main`` (the sole canonical branch since the
+2026-06-03 consolidation). It owns liquid NSE names with persistent 12-1 style
+relative strength, smooth downside behavior, segment-level trend consistency,
+and limited drawdown; sizes them by bounded gross-targeting down the ranked list
 under per-name and per-sector caps; scales total gross to a downside-volatility
 target (dual-horizon MAX of a slow ~6m and fast ~1m semi-deviation); and exits a
-held name between rebalances once its ~190-day trend MA breaks. Idle cash is
-parked in a liquid ETF by the EXECUTOR (cash-floor policy — not part of this
-signal; see scripts/executors/dhan.py).
+held name between rebalances once its ~190-day trend MA breaks.
 
-Promotion evidence (2026-06-10, split/bonus-adjusted survivorship-free data,
-the first honest measurement in the repo — see journal): at the ₹50k
-deployment scale the filtered book is the only variant passing ALL five
-anti-overfit gates on the extended 2017-07+ evaluator window (34 folds,
-validation Sortino 1.995, sub-period buckets [+0.83,+1.95,+1.85,+3.50] →
-stationarity 0.236 ≥ 0.20; the unfiltered book scores 2.088 but FAILS
-stationarity at 0.169). Continuous 2019-2026 @₹50k with the cash floor:
-+13.4%/yr, maxDD −17.9% (Nifty 50: +11.1%/yr, −38.4%). Originally proposed
-2026-05-28 (docs/strategy-candidates.md ⭐) and parked on an underpowered
-2-bucket window; its documented revisit condition (a full extra cycle incl. a
-crash) was met by the universe rebuild + the 2026-06-10 data-layer repairs.
+(Historical label note: this file was developed on the experiment branch once
+named ``mean-reversion-quant-strategy`` and tagged "Strategy B" with "fixed risk
+slots" -- all three labels are obsolete. The signal here is momentum-quality
+with bounded gross-targeting, not residual reversion and not fixed slots.)
 
 Rebalance: biweekly (every other Friday). On non-rebalance bars the strategy
 returns early; every position change goes through ``order_target_percent``.
@@ -583,19 +570,15 @@ def construct_gross_targets(
     return targets
 
 
+
 def low_vol_eligible(
     close_by_ticker: dict[str, list[float]],
     vol_lb: int,
 ) -> set[str]:
     """Bottom-half-by-trailing-realised-volatility subset (low-vol pre-filter).
 
-    Std of the last vol_lb daily simple returns per name; return the names at
-    or below the cross-sectional MEDIAN. Median split = parameter-free (no new
-    hyperparameter, parsimony untouched); vol window reuses beta_window (no
-    new lookback). PIT-safe: uses the same decision-bar close series the
-    momentum scores rank on. Returns empty set when <2 names have a
-    computable vol (caller then does no filtering — never regress in a thin
-    window). Promoted 2026-06-10; see module docstring for gate evidence.
+    Median split = parameter-free; vol window reuses beta_window. PIT-safe.
+    Returns empty set when <2 names have a computable vol (no filtering).
     """
     vols: dict[str, float] = {}
     for t, raw in close_by_ticker.items():
@@ -939,7 +922,6 @@ __all__ = [
     'market_factor',
     'smb_factor',
     'reversion_scores',
-    'low_vol_eligible',
     'momentum_quality_scores',
     'breadth_scaled_gross',
     'vol_targeted_gross',

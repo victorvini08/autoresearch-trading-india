@@ -110,10 +110,16 @@ def main(argv: list[str] | None = None) -> int:
 
     print(f"\n=== daily_update for {today_d} ===")
 
-    # Step 1: prices
+    # Step 1: prices — ingest the FULL bhav cross-section (tickers=None), not
+    # just the live universe. The bhav is one downloaded file either way;
+    # filtering to universe members starved daily_bars to ~200 rows/day from
+    # 2026-05-15 (masked earlier by backfills overwriting the full history),
+    # which silently breaks future PIT universe rebuilds — the top-200-by-ADV
+    # ranking needs the whole ~1,700-name EQ cross-section. Found 2026-06-10
+    # while tracing phantom gross>100% breaches to thin-ingest days.
     t0 = time.time()
-    print(f"[1/6] prices: {len(tickers)} tickers, {start_d}..{today_d}", flush=True)
-    n_prices = ingest_prices(tickers, start_d.isoformat(), today_d.isoformat())
+    print(f"[1/6] prices: FULL bhav, {start_d}..{today_d}", flush=True)
+    n_prices = ingest_prices(None, start_d.isoformat(), today_d.isoformat())
     print(f"      → {n_prices} rows ({time.time()-t0:.1f}s)", flush=True)
 
     # Step 2: macro
