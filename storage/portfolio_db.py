@@ -781,9 +781,11 @@ _INITIAL_DEPOSIT_BY_MODE: dict[str, float] = {
     # as the actual balance and displayed it as such — including the
     # dashboard, which surfaced negative cash to the user. Anchor here so
     # the ledger has a single source of truth for "real cash." Paper boots
-    # with ₹1,00,000 (DhanExecutor / DhanMock default); dhan-live's real
-    # cash comes from the broker and is not seeded from the ledger.
-    "dhan-paper": 100_000.0,
+    # with ₹50,000 (user-confirmed deployment capital 2026-06-11 — the
+    # forward dhan-paper validation runs at the size that will actually be
+    # deployed; keep in sync with DhanExecutor / DhanMock defaults);
+    # dhan-live's real cash comes from the broker and is not seeded here.
+    "dhan-paper": 50_000.0,
     "dhan-live": 0.0,
 }
 

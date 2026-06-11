@@ -122,6 +122,37 @@ def main(argv: list[str] | None = None) -> int:
     n_prices = ingest_prices(None, start_d.isoformat(), today_d.isoformat())
     print(f"      → {n_prices} rows ({time.time()-t0:.1f}s)", flush=True)
 
+    # Step 1b: self-healing universe refresh (2026-06-10). The PIT universe
+    # (top-200 by 20-day ADV) is rebuilt MONTHLY, but the rebuild was never
+    # scheduled — get_live_universe would silently freeze on the last manual
+    # snapshot (found 2026-06-10: stale at 2026-05-14, 28 days old, while the
+    # universe churns ~9%/month). Self-heal here: if this calendar month's
+    # 1st-of-month snapshot is missing, compute it from the full bhav we just
+    # ingested. Idempotent (compute_universe delete-then-inserts), cheap
+    # (once/month effective), and fail-soft — a build error logs and never
+    # blocks the daily run. Constituents fetch degrades to the cached
+    # nifty500 list, so this works offline too.
+    t0 = time.time()
+    month_start = today_d.replace(day=1)
+    try:
+        from data.universe import (
+            DEFAULT_UNIVERSE_DB,
+            compute_universe,
+            snapshot_dates,
+        )
+        from data.ingest_prices import DB_PATH as _PRICES_DB
+
+        if month_start not in set(snapshot_dates(DEFAULT_UNIVERSE_DB)):
+            rows = compute_universe(month_start, _PRICES_DB, DEFAULT_UNIVERSE_DB)
+            print(f"[1b/6] universe: built {month_start} snapshot "
+                  f"({len(rows)} members, {time.time()-t0:.1f}s)", flush=True)
+        else:
+            print(f"[1b/6] universe: {month_start} snapshot already current",
+                  flush=True)
+    except Exception as e:  # noqa: BLE001 — never block the daily run
+        print(f"[1b/6] universe refresh skipped ({type(e).__name__}: {e})",
+              flush=True)
+
     # Step 2: macro
     t0 = time.time()
     print(f"[2/6] macro: {start_d}..{today_d}", flush=True)
