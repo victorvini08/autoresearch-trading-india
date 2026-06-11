@@ -58,17 +58,26 @@ def _trading_days(start: date, end: date) -> list[date]:
     return [r[0] for r in rows]
 
 
-def _isolate_state(sandbox: Path) -> Path:
+def _isolate_state(sandbox: Path, initial_cash: float) -> Path:
     """Redirect EVERY mutable-state path to the sandbox so the real ledger,
     halt file, and safety state are never touched. Returns the sandbox
-    portfolio-db path."""
+    portfolio-db path.
+
+    `initial_cash` anchors the paper account's starting balance. It must be
+    set on `_INITIAL_DEPOSIT_BY_MODE` (which get_cash_balance adds to the
+    signed ledger sum) so the account boots with exactly this much cash —
+    not the ₹100k module default. The DhanMock/DhanExecutor are also told
+    the same number so the live-position seed cash matches."""
     sandbox.mkdir(parents=True, exist_ok=True)
+    # Anchor the paper account's initial deposit to the requested capital so
+    # get_cash_balance, the executor seed, and the mock broker all agree.
+    portfolio_db._INITIAL_DEPOSIT_BY_MODE["dhan-paper"] = float(initial_cash)
     pf = sandbox / "portfolio.duckdb"
     if pf.exists():
         pf.unlink()  # always a fresh, clean account
     conn = portfolio_db.connect(pf)
     try:
-        portfolio_db.init_schema(conn)  # empty ledger -> cash = _INITIAL_DEPOSIT (Rs100k)
+        portfolio_db.init_schema(conn)  # empty ledger -> cash = initial_cash
     finally:
         conn.close()
 
@@ -136,8 +145,9 @@ def _equity_now(pf: Path, as_of: date) -> tuple[float, float, float]:
     return cash, invested, cash + invested
 
 
-def run_replay(start: date, end: date, sandbox: Path) -> dict:
-    pf = _isolate_state(sandbox)
+def run_replay(start: date, end: date, sandbox: Path,
+               initial_cash: float = 50_000.0) -> dict:
+    pf = _isolate_state(sandbox, initial_cash)
     reports_dir = sandbox / "reports"
 
     # Imports AFTER isolation so any module-level path captures see the sandbox.
@@ -149,13 +159,15 @@ def run_replay(start: date, end: date, sandbox: Path) -> dict:
         print(f"No trading days in {start}..{end}.")
         return {}
     print(f"Replaying {len(days)} trading days {days[0]} .. {days[-1]} "
-          f"into sandbox {sandbox}/  (real ledger untouched)\n")
+          f"into sandbox {sandbox}/  @ Rs{initial_cash:,.0f}  "
+          f"(real ledger untouched)\n")
     print(f"{'date':12} {'dow':3} {'orders':>6} {'gross_buy':>11} "
           f"{'gross_sell':>11} {'equity':>11}  note")
 
     rebalance_days = 0
     for D in days:
-        ex = DhanExecutor(mode="dhan-paper", portfolio_db=pf, prices_db=PRICES_DB)
+        ex = DhanExecutor(mode="dhan-paper", portfolio_db=pf, prices_db=PRICES_DB,
+                          initial_cash_inr=initial_cash)
         summary = ex.execute_day(D, skips=set())
         # Faithful clock: re-stamp the cash-ledger rows just written to the
         # SIMULATED date so the per-date equity/peak/drawdown (and thus the
@@ -181,10 +193,39 @@ def run_replay(start: date, end: date, sandbox: Path) -> dict:
               f"{gb:>11,.0f} {gs:>11,.0f} {equity:>11,.0f}  {note}")
 
     return {"pf": pf, "reports_dir": reports_dir, "days": days,
-            "trading_days": len(days), "active_days": rebalance_days}
+            "trading_days": len(days), "active_days": rebalance_days,
+            "initial_cash": initial_cash}
 
 
-def _pnl_breakdown(pf: Path) -> dict:
+def _nifty_return(start: date, end: date) -> tuple[float, float]:
+    """(total_return_pct, maxDD_pct) of Nifty 50 over [start, end] from the
+    macro store — the SAME index/dates the equity result is compared against,
+    so the comparison is apples-to-apples (price index; TR would be ~+1.2%/yr
+    higher)."""
+    macro = REPO / "storage" / "macro.duckdb"
+    if not macro.exists():
+        return float("nan"), float("nan")
+    c = duckdb.connect(str(macro), read_only=True)
+    try:
+        rows = c.execute(
+            "SELECT value FROM macro_daily WHERE series_id='index_nifty_50' "
+            "AND dt BETWEEN ? AND ? ORDER BY dt", [start, end],
+        ).fetchall()
+    finally:
+        c.close()
+    v = [float(r[0]) for r in rows if r[0] is not None]
+    if len(v) < 2:
+        return float("nan"), float("nan")
+    tot = (v[-1] / v[0] - 1.0) * 100.0
+    peak = v[0]
+    mdd = 0.0
+    for x in v:
+        peak = max(peak, x)
+        mdd = min(mdd, x / peak - 1.0)
+    return tot, mdd * 100.0
+
+
+def _pnl_breakdown(pf: Path, initial_cash: float) -> dict:
     """Realized (closed round-trips) + unrealized (open positions marked) +
     commissions, reconciling to equity − Rs100,000."""
     c = duckdb.connect(str(pf), read_only=True)
@@ -213,7 +254,8 @@ def _pnl_breakdown(pf: Path) -> dict:
     return {
         "realized": float(realized), "tax": float(tax), "n_round": int(n_round),
         "commissions": float(comm), "cost": float(cost), "mark": float(mark),
-        "unrealized": float(mark) - float(cost), "cash": 100_000.0 + float(ledger),
+        "unrealized": float(mark) - float(cost),
+        "cash": float(initial_cash) + float(ledger),
     }
 
 
@@ -244,17 +286,21 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--start", type=date.fromisoformat, required=True)
     p.add_argument("--end", type=date.fromisoformat, required=True)
     p.add_argument("--sandbox", type=Path, default=REPO / "state" / "replay")
+    p.add_argument("--initial-cash", type=float, default=50_000.0,
+                   help="starting paper capital (default ₹50,000)")
     p.add_argument("--dashboard", action="store_true",
                    help="render the sandbox dashboard.html at the end")
     args = p.parse_args(argv)
 
-    res = run_replay(args.start, args.end, args.sandbox)
+    res = run_replay(args.start, args.end, args.sandbox, args.initial_cash)
     if not res:
         return 1
     _print_trade_log(res["pf"])
-    p = _pnl_breakdown(res["pf"])
+    cash0 = res["initial_cash"]
+    p = _pnl_breakdown(res["pf"], cash0)
     equity = p["cash"] + p["mark"]
-    ret = (equity - 100_000.0) / 100_000.0 * 100.0
+    ret = (equity - cash0) / cash0 * 100.0
+    nifty_ret, nifty_dd = _nifty_return(res["days"][0], res["days"][-1])
     print(f"\n=== FINAL ({res['days'][-1]}) ===")
     print(f"  trading days replayed: {res['trading_days']}   days with orders: {res['active_days']}")
     print(f"  Realized P&L:    Rs {p['realized']:+,.2f}   "
@@ -264,7 +310,10 @@ def main(argv: list[str] | None = None) -> int:
     print(f"  Commissions:     Rs {p['commissions']:,.2f}")
     print(f"  Net total P&L:   Rs {p['realized'] + p['unrealized'] - p['commissions']:+,.2f}")
     print(f"  Equity Rs{equity:,.2f} = cash Rs{p['cash']:,.2f} + holdings Rs{p['mark']:,.2f}   "
-          f"return {ret:+.2f}%  (vs Rs100,000 start)")
+          f"return {ret:+.2f}%  (vs Rs{cash0:,.0f} start)")
+    print(f"  Nifty 50 (same window): {nifty_ret:+.2f}%   maxDD {nifty_dd:.2f}%")
+    print(f"  >>> STRATEGY {ret:+.2f}%  vs  NIFTY50 {nifty_ret:+.2f}%  "
+          f"= {ret - nifty_ret:+.2f}pp")
     print(f"  per-day reports: {res['reports_dir']}/")
 
     if args.dashboard:
