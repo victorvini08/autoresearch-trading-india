@@ -1,0 +1,18 @@
+# autoresearch-trading-india — IST schedule (system TZ is Asia/Kolkata)
+# Mirrors deploy/launchd/*.plist exactly; scripts no-op on non-trading days.
+SHELL=/bin/bash
+HOME=/home/ubuntu
+REPO=/home/ubuntu/autoresearch-trading-india
+UV=/home/ubuntu/.local/bin/uv
+
+# token refresh 09:00 & 21:00 (keeps a real Dhan token alive if present; harmless in mock)
+0 9 * * *  cd $REPO && $UV run python -m scripts.dhan_token_refresh >> state/logs/dhan_token_refresh.out.log 2>> state/logs/dhan_token_refresh.err.log
+0 21 * * * cd $REPO && $UV run python -m scripts.dhan_token_refresh >> state/logs/dhan_token_refresh.out.log 2>> state/logs/dhan_token_refresh.err.log
+# daily data update 09:30
+30 9 * * * cd $REPO && $UV run python -m scripts.daily_update >> state/logs/daily_update.out.log 2>> state/logs/daily_update.err.log
+# premarket scan 10:00
+0 10 * * * cd $REPO && $UV run python -m scripts.premarket_scan >> state/logs/premarket_scan.out.log 2>> state/logs/premarket_scan.err.log
+# run live (paper) 10:15
+15 10 * * * cd $REPO && $UV run python -m scripts.run_live >> state/logs/run_live.out.log 2>> state/logs/run_live.err.log
+# daily report + safety eval 15:35
+35 15 * * * cd $REPO && $UV run python -m scripts.daily_report >> state/logs/daily_report.out.log 2>> state/logs/daily_report.err.log
