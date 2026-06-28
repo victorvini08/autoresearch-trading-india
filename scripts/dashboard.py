@@ -165,6 +165,7 @@ def _query_bucket(*, modes: tuple[str, ...], db_path: Path | None) -> dict:
         "dates": [d.isoformat() for d in all_dates],
         "by_date": by_date,
         "equity_curve": equity_curve,
+        "live_health": _live_health_for_bucket(modes, db_path),
     }
 
 
@@ -507,6 +508,22 @@ def _safety_state_for_day(
         return {"error": f"{type(e).__name__}: {e}"}
 
 
+def _live_health_for_bucket(modes: tuple[str, ...], db_path: Path | None) -> dict | None:
+    """Process-fidelity panel for the bucket (window-level, not per-day).
+
+    Wrapped in try/except so a computation hiccup degrades to a structured
+    error the JS renders inline, rather than taking down the whole dashboard
+    build. Returns None when the bucket has no equity history yet."""
+    try:
+        from data.live_health import compute_live_health
+
+        return compute_live_health(
+            mode=modes[0], db_path=db_path or portfolio_db.DEFAULT_DB_PATH
+        )
+    except Exception as e:  # noqa: BLE001
+        return {"error": f"{type(e).__name__}: {e}"}
+
+
 def _reconciliation_for_day(modes: tuple[str, ...], d: date) -> dict | None:
     """Compute the 5 reconciliation answers for the first mode in the bucket.
 
@@ -685,6 +702,44 @@ _HTML_TEMPLATE = r"""<!doctype html>
   .safety-card.transitioned { border-color: #fbbf24; }
   .safety-empty { color: var(--muted); font-size: 13px; }
 
+  /* Live Health & Confidence card */
+  .lh-section { display: flex; flex-direction: column; gap: 14px; }
+  .lh-verdict { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .lh-badge {
+    font-weight: 700; font-size: 13px; padding: 3px 12px; border-radius: 999px;
+    letter-spacing: 0.04em;
+  }
+  .lh-badge.GREEN { background: #14532d; color: #4ade80; }
+  .lh-badge.AMBER { background: #422006; color: #fbbf24; }
+  .lh-badge.RED { background: #4c0519; color: #f87171; }
+  .lh-headline { color: var(--text); font-size: 13px; font-weight: 600; }
+  .lh-caveat {
+    color: var(--muted); font-size: 12px; line-height: 1.5;
+    border-left: 2px solid var(--border, #333); padding-left: 10px;
+  }
+  .lh-window { color: var(--muted); font-size: 12px; }
+  .lh-group-title {
+    font-weight: 600; color: var(--text); font-size: 12px;
+    text-transform: uppercase; letter-spacing: 0.05em; margin: 6px 0 2px;
+  }
+  .lh-row { display: flex; gap: 8px; align-items: baseline; font-size: 13px; padding: 2px 0; }
+  .lh-icon { font-weight: 700; width: 14px; flex: none; text-align: center; }
+  .lh-icon.ok { color: #4ade80; }
+  .lh-icon.warn { color: #fbbf24; }
+  .lh-icon.flag { color: #f87171; }
+  .lh-icon.na { color: var(--muted); }
+  .lh-label { color: var(--text); flex: none; }
+  .lh-detail { color: var(--muted); }
+  .lh-behavior {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 10px; margin-top: 4px;
+  }
+  .lh-stat { background: var(--panel, #1a1a1a); border-radius: 8px; padding: 8px 12px; }
+  .lh-stat-label { color: var(--muted); font-size: 11px; }
+  .lh-stat-value { font-size: 16px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .lh-pending { color: var(--muted); font-size: 12px; line-height: 1.5; }
+  .lh-empty { color: var(--muted); font-size: 13px; }
+
   /* Trade Outcomes card (Step 3.b) */
   .tc-sub-title {
     font-weight: 600; color: var(--text); font-size: 13px;
@@ -827,6 +882,10 @@ _HTML_TEMPLATE = r"""<!doctype html>
   <div class="card chart-card">
     <h2>Cumulative Equity</h2>
     <canvas class="equity-chart"></canvas>
+  </div>
+  <div class="card live-health-card" style="margin-top:20px">
+    <h2>Live Health &amp; Strategy Evaluation <span class="recon-subtitle">— is the live book faithful to the validated strategy? (a fidelity check, NOT a returns forecast)</span></h2>
+    <div class="live-health-section"></div>
   </div>
   <div class="card" style="margin-bottom:20px">
     <h2>Orders &amp; Fills</h2>
@@ -1171,6 +1230,55 @@ function renderDay(bucketEl, bucket, iso) {
         + '<span class="recon-detail">' + escapeHtml(q.detail || '') + '</span>'
         + '</div>';
     }).join('');
+  }
+
+  // Live Health & Confidence — bucket-level (identical across days); rendered
+  // here so it refreshes with the tab. A fidelity verdict, NOT a returns call.
+  const lhDiv = bucketEl.querySelector('.live-health-section');
+  const lh = bucket.live_health;
+  if (lhDiv) {
+    if (!lh) {
+      lhDiv.innerHTML = '<div class="lh-empty">No equity history yet — nothing to assess.</div>';
+    } else if (lh.error) {
+      lhDiv.innerHTML = '<div class="lh-empty">Live health error: ' + escapeHtml(lh.error) + '</div>';
+    } else {
+      const lhIcon = (s) => s === 'ok' ? '✓' : (s === 'warn' ? '⚠' : (s === 'flag' ? '✗' : '·'));
+      const ppFmt = (v) => (v == null || isNaN(v)) ? '—' : ((v >= 0 ? '+' : '') + v.toFixed(2) + 'pp');
+      const pctFmt = (v) => (v == null || isNaN(v)) ? '—' : ((v >= 0 ? '+' : '') + v.toFixed(2) + '%');
+      const rowHtml = (r) =>
+        '<div class="lh-row"><span class="lh-icon ' + r.status + '">' + lhIcon(r.status) + '</span>'
+        + '<span class="lh-label">' + escapeHtml(r.label) + '</span>'
+        + '<span class="lh-detail">' + escapeHtml(r.detail || '') + '</span></div>';
+      const fidRows = (lh.fidelity || []).map(rowHtml).join('');
+      const chkRows = (lh.capital_checklist || []).map(rowHtml).join('');
+      const b = lh.behavior || {};
+      const ddCls = (b.dd_protection_pp >= 0) ? 'positive' : 'negative';
+      const exCls = (b.excess_pp >= 0) ? 'positive' : 'negative';
+      const behaviorHtml =
+        '<div class="lh-behavior">'
+        + '<div class="lh-stat"><div class="lh-stat-label">Strategy return (window)</div><div class="lh-stat-value ' + cls(b.strategy_return_pct) + '">' + pctFmt(b.strategy_return_pct) + '</div></div>'
+        + '<div class="lh-stat"><div class="lh-stat-label">Nifty 50 (same window)</div><div class="lh-stat-value ' + cls(b.nifty_return_pct) + '">' + pctFmt(b.nifty_return_pct) + '</div></div>'
+        + '<div class="lh-stat"><div class="lh-stat-label">Excess vs Nifty</div><div class="lh-stat-value ' + exCls + '">' + ppFmt(b.excess_pp) + '</div></div>'
+        + '<div class="lh-stat"><div class="lh-stat-label">Worst-dip protection vs Nifty</div><div class="lh-stat-value ' + ddCls + '">' + ppFmt(b.dd_protection_pp) + '</div></div>'
+        + '</div>'
+        + '<div class="lh-pending">' + escapeHtml(b.envelope_detail || '') + '</div>';
+      const w = lh.window || {};
+      const pendingHtml = (lh.pending || []).length
+        ? '<div class="lh-pending"><strong>Coming next:</strong> ' + lh.pending.map(escapeHtml).join(' · ') + '</div>'
+        : '';
+      lhDiv.innerHTML =
+        '<div class="lh-section">'
+        + '<div class="lh-verdict"><span class="lh-badge ' + lh.verdict.status + '">' + escapeHtml(lh.verdict.status) + '</span>'
+        + '<span class="lh-headline">' + escapeHtml(lh.verdict.headline) + '</span></div>'
+        + '<div class="lh-window">Window ' + escapeHtml(w.start) + ' → ' + escapeHtml(w.end)
+          + ' (~' + w.n_weeks + 'w, ' + w.n_snapshots + ' snapshots)</div>'
+        + '<div class="lh-caveat">' + escapeHtml(lh.verdict.caveat) + '</div>'
+        + '<div><div class="lh-group-title">Process fidelity — is the machine faithful?</div>' + fidRows + '</div>'
+        + '<div><div class="lh-group-title">Behaviour vs benchmark</div>' + behaviorHtml + '</div>'
+        + '<div><div class="lh-group-title">Should I add capital? (advisory checklist)</div>' + chkRows + '</div>'
+        + pendingHtml
+        + '</div>';
+    }
   }
 
   // Positions
