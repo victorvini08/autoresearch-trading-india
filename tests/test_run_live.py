@@ -235,6 +235,29 @@ def test_weekend_run_is_skipped(env, monkeypatch):
     assert "Sunday" in summary_sun.skipped_reason
 
 
+def test_holiday_run_is_skipped(env, monkeypatch):
+    """NSE is closed on published holidays; run_live must skip them WITHOUT
+    building the executor — the exact gap that let the 2026-06-26 (Muharram)
+    run execute a structural MA-exit on a non-session. The deferred signal is
+    re-derived on the next trading day, so nothing is lost."""
+    monkeypatch.setattr(run_live, "_within_execution_window", lambda now: True)
+    monkeypatch.setattr(daily_report, "REPORTS_DIR", env["reports_dir"])
+    monkeypatch.setattr(dashboard, "REPORTS_DIR", env["reports_dir"])
+    monkeypatch.setattr(daily_report.portfolio_db, "DEFAULT_DB_PATH", env["db_path"])
+    monkeypatch.setattr(dashboard.portfolio_db, "DEFAULT_DB_PATH", env["db_path"])
+
+    def _must_not_build(mode):
+        raise AssertionError("executor must NOT be built on an NSE holiday")
+    monkeypatch.setattr(run_live, "_build_executor", _must_not_build)
+
+    # 2026-06-26 is Muharram (a Friday) — an NSE holiday, not a weekend.
+    code, summary = run_live.run(mode="dhan-paper", today_ist=date(2026, 6, 26))
+    assert code == 0
+    assert summary.skipped is True
+    assert "holiday" in summary.skipped_reason.lower()
+    assert "weekend" not in summary.skipped_reason.lower()
+
+
 def test_weekday_passes_trading_day_guard(env, monkeypatch):
     """A normal weekday (Monday) must NOT be skipped by the weekend guard —
     it must reach the executor."""

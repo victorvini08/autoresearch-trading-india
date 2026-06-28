@@ -29,6 +29,7 @@ from datetime import date, datetime, time, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
+from data.nse_calendar import is_calendar_current, is_trading_day
 from scripts import daily_report, dashboard, premarket_scan
 # DhanExecutor lands in scripts.executors after Phase 4 (handoff §3,
 # scripts/executors/dhan.py NEW). For now import only the protocol-level
@@ -162,25 +163,45 @@ def run(
         _safe_report(skip_summary, premarket_payload=None)
         return 1, skip_summary
 
-    # Pre-flight: trading-day guard. NSE is closed on weekends, so neither
-    # dhan-paper nor dhan-live should execute on a Saturday/Sunday. The
-    # launchd plist has NO Weekday restriction, so without this guard the
-    # 10:15 job fires every calendar day — it ran on Saturday 2026-05-30 and
-    # the mock broker "filled" orders against a closed market, churning the
-    # paper validation track record on a non-session. (Holidays are handled
-    # downstream: a non-session never advances the price feed, and the
-    # live-seeded signal re-derives the held book as its own target, so a
-    # stale-feed re-run produces ~0 orders rather than phantom churn.)
-    if today_ist.weekday() >= 5:  # 5 = Saturday, 6 = Sunday
+    # Pre-flight: trading-day guard. NSE is closed on weekends AND on its
+    # published holidays. The launchd/cron job has NO weekday/holiday
+    # restriction, so without this guard the 10:15 job fires every calendar
+    # day. It ran on Saturday 2026-05-30 (weekend) and again on the Muharram
+    # holiday 2026-06-26 — both times the mock "filled" orders against a closed
+    # market (the 06-26 run executed a genuine structural MA-exit of TATASTEEL,
+    # but on stale 06-25 prices and a non-session). The earlier "holidays are
+    # handled downstream by a stale feed" assumption was WRONG: it holds on a
+    # hold day but breaks the moment the strategy actually trades (a structural
+    # exit or a rebalance), which is exactly when it matters. Holidays are NOT
+    # derivable from the feed at 10:15 (a holiday morning is indistinguishable
+    # from a normal one), so the explicit NSE calendar (data/nse_calendar.py)
+    # is the only correct source. A skipped signal is not lost — the next
+    # trading session's run re-derives and executes it.
+    if not is_calendar_current(today_ist):
+        print(
+            f"[run_live] WARNING: NSE holiday calendar (data/nse_calendar.py) "
+            f"has no entries for {today_ist.year}; only the weekend rule is "
+            f"active — a weekday holiday could slip through. Update it from "
+            f"nseindia.com."
+        )
+    if not is_trading_day(today_ist):
+        if today_ist.weekday() >= 5:  # 5 = Saturday, 6 = Sunday
+            reason = (
+                f"{today_ist.isoformat()} is a weekend "
+                f"({today_ist.strftime('%A')}); NSE is closed — no execution."
+            )
+        else:
+            reason = (
+                f"{today_ist.isoformat()} is an NSE holiday "
+                f"({today_ist.strftime('%A')}); market closed — no execution. "
+                f"The signal defers to the next trading session."
+            )
         skip_summary = ExecutionSummary(
             mode=mode,
             as_of_date=today_ist,
             fill_date=None,
             skipped=True,
-            skipped_reason=(
-                f"{today_ist.isoformat()} is a weekend "
-                f"({today_ist.strftime('%A')}); NSE is closed — no execution."
-            ),
+            skipped_reason=reason,
         )
         _log_skip_summary(skip_summary)
         _safe_report(skip_summary, premarket_payload=None)
