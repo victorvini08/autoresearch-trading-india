@@ -89,6 +89,16 @@ def _nifty_window(start: date, end: date) -> tuple[float, float]:
     return tot, mdd * 100.0
 
 
+def _dd_protection_pp(strat_mdd_pct: float, nifty_mdd_pct: float) -> float:
+    """Drawdown protection in percentage points: POSITIVE = our worst dip was
+    SHALLOWER than Nifty's (the strategy's actual edge). Both inputs are
+    negative percentages (e.g. strat −0.53, nifty −1.42), so protection =
+    |nifty| − |ours| = strat_mdd − nifty_mdd  (−0.53 − (−1.42) = +0.89)."""
+    if nifty_mdd_pct != nifty_mdd_pct:  # NaN guard
+        return float("nan")
+    return strat_mdd_pct - nifty_mdd_pct
+
+
 def _max_drawdown_pct(equity: list[float]) -> float:
     peak, mdd = equity[0], 0.0
     for x in equity:
@@ -287,7 +297,7 @@ def compute_live_health(
         "strategy_maxdd_pct": strat_mdd,
         "nifty_maxdd_pct": nifty_mdd,
         # drawdown protection = how much shallower our worst dip was (positive = better)
-        "dd_protection_pp": (nifty_mdd - strat_mdd) if nifty_mdd == nifty_mdd else float("nan"),
+        "dd_protection_pp": _dd_protection_pp(strat_mdd, nifty_mdd),
         "envelope_status": "na",
         "envelope_detail": (
             "Return-vs-backtest envelope and parallel-backtest tracking-error "

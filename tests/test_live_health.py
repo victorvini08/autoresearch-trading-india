@@ -11,8 +11,18 @@ from datetime import date, datetime
 
 import pytest
 
-from data.live_health import compute_live_health
+from data.live_health import _dd_protection_pp, compute_live_health
 from storage import portfolio_db
+
+
+def test_dd_protection_sign():
+    """Positive = we fell LESS than Nifty (the edge); negative = we fell more."""
+    # strat dipped −0.53%, Nifty −1.42% → we protected by +0.89pp
+    assert _dd_protection_pp(-0.53, -1.42) == pytest.approx(0.89)
+    # strat dipped −5%, Nifty only −2% → we fell 3pp MORE → negative
+    assert _dd_protection_pp(-5.0, -2.0) == pytest.approx(-3.0)
+    # missing benchmark → NaN, not a bogus number
+    assert _dd_protection_pp(-1.0, float("nan")) != _dd_protection_pp(-1.0, float("nan"))
 
 MODE = "test-health"
 D1 = date(2026, 6, 15)
