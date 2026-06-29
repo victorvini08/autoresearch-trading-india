@@ -408,3 +408,48 @@ def test_low_capital_live_run_keeps_bootstrap_armed(
 
     assert seen == [True]            # the force WAS computed (empty book, no marker)
     assert not marker.exists()       # but NOT consumed — no buildable equity order
+
+
+def test_sweep_retries_missed_leg_without_overfill(
+    prices_db: Path, portfolio_db: Path, halt_file: Path, monkeypatch
+) -> None:
+    """Sweep-to-fill: a leg that doesn't fill on the first pass (IOC cancel) is
+    re-fired on the next pass and fills — and because each pass re-sizes the
+    RESIDUAL from the live book, the name is never over-bought."""
+    from brokers.dhan import OrderResponse, STATUS_CANCELLED
+
+    monkeypatch.setenv("DHAN_MOCK", "1")
+    mock = DhanMock(prices_db=prices_db, initial_cash_inr=50_000.0, slippage_bps=0.0)
+
+    # Make INFY's FIRST buy a no-fill IOC cancel (no position change); later
+    # attempts go through to the real mock and fill.
+    real_place = mock.place_order
+    miss = {"INFY": 1}
+    seen_orders = {"count": 0}
+
+    def flaky_place(req, **kw):
+        seen_orders["count"] += 1
+        if req.ticker == "INFY" and req.transaction_type == "BUY" and miss["INFY"] > 0:
+            miss["INFY"] -= 1
+            return OrderResponse(order_id=f"ioc-cancel-{seen_orders['count']}",
+                                 status=STATUS_CANCELLED, raw={})
+        return real_place(req, **kw)
+
+    monkeypatch.setattr(mock, "place_order", flaky_place)
+
+    executor = DhanExecutor(
+        mode="dhan-paper", prices_db=prices_db, portfolio_db=portfolio_db,
+        broker=mock, initial_cash_inr=50_000.0,
+    )
+    with patch("scripts.signal_today.generate_signals", side_effect=_stub_signals):
+        result = executor.execute_day(date(2026, 5, 13))
+
+    assert not result.skipped, result.skipped_reason
+    # INFY missed pass 1 but was retried and filled to its CORRECT target qty
+    # (1/6 of ₹50k at ₹1500 = floor(5.55) = 5 shares) — crucially NOT doubled to
+    # 10, because each pass re-sizes the residual from the live book.
+    pos = {p.ticker: p.quantity for p in mock.get_positions() if p.quantity}
+    assert pos.get("INFY") == 5, f"INFY filled {pos.get('INFY')} (target 5; 10 = over-fill bug)"
+    # All six names filled; the cancelled retry is NOT counted as an order.
+    assert result.n_orders == 6
+    assert miss["INFY"] == 0  # the first INFY buy really was the no-fill path

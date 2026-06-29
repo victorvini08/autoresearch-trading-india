@@ -60,6 +60,12 @@ ORDER_TYPE_SLM = "STOP_LOSS_MARKET"
 PRODUCT_CNC = "CNC"
 EXCHANGE_NSE_EQ = "NSE_EQ"
 VALIDITY_DAY = "DAY"
+# IOC (Immediate-Or-Cancel): fills what it can at once, cancels the rest — it
+# never rests on the book. The executor's sweep-to-fill loop uses this so a
+# missed leg becomes an immediate clean cancel (re-fired next sweep) rather than
+# a stale resting order that could surprise-fill later at a price we no longer
+# want. Verified accepted for equity CNC live 2026-06-29.
+VALIDITY_IOC = "IOC"
 
 # Status constants Dhan returns. Reachability in CURRENT code paths:
 #   PENDING       — live broker default when /v2/orders POST returns no status
@@ -95,6 +101,7 @@ class OrderRequest:
     order_type: str = ORDER_TYPE_MARKET
     price: float | None = None       # required for LIMIT
     trigger_price: float | None = None  # required for SL / SLM
+    validity: str = VALIDITY_DAY     # DAY or IOC (IOC = fill-now-or-cancel)
 
 
 @dataclass
@@ -470,7 +477,7 @@ class DhanBroker:
             "exchangeSegment": EXCHANGE_NSE_EQ,
             "productType": PRODUCT_CNC,
             "orderType": req.order_type,
-            "validity": VALIDITY_DAY,
+            "validity": req.validity,
             "securityId": security_id,
             "quantity": int(req.quantity),
         }
@@ -594,6 +601,7 @@ __all__ = [
     "PRODUCT_CNC",
     "EXCHANGE_NSE_EQ",
     "VALIDITY_DAY",
+    "VALIDITY_IOC",
     "STATUS_PENDING",
     "STATUS_TRANSIT",
     "STATUS_TRADED",

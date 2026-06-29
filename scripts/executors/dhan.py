@@ -38,6 +38,7 @@ from brokers.dhan import (
     ORDER_TYPE_MARKET,
     STATUS_REJECTED,
     STATUS_TRADED,
+    VALIDITY_IOC,
     OrderRequest,
 )
 from scripts.executors.protocol import (
@@ -61,6 +62,19 @@ FRACTION_CHANGE_THRESHOLD = 0.005   # 0.5pp — US repo learnings §4.2
 MIN_ORDER_INR = 1500.0
 DEFAULT_PRICES_DB = Path("storage/prices.duckdb")
 DEFAULT_PORTFOLIO_DB = Path("storage/portfolio.duckdb")
+
+# Sweep-to-fill (rebalance-day robustness). On Dhan a "MARKET" equity order is
+# really a protected LIMIT at LTP that can miss on a tick, and IOC cancels the
+# unfilled part rather than resting it. So instead of placing once and hoping,
+# the executor re-derives the RESIDUAL delta from the live book and re-fires IOC
+# until everything is filled or a hard time budget elapses. Residual sizing comes
+# from re-running _build_orders against current positions, so repeated passes can
+# never over-fill. Bounded by BOTH a wall-clock budget and a sweep cap; the
+# settle pause lets each IOC reach terminal + the position read be authoritative
+# before the next residual is sized (this is what prevents a double-fill race).
+REBALANCE_FILL_BUDGET_SEC = 180.0   # total wall-clock for one execute_day's fills
+MAX_FILL_SWEEPS = 90                # backstop on passes; the time budget governs first
+SWEEP_SETTLE_SEC = 2.0              # pause between passes (tests set this to 0)
 
 # First-day live bootstrap marker. A freshly-funded dhan-live account is an
 # EMPTY book, which signal_today treats as the seeded-flat path: it acts on
@@ -505,37 +519,96 @@ class DhanExecutor:
                 type(e).__name__, e,
             )
 
-        # 3. Convert target_fractions → integer share orders
-        order_reqs, gross_buy, gross_sell = self._build_orders(
-            as_of_date=as_of_date,
-            targets=targets,
-        )
-        # 3b. Drop orders touching premarket-flagged tickers (gap/halt). For
-        #     held names this leaves the position in place (no sell into a
-        #     gap-down); for new entries this defers them to the next
-        #     rebalance day (no buy into a gap-up).
-        if skips and order_reqs:
-            before = len(order_reqs)
-            dropped: dict[str, float] = {}
-            kept = []
-            for req in order_reqs:
+        # 3-4. SWEEP-TO-FILL. On Dhan a "MARKET" equity order is really a
+        # protected LIMIT at LTP that can miss on a tick, and IOC cancels the
+        # unfilled part instead of resting it. So rather than place-once-and-hope,
+        # we re-derive the RESIDUAL delta from the live book each pass and re-fire
+        # IOC until everything is filled or a hard time budget elapses. Residual
+        # sizing comes from re-running _build_orders against current positions, so
+        # repeated passes converge to target and can NEVER over-fill.
+        import time as _sweep_time
+
+        def _drop_premarket_skips(reqs, gb, gs):
+            """Drop premarket-flagged (gap/halt) tickers from this pass's orders.
+            Returns (kept, gross_buy, gross_sell)."""
+            if not (skips and reqs):
+                return reqs, gb, gs
+            kept, dropped = [], {}
+            for req in reqs:
                 if req.ticker.upper() in skips:
                     notional = float(req.quantity) * float(req.price or 0.0)
                     dropped[req.ticker.upper()] = notional
                     if req.transaction_type.upper() == "BUY":
-                        gross_buy -= notional
+                        gb -= notional
                     else:
-                        gross_sell -= notional
+                        gs -= notional
                 else:
                     kept.append(req)
-            order_reqs = kept
-            if dropped:
+            return kept, gb, gs
+
+        placed: list = []          # (req, resp) across ALL passes, for reconcile
+        gross_buy = gross_sell = 0.0
+        last_reqs: list = []       # residual still outstanding when the loop exits
+        seen_premarket_drop = False
+        bootstrap_marked = False
+        deadline = _sweep_time.monotonic() + REBALANCE_FILL_BUDGET_SEC
+
+        for sweep in range(MAX_FILL_SWEEPS):
+            reqs, gb, gs = self._build_orders(as_of_date=as_of_date, targets=targets)
+            n_before = len(reqs)
+            reqs, gb, gs = _drop_premarket_skips(reqs, gb, gs)
+            if skips and n_before > len(reqs) and not seen_premarket_drop:
                 notes.append(
-                    f"premarket: dropped {before - len(order_reqs)} orders for "
-                    f"gap-flagged tickers {sorted(dropped)}"
+                    f"premarket: dropped {n_before - len(reqs)} orders for "
+                    f"gap-flagged tickers {sorted(skips)}"
                 )
-        if not order_reqs:
-            notes.append("FRACTION_CHANGE_THRESHOLD suppressed all rebalance deltas")
+                seen_premarket_drop = True
+            last_reqs = reqs
+            if not reqs:
+                break  # fully converged: all filled, or remaining deltas suppressed
+            if sweep == 0:
+                gross_buy, gross_sell = gb, gs  # report the round-0 intended gross
+
+            # First-day live bootstrap: consume the one-time marker ONLY once the
+            # forced rebalance has a real EQUITY order to place (not the cash
+            # floor) — a low-capital run that builds no whole-share equity order
+            # never reaches here, so the bootstrap stays ARMED. See the marker
+            # helpers near the top of this module.
+            if force_rebalance and not bootstrap_marked:
+                from scripts.cash_floor import CASH_FLOOR_TICKER as _BOOT_FLOOR_TKR
+
+                if any(r.ticker.upper() != _BOOT_FLOOR_TKR for r in reqs):
+                    _mark_live_bootstrap_done(as_of_date)
+                    notes.append("first-day live bootstrap: forced initial rebalance")
+                    bootstrap_marked = True
+
+            for req in reqs:
+                try:
+                    if not hasattr(self.broker, "place_order"):
+                        raise RuntimeError("broker has no place_order")
+                    # as_of_date drives Phase B fill-pricing in the mock; the
+                    # live broker ignores it (exchange supplies the fill price).
+                    resp = self.broker.place_order(req, as_of_date=as_of_date)
+                    placed.append((req, resp))
+                    if resp.status == STATUS_REJECTED:
+                        notes.append(
+                            f"order rejected: {req.transaction_type} {req.quantity} {req.ticker}")
+                except Exception as e:
+                    logger.error("place_order %s %s failed: %s",
+                                 req.transaction_type, req.ticker, e)
+                    notes.append(
+                        f"place_order failed for {req.transaction_type} "
+                        f"{req.quantity} {req.ticker}: {e}")
+
+            if _sweep_time.monotonic() >= deadline:
+                break
+            _sweep_time.sleep(SWEEP_SETTLE_SEC)  # settle: IOC reaches terminal +
+            #                                      position read becomes authoritative
+
+        # Nothing was placeable at all → non-rebalance day or every delta
+        # suppressed (FRACTION_CHANGE_THRESHOLD / MIN_ORDER_INR).
+        if not placed:
+            notes.append("no fillable orders (non-rebalance day or all deltas suppressed)")
             return ExecutionSummary(
                 mode=self.mode,
                 as_of_date=as_of_date,
@@ -548,60 +621,31 @@ class DhanExecutor:
                 notes=notes,
             )
 
-        # First-day live bootstrap: consume the one-time marker ONLY now that
-        # the forced rebalance has produced a real EQUITY order to place — not
-        # when the signal was merely computed. A low-capital run (e.g. a ₹1k
-        # API shakedown) yields target fractions but no buildable whole-share
-        # equity orders, so order_reqs is empty/floor-only above and we never
-        # reach here with equity work → the bootstrap stays ARMED for the real
-        # funded start. The cash-floor ticker is excluded: parking idle cash is
-        # not the equity deployment the bootstrap exists to trigger. Placement
-        # failures after this point are handled by normal reconciliation, not
-        # by re-bootstrapping (the initial rebalance has genuinely fired).
-        if force_rebalance:
-            from scripts.cash_floor import CASH_FLOOR_TICKER as _BOOT_FLOOR_TKR
-
-            if any(r.ticker.upper() != _BOOT_FLOOR_TKR for r in order_reqs):
-                _mark_live_bootstrap_done(as_of_date)
-                notes.append("first-day live bootstrap: forced initial rebalance")
-
-        # 4. Place orders + wait for terminal status
-        placed: list = []
-        for req in order_reqs:
-            try:
-                if hasattr(self.broker, "place_order"):
-                    # as_of_date drives Phase B fill-pricing in the mock
-                    # (today's NSE open via yfinance); DhanBroker ignores it.
-                    resp = self.broker.place_order(req, as_of_date=as_of_date)
-                else:
-                    raise RuntimeError("broker has no place_order")
-                placed.append((req, resp))
-            except Exception as e:
-                logger.error("place_order %s %s failed: %s", req.transaction_type, req.ticker, e)
-                notes.append(
-                    f"place_order failed for {req.transaction_type} {req.quantity} {req.ticker}: {e}"
-                )
-
-        for req, resp in list(placed):
-            if resp.status == STATUS_TRADED:
-                continue
-            if resp.status == STATUS_REJECTED:
-                notes.append(f"order rejected: {req.transaction_type} {req.quantity} {req.ticker}")
-                continue
-            try:
-                final = self.broker.wait_for_done(resp.order_id)
-                if final.status == STATUS_REJECTED:
-                    notes.append(f"post-wait reject {req.ticker}: {final.status}")
-            except Exception as e:
-                logger.error("wait_for_done %s failed: %s", resp.order_id, e)
+        # Loud alert if the budget/cap was exhausted with residual deltas still
+        # open — the rebalance did NOT fully complete (rare: an all-session
+        # halt/illiquid name). The book is closer to target than before; the
+        # shortfall is logged and self-heals at the next rebalance.
+        if last_reqs:
+            shortfall = sorted(
+                f"{r.transaction_type} {r.quantity} {r.ticker}" for r in last_reqs)
+            logger.error(
+                "sweep-to-fill INCOMPLETE after budget/cap — residual legs: %s", shortfall)
+            notes.append(f"INCOMPLETE: {len(last_reqs)} unfilled residual leg(s): {shortfall}")
+        else:
+            notes.append(f"sweep-to-fill complete in <= {MAX_FILL_SWEEPS} passes")
 
         # 5. Reconcile fills
         fills = list(self.broker.get_fills())
         n_fills = len(fills)
-        # We placed orders only today, but mock keeps fills across calls;
+        # We placed orders only today, but the broker keeps fills across calls;
         # filter to today's fills by intent — match against `placed` order_ids.
+        # IOC cancels produce NO fill, so get_fills already holds only what
+        # executed; `filled_ids` lets us drop the cancelled retry orders from the
+        # ledger — recording them would bloat n_orders and flag false unfilled
+        # discrepancies in write_execution_result.
         placed_ids = {r.order_id for _, r in placed if r.order_id}
         todays = [f for f in fills if f.order_id in placed_ids]
+        filled_ids = {f.order_id for f in todays}
         n_fills = len(todays)
         total_commission = sum(f.commission for f in todays)
 
@@ -646,6 +690,7 @@ class DhanExecutor:
                     status=resp.status,
                 )
                 for req, resp in placed
+                if resp.order_id in filled_ids  # only orders that actually filled
             ]
             # Use the Dhan trade-leg ID for fill_id, not the order_id —
             # /v2/trades may return N fills for one order (partial fills,
@@ -693,7 +738,7 @@ class DhanExecutor:
             mode=self.mode,
             as_of_date=as_of_date,
             fill_date=as_of_date,
-            n_orders=len(placed),
+            n_orders=len(filled_ids),  # distinct orders that filled (not retry attempts)
             n_fills=n_fills,
             gross_buy_usd=gross_buy,
             gross_sell_usd=gross_sell,
@@ -816,6 +861,7 @@ class DhanExecutor:
                         ticker=ticker,
                         quantity=pos.quantity,
                         order_type=ORDER_TYPE_MARKET,
+                        validity=VALIDITY_IOC,
                     )
                 )
 
@@ -888,6 +934,7 @@ class DhanExecutor:
                         ticker=ticker,
                         quantity=delta,
                         order_type=ORDER_TYPE_MARKET,
+                        validity=VALIDITY_IOC,
                     )
                 )
             else:
@@ -898,6 +945,7 @@ class DhanExecutor:
                         ticker=ticker,
                         quantity=abs(delta),
                         order_type=ORDER_TYPE_MARKET,
+                        validity=VALIDITY_IOC,
                     )
                 )
 
