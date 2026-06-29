@@ -282,3 +282,129 @@ def test_dhan_executor_empty_targets_skips(
     assert "non-rebalance day" in (result.skipped_reason or "") or "empty" in (
         result.skipped_reason or ""
     )
+
+
+def _force_capturing_stub(seen: list):
+    """generate_signals stub that records the `force_rebalance` kwarg the
+    executor passes, then returns the standard fixed targets."""
+
+    def _stub(*, target_date, strategy_module_name, force_rebalance=False, **_kw):
+        seen.append(force_rebalance)
+        return _stub_signals(
+            target_date=target_date, strategy_module_name=strategy_module_name
+        )
+
+    return _stub
+
+
+def test_first_day_live_bootstrap_forces_and_marks(
+    prices_db: Path, portfolio_db: Path, halt_file: Path, tmp_path: Path, monkeypatch
+) -> None:
+    """First dhan-live run on an empty book forces a rebalance AND writes the
+    one-time marker."""
+    monkeypatch.setenv("DHAN_MOCK", "1")
+    import scripts.executors.dhan as dhanmod
+
+    marker = tmp_path / "live_bootstrapped.json"
+    monkeypatch.setattr(dhanmod, "LIVE_BOOTSTRAP_MARKER", marker)
+
+    seen: list = []
+    mock = DhanMock(prices_db=prices_db, initial_cash_inr=50_000.0, slippage_bps=0.0)
+    executor = DhanExecutor(
+        mode="dhan-live", prices_db=prices_db, portfolio_db=portfolio_db,
+        broker=mock, initial_cash_inr=50_000.0,
+    )
+    with patch(
+        "scripts.signal_today.generate_signals",
+        side_effect=_force_capturing_stub(seen),
+    ):
+        result = executor.execute_day(date(2026, 5, 13))
+
+    assert seen == [True]                      # bootstrap forced exactly once
+    assert marker.exists()                     # marker recorded
+    assert not result.skipped, result.skipped_reason
+
+
+def test_marker_present_suppresses_force_on_empty_book(
+    prices_db: Path, portfolio_db: Path, halt_file: Path, tmp_path: Path, monkeypatch
+) -> None:
+    """A pre-existing marker suppresses the force even on an empty live book —
+    the bootstrap is strictly one-time."""
+    monkeypatch.setenv("DHAN_MOCK", "1")
+    import scripts.executors.dhan as dhanmod
+
+    marker = tmp_path / "live_bootstrapped.json"
+    marker.write_text("{}")                    # bootstrap already consumed
+    monkeypatch.setattr(dhanmod, "LIVE_BOOTSTRAP_MARKER", marker)
+
+    seen: list = []
+    mock = DhanMock(prices_db=prices_db, initial_cash_inr=50_000.0, slippage_bps=0.0)
+    executor = DhanExecutor(
+        mode="dhan-live", prices_db=prices_db, portfolio_db=portfolio_db,
+        broker=mock, initial_cash_inr=50_000.0,
+    )
+    with patch(
+        "scripts.signal_today.generate_signals",
+        side_effect=_force_capturing_stub(seen),
+    ):
+        executor.execute_day(date(2026, 5, 13))
+
+    assert seen == [False]
+
+
+def test_paper_mode_never_force_bootstraps(
+    prices_db: Path, portfolio_db: Path, halt_file: Path, tmp_path: Path, monkeypatch
+) -> None:
+    """The bootstrap is scoped to dhan-live: an empty dhan-paper book must NOT
+    force (paper runs daily on the mock with no idle-cash cost)."""
+    monkeypatch.setenv("DHAN_MOCK", "1")
+    import scripts.executors.dhan as dhanmod
+
+    marker = tmp_path / "live_bootstrapped.json"
+    monkeypatch.setattr(dhanmod, "LIVE_BOOTSTRAP_MARKER", marker)
+
+    seen: list = []
+    mock = DhanMock(prices_db=prices_db, initial_cash_inr=50_000.0, slippage_bps=0.0)
+    executor = DhanExecutor(
+        mode="dhan-paper", prices_db=prices_db, portfolio_db=portfolio_db,
+        broker=mock, initial_cash_inr=50_000.0,
+    )
+    with patch(
+        "scripts.signal_today.generate_signals",
+        side_effect=_force_capturing_stub(seen),
+    ):
+        executor.execute_day(date(2026, 5, 13))
+
+    assert seen == [False]
+    assert not marker.exists()
+
+
+def test_low_capital_live_run_keeps_bootstrap_armed(
+    prices_db: Path, portfolio_db: Path, halt_file: Path, tmp_path: Path, monkeypatch
+) -> None:
+    """A low-capital live run (e.g. a ₹1k API shakedown) FORCES the rebalance
+    signal but builds no whole-share equity orders at that capital — so the
+    one-time bootstrap marker must NOT be written. It stays armed for the real
+    funded start; otherwise the ₹1k test would silently burn the one-shot."""
+    monkeypatch.setenv("DHAN_MOCK", "1")
+    import scripts.executors.dhan as dhanmod
+
+    marker = tmp_path / "live_bootstrapped.json"
+    monkeypatch.setattr(dhanmod, "LIVE_BOOTSTRAP_MARKER", marker)
+
+    seen: list = []
+    # ₹1,000 capital: 1/6 ≈ ₹166/name vs share prices ₹1,100–3,500 → 0 shares
+    # buildable for every name → order_reqs empty → bootstrap stays armed.
+    mock = DhanMock(prices_db=prices_db, initial_cash_inr=1_000.0, slippage_bps=0.0)
+    executor = DhanExecutor(
+        mode="dhan-live", prices_db=prices_db, portfolio_db=portfolio_db,
+        broker=mock, initial_cash_inr=1_000.0,
+    )
+    with patch(
+        "scripts.signal_today.generate_signals",
+        side_effect=_force_capturing_stub(seen),
+    ):
+        executor.execute_day(date(2026, 5, 13))
+
+    assert seen == [True]            # the force WAS computed (empty book, no marker)
+    assert not marker.exists()       # but NOT consumed — no buildable equity order

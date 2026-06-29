@@ -457,3 +457,88 @@ def test_carry_forward_fractions_match_live_book_non_rebalance(monkeypatch):
     assert frac["BBB"] == pytest.approx(0.10, abs=0.005)
     assert frac["CCC"] == pytest.approx(0.05, abs=0.005)
     assert sum(frac.values()) == pytest.approx(0.25, abs=0.01)  # true gross, not ~0.33
+
+
+def _gated_strategy_module(name: str = "fake_gated_strategy"):
+    """A strategy that rebalances ONLY when `_is_rebalance_today()` is True
+    (default: never) — mirroring IndiaMomentumQualityCarry's calendar gate.
+    Registered as an importable module so generate_signals can load it."""
+    import sys
+
+    class _GatedRebalance(bt.Strategy):
+        def _is_rebalance_today(self):
+            return False  # calendar gate closed on every bar by default
+
+        def next(self):
+            if not self._is_rebalance_today():
+                return
+            self.order_target_percent(data=self.datas[0], target=0.1)
+
+    mod = type(sys)(name)
+    mod.GatedRebalance = _GatedRebalance
+    sys.modules[name] = mod
+    return name
+
+
+def _gated_feeds(monkeypatch):
+    """Flat feeds ending on a NON-rebalance Monday so the calendar gate would
+    naturally keep the book flat without the force flag."""
+    idx = pd.bdate_range("2025-05-01", "2026-06-01")
+    fake_feeds = {
+        t: pd.DataFrame(
+            {"open": 100.0, "high": 101.0, "low": 99.0, "close": 100.0,
+             "volume": 1_000_000},
+            index=idx,
+        )
+        for t in ["AAA", "BBB"]
+    }
+    monkeypatch.setattr("scripts.signal_today._load_feeds", lambda s, e, t: fake_feeds)
+    monkeypatch.setattr("scripts.signal_today.get_universe_at", lambda d: ["AAA", "BBB"])
+
+
+def test_force_rebalance_deploys_empty_book(monkeypatch):
+    """First-day live bootstrap: force_rebalance makes a gated strategy
+    rebalance on the seeded decision bar even though its calendar gate is
+    closed — so a freshly-funded empty book deploys immediately instead of
+    idling until the next rebalance Friday."""
+    name = _gated_strategy_module()
+    _gated_feeds(monkeypatch)
+    res = generate_signals(
+        target_date=date(2026, 6, 2),
+        strategy_module_name=name,
+        current_positions={},          # freshly-funded empty live book
+        current_cash=50_000.0,
+        force_rebalance=True,
+    )
+    frac = {r["ticker"]: r["target_fraction"] for r in res["targets"]}
+    assert frac.get("AAA") == pytest.approx(0.1)
+
+
+def test_no_force_leaves_empty_book_flat(monkeypatch):
+    """Without the flag, the same gated strategy stays flat on a non-rebalance
+    day — exactly the idling the bootstrap exists to prevent."""
+    name = _gated_strategy_module()
+    _gated_feeds(monkeypatch)
+    res = generate_signals(
+        target_date=date(2026, 6, 2),
+        strategy_module_name=name,
+        current_positions={},
+        current_cash=50_000.0,
+        force_rebalance=False,
+    )
+    assert res["targets"] == []
+
+
+def test_force_rebalance_ignored_on_legacy_path(monkeypatch):
+    """force_rebalance is honoured ONLY on the seeded path. The legacy
+    from-scratch replay (current_positions=None) must ignore it so backtests
+    and the gated rebalance calendar stay untouched."""
+    name = _gated_strategy_module()
+    _gated_feeds(monkeypatch)
+    res = generate_signals(
+        target_date=date(2026, 6, 2),
+        strategy_module_name=name,
+        current_positions=None,        # legacy path
+        force_rebalance=True,
+    )
+    assert res["targets"] == []

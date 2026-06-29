@@ -107,6 +107,7 @@ def _make_capturing_strategy(
     strategy_cls: type,
     live_positions: dict[str, float] | None = None,
     decision_date: date | None = None,
+    force_rebalance: bool = False,
 ) -> tuple[type, dict]:
     """Subclass `strategy_cls`. Lets order_target_percent fill normally
     (super() called) AND tracks each bar's order_target_percent calls so the
@@ -155,6 +156,20 @@ def _make_capturing_strategy(
         @staticmethod
         def _name_of(d) -> str:
             return str(getattr(d, "_name", "") or "").upper()
+
+        def _is_rebalance_today(self):
+            # First-day live bootstrap: when the executor flags
+            # force_rebalance, treat the decision bar as a rebalance so a
+            # freshly-funded (empty) live book deploys immediately instead of
+            # idling until the next even-week rebalance Friday. Honoured ONLY
+            # on the seeded path (_seed is not None): there, super().next() —
+            # and therefore this gate — runs on the decision bar ALONE, so the
+            # force fires on exactly one bar. The legacy from-scratch replay
+            # (_seed is None) ignores it, leaving backtest behaviour and the
+            # gated rebalance calendar untouched.
+            if force_rebalance and _seed is not None:
+                return True
+            return super()._is_rebalance_today()
 
         def _seed_live_positions(self) -> None:
             """Force the in-memory broker to mirror the LIVE account on the
@@ -259,8 +274,15 @@ def generate_signals(
     lookback_days: int = 500,
     current_positions: dict[str, float] | None = None,
     current_cash: float | None = None,
+    force_rebalance: bool = False,
 ) -> dict:
     """Generate target positions as of `target_date` from `strategy_module_name`.
+
+    `force_rebalance` (executor-only, seeded path): treat the decision bar as
+    a rebalance regardless of the strategy's calendar gate. Used by the
+    one-time first-day live bootstrap so a freshly-funded empty book deploys
+    immediately instead of idling until the next even-week rebalance Friday.
+    Ignored on the legacy (`current_positions is None`) from-scratch path.
 
     Returns the structured dict described in this script's docstring.
     """
@@ -294,6 +316,7 @@ def generate_signals(
         strategy_cls,
         live_positions=current_positions,
         decision_date=last_bar,
+        force_rebalance=force_rebalance,
     )
 
     cerebro = bt.Cerebro()

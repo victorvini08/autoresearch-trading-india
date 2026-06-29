@@ -26,6 +26,7 @@ authoritative tag.
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 from dataclasses import dataclass
@@ -60,6 +61,37 @@ FRACTION_CHANGE_THRESHOLD = 0.005   # 0.5pp — US repo learnings §4.2
 MIN_ORDER_INR = 1500.0
 DEFAULT_PRICES_DB = Path("storage/prices.duckdb")
 DEFAULT_PORTFOLIO_DB = Path("storage/portfolio.duckdb")
+
+# First-day live bootstrap marker. A freshly-funded dhan-live account is an
+# EMPTY book, which signal_today treats as the seeded-flat path: it acts on
+# the decision bar alone and only rebalances on an even-week rebalance Friday.
+# So a live start on any other weekday would idle (uninvested) for up to two
+# weeks until the next scheduled rebalance. This marker lets the executor force
+# a single rebalance on the very first live session, then never again — an
+# ops-level bootstrap, NOT a change to the gated strategy calendar (same layer
+# as the LIQUIDCASE cash floor). The 4-week paper analogue is intentionally not
+# bootstrapped: paper runs daily on the mock and has no idle-cash cost.
+LIVE_BOOTSTRAP_MARKER = portfolio_db.REPO_ROOT / "state" / "live_bootstrapped.json"
+
+
+def _live_bootstrap_done() -> bool:
+    """True once the first-day live rebalance has been forced (marker exists)."""
+    return LIVE_BOOTSTRAP_MARKER.exists()
+
+
+def _mark_live_bootstrap_done(as_of_date: date) -> None:
+    """Record that the one-time first-day live rebalance has been performed."""
+    LIVE_BOOTSTRAP_MARKER.parent.mkdir(parents=True, exist_ok=True)
+    LIVE_BOOTSTRAP_MARKER.write_text(
+        json.dumps(
+            {
+                "bootstrapped_on": as_of_date.isoformat(),
+                "set_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+                "note": "first-day live rebalance forced; normal calendar resumes",
+            },
+            indent=2,
+        )
+    )
 
 
 @dataclass
@@ -213,12 +245,38 @@ class DhanExecutor:
                 if _floor_px and live_cash is not None:
                     live_cash += _floor_qty * _floor_px
 
+            # First-day live bootstrap: force a single rebalance when a
+            # freshly-funded live account starts EMPTY (no equity positions;
+            # a floor-only book has already been stripped to {} above) and the
+            # bootstrap has never run. Scoped to dhan-live — paper runs daily
+            # on the mock and has no idle-cash cost. signal_today honours the
+            # flag on the seeded decision bar alone, so exactly one rebalance
+            # fires; the marker (written below) prevents it recurring.
+            force_rebalance = (
+                self.mode == "dhan-live"
+                and live_positions == {}
+                and not _live_bootstrap_done()
+            )
+            if force_rebalance:
+                logger.info(
+                    "first-day live bootstrap: empty live book on %s — forcing "
+                    "an initial rebalance so capital deploys immediately instead "
+                    "of idling to the next rebalance Friday", as_of_date,
+                )
+
             signals_result = generate_signals(
                 target_date=as_of_date,
                 strategy_module_name=strategy_module,
                 current_positions=live_positions,
                 current_cash=live_cash,
+                force_rebalance=force_rebalance,
             )
+            # NB: the one-time bootstrap marker is written LATER — only once
+            # the forced rebalance has produced a real equity order to place
+            # (see "first-day live bootstrap: consume marker" below). Marking
+            # it here would burn the one-shot on a run that computes target
+            # FRACTIONS but builds no whole-share orders — e.g. a low-capital
+            # ₹1k API shakedown — leaving the real funded start un-bootstrapped.
             # generate_signals returns {"targets": [{"ticker","target_fraction"},...],
             # "exits":[...]} — a LIST of entry rows. _build_orders expects a
             # {ticker: target_fraction} MAPPING (a ticker absent from the map is
@@ -489,6 +547,23 @@ class DhanExecutor:
                 total_commission_usd=0.0,
                 notes=notes,
             )
+
+        # First-day live bootstrap: consume the one-time marker ONLY now that
+        # the forced rebalance has produced a real EQUITY order to place — not
+        # when the signal was merely computed. A low-capital run (e.g. a ₹1k
+        # API shakedown) yields target fractions but no buildable whole-share
+        # equity orders, so order_reqs is empty/floor-only above and we never
+        # reach here with equity work → the bootstrap stays ARMED for the real
+        # funded start. The cash-floor ticker is excluded: parking idle cash is
+        # not the equity deployment the bootstrap exists to trigger. Placement
+        # failures after this point are handled by normal reconciliation, not
+        # by re-bootstrapping (the initial rebalance has genuinely fired).
+        if force_rebalance:
+            from scripts.cash_floor import CASH_FLOOR_TICKER as _BOOT_FLOOR_TKR
+
+            if any(r.ticker.upper() != _BOOT_FLOOR_TKR for r in order_reqs):
+                _mark_live_bootstrap_done(as_of_date)
+                notes.append("first-day live bootstrap: forced initial rebalance")
 
         # 4. Place orders + wait for terminal status
         placed: list = []
