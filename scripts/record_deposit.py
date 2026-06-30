@@ -17,6 +17,14 @@ Usage (on the VM, where the live token + ledger live):
     DHAN_MOCK=0 uv run python -m scripts.record_deposit seed-to-broker
     # record an explicit amount (no broker call; e.g. a known deposit)
     uv run python -m scripts.record_deposit record --amount 50000
+
+    # pooled account: record each contributor separately for an audit trail
+    uv run python -m scripts.record_deposit record --amount 20000 --notes "Aryan"
+    uv run python -m scripts.record_deposit record --amount 20000 --notes "Friend B"
+    uv run python -m scripts.record_deposit record --amount 15000 --notes "Friend C"
+    # a later solo top-up: ALSO note the account value before adding (for fair NAV split)
+    uv run python -m scripts.record_deposit record --amount 50000 \
+        --notes "Aryan top-up; acct value before add = Rs.X"
 """
 from __future__ import annotations
 
@@ -50,6 +58,9 @@ def main(argv: list[str] | None = None) -> int:
         if name == "record":
             sp.add_argument("--amount", type=float, required=True,
                             help="deposit ₹ (negative for a withdrawal)")
+            sp.add_argument("--notes", default=None,
+                            help="audit tag, e.g. contributor name (+ pre-add "
+                                 "account value for a mid-stream top-up)")
     args = p.parse_args(argv)
 
     anchor = _INITIAL_DEPOSIT_BY_MODE.get(args.mode, 0.0)
@@ -62,7 +73,8 @@ def main(argv: list[str] | None = None) -> int:
         ledger = get_cash_balance(conn, mode=args.mode)
 
         if args.cmd == "record":
-            eid = record_deposit(conn, amount_inr=args.amount, mode=args.mode)
+            eid = record_deposit(conn, amount_inr=args.amount, mode=args.mode,
+                                 notes=args.notes)
             new = get_cash_balance(conn, mode=args.mode)
             print(f"recorded ₹{args.amount:,.2f} ({eid}); "
                   f"ledger cash ₹{ledger:,.2f} -> ₹{new:,.2f}")

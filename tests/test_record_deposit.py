@@ -56,3 +56,18 @@ def test_cli_record_explicit_amount(tmp_path):
     assert rd.main(["record", "--amount", "50000", "--db", str(db), "--mode", "dhan-live"]) == 0
     with connect(db) as conn:
         assert get_cash_balance(conn, mode="dhan-live") == 50000.0
+
+
+def test_pooled_contributors_tagged_and_summed(tmp_path):
+    """Three contributors recorded separately: ledger totals to the sum and each
+    person's tag is preserved in the cash_ledger notes (the audit trail)."""
+    db = tmp_path / "pf.duckdb"
+    for amt, who in [("20000", "Aryan"), ("20000", "Friend B"), ("15000", "Friend C")]:
+        assert rd.main(["record", "--amount", amt, "--notes", who,
+                        "--db", str(db), "--mode", "dhan-live"]) == 0
+    with connect(db) as conn:
+        assert get_cash_balance(conn, mode="dhan-live") == 55000.0
+        notes = [r[0] for r in conn.execute(
+            "SELECT notes FROM cash_ledger WHERE mode='dhan-live' AND kind='deposit'"
+        ).fetchall()]
+    assert sorted(notes) == ["Aryan", "Friend B", "Friend C"]
