@@ -634,6 +634,55 @@ class DhanExecutor:
         else:
             notes.append(f"sweep-to-fill complete in <= {MAX_FILL_SWEEPS} passes")
 
+        # 4b. FLOOR-SWEEP: park ACTUAL residual idle cash into the cash-floor ETF.
+        # The main sweep sizes the floor from equity TARGETS, so when equities
+        # under-fill — whole-share rounding, or a name too expensive to fit the
+        # per-name cap at small capital (e.g. a ₹5,660 stock vs a ₹5,000 10% cap
+        # at ₹50k) — that shortfall stayed as cash earning 0%. Here we read the
+        # REAL post-fill broker cash and top the floor up with (cash - buffer),
+        # so idle capital earns the ~6.5% liquid-ETF yield instead of nothing.
+        # BUY-only, whole shares, IOC, residual recomputed each pass (can't
+        # over-buy). Reached only after a real rebalance placed orders (past the
+        # `if not placed` guard), so it never churns the floor on a quiet day.
+        if CASH_FLOOR_ENABLED:
+            try:
+                import time as _fs_time
+
+                from scripts.cash_floor import (
+                    CASH_FLOOR_BUFFER as _FS_BUFFER,
+                    CASH_FLOOR_TICKER as _FS_TKR,
+                )
+                _fs_px = _load_latest_closes(
+                    self.prices_db, tickers={_FS_TKR}, on_or_before=as_of_date,
+                ).get(_FS_TKR)
+                _fs_added = 0
+                for _ in range(5):  # bounded; residual-recomputed each pass
+                    _fs_cash = float(self.broker.get_cash().get("availableBalance", 0.0))
+                    _post = [p for p in self.broker.get_positions() if p.quantity]
+                    _pxm = _load_latest_closes(
+                        self.prices_db,
+                        tickers={p.ticker for p in _post} | {_FS_TKR},
+                        on_or_before=as_of_date,
+                    )
+                    _equity = _fs_cash + sum(
+                        float(p.quantity) * float(_pxm.get(p.ticker, 0.0)) for p in _post)
+                    _deployable = _fs_cash - _FS_BUFFER * _equity   # keep the buffer
+                    if not _fs_px or _fs_px <= 0 or _deployable < _fs_px:
+                        break  # nothing left to park (< one share past the buffer)
+                    _fs_qty = int(_deployable / _fs_px)
+                    if _fs_qty < 1:
+                        break
+                    _fs_req = OrderRequest(transaction_type="BUY", ticker=_FS_TKR,
+                                           quantity=_fs_qty, validity=VALIDITY_IOC)
+                    _fs_resp = self.broker.place_order(_fs_req, as_of_date=as_of_date)
+                    placed.append((_fs_req, _fs_resp))
+                    _fs_added += _fs_qty
+                    _fs_time.sleep(SWEEP_SETTLE_SEC)
+                if _fs_added:
+                    notes.append(f"floor-sweep: parked residual cash → +{_fs_added} {_FS_TKR}")
+            except Exception as e:  # noqa: BLE001 — best-effort; never blocks the run
+                logger.warning("floor-sweep failed: %s: %s", type(e).__name__, e)
+
         # 5. Reconcile fills
         fills = list(self.broker.get_fills())
         n_fills = len(fills)
