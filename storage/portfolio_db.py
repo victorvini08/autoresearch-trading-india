@@ -372,29 +372,32 @@ def record_deposit(
     mode: str,
     as_of_date: date | None = None,
     notes: str | None = None,
+    kind: str = "deposit",
 ) -> str:
-    """Record an external cash deposit (or withdrawal, if negative) into
-    cash_ledger so `get_cash_balance` tracks the REAL broker balance.
+    """Record an external cash movement into cash_ledger so `get_cash_balance`
+    tracks the REAL broker balance. `kind="deposit"` for funding/top-ups;
+    `kind="reconcile"` for the daily broker-truth adjustment that absorbs the
+    small charge-model drift (our commission estimate vs Dhan's exact STT/GST/
+    stamp), keeping ledger == broker.
 
     Why this exists: for dhan-live the ledger anchor is ₹0
     (_INITIAL_DEPOSIT_BY_MODE), so without recording the funding the ledger
     cash goes negative after the first buy and the equity-curve/dashboard/P&L
     (all derived from the ledger) are wrong — even though the trades, sized off
-    the live broker balance, are correct. Recording the opening capital (and any
-    later top-up) as a `deposit` row seeds the ledger to match the broker.
+    the live broker balance, are correct.
 
     Returns the entry_id written.
     """
     import uuid
 
     d = as_of_date or date.today()
-    entry_id = f"deposit-{mode}-{d.isoformat()}-{uuid.uuid4().hex[:8]}"
+    entry_id = f"{kind}-{mode}-{d.isoformat()}-{uuid.uuid4().hex[:8]}"
     insert_cash_entry(
         conn,
         entry_id=entry_id,
         entry_at=datetime.now(timezone.utc),
         as_of_date=d,
-        kind="deposit",
+        kind=kind,
         amount_usd=float(amount_inr),
         notes=notes or f"capital {'deposit' if amount_inr >= 0 else 'withdrawal'} "
                        f"₹{abs(amount_inr):,.2f}",

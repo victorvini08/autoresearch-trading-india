@@ -39,7 +39,8 @@ from storage.portfolio_db import (
     record_deposit,
 )
 
-MATCH_TOL = 1.0  # ₹ — rounding tolerance for "matched"
+MATCH_TOL = 1.0       # ₹ — tolerance for check / seed-to-broker "matched"
+RECONCILE_TOL = 0.01  # ₹ — the daily reconcile keeps books exact to the paisa
 
 
 def _broker_cash() -> float:
@@ -51,7 +52,7 @@ def _broker_cash() -> float:
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(description="Seed/verify live ledger cash vs broker.")
     sub = p.add_subparsers(dest="cmd", required=True)
-    for name in ("check", "seed-to-broker", "record"):
+    for name in ("check", "seed-to-broker", "reconcile", "record"):
         sp = sub.add_parser(name)
         sp.add_argument("--mode", default="dhan-live")
         sp.add_argument("--db", type=Path, default=portfolio_db.DEFAULT_DB_PATH)
@@ -92,18 +93,27 @@ def main(argv: list[str] | None = None) -> int:
             if abs(diff) < MATCH_TOL:
                 print("  MATCH ✓ — ledger cash agrees with the broker")
                 return 0
-            print(f"  MISMATCH ✗ — run `seed-to-broker` to record ₹{diff:,.2f}")
+            print(f"  MISMATCH ✗ — run `reconcile` (or `seed-to-broker`) to record ₹{diff:,.2f}")
             return 2
 
-        # seed-to-broker
-        if abs(diff) < MATCH_TOL:
-            print("  already matched; nothing to record")
+        # seed-to-broker (funding true-up, kind=deposit) OR reconcile (the daily
+        # broker-truth true-up that absorbs charge-model drift, kind=reconcile).
+        # Both record (broker - ledger) so ledger == broker; reconcile uses a
+        # tighter tolerance so the books stay exact to the paisa.
+        is_reconcile = args.cmd == "reconcile"
+        tol = RECONCILE_TOL if is_reconcile else MATCH_TOL
+        if abs(diff) < tol:
+            print("  in sync; nothing to record")
             return 0
-        eid = record_deposit(conn, amount_inr=diff, mode=args.mode,
-                             notes="seed-to-broker: match availableBalance")
+        eid = record_deposit(
+            conn, amount_inr=diff, mode=args.mode,
+            kind="reconcile" if is_reconcile else "deposit",
+            notes=("daily broker-truth reconcile (charge drift)" if is_reconcile
+                   else "seed-to-broker: match availableBalance"),
+        )
         new = get_cash_balance(conn, mode=args.mode)
-        ok = abs(broker - new) < MATCH_TOL
-        print(f"  recorded ₹{diff:,.2f} deposit ({eid}); ledger now ₹{new:,.2f} "
+        ok = abs(broker - new) < max(tol, 0.01)
+        print(f"  recorded ₹{diff:,.2f} ({eid}); ledger now ₹{new:,.2f} "
               f"(broker ₹{broker:,.2f}) -> {'MATCH ✓' if ok else 'STILL OFF ✗'}")
         return 0 if ok else 2
 

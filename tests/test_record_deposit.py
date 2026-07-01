@@ -51,6 +51,25 @@ def test_cli_check_detects_mismatch_then_seed_matches(tmp_path, monkeypatch):
     assert rd.main(["check", "--db", str(db), "--mode", "dhan-live"]) == 0
 
 
+def test_cli_reconcile_trues_up_charge_drift(tmp_path, monkeypatch):
+    """`reconcile` records the small broker-vs-ledger drift (kind=reconcile) so
+    the books stay exact to the paisa; re-running is a no-op."""
+    db = tmp_path / "pf.duckdb"
+    with connect(db) as conn:
+        record_deposit(conn, amount_inr=50_000.0, mode="dhan-live")
+    # broker reports ₹5.35 less than the ledger (charges we under-modelled)
+    monkeypatch.setattr(rd, "_broker_cash", lambda: 49_994.65)
+    assert rd.main(["reconcile", "--db", str(db), "--mode", "dhan-live"]) == 0
+    with connect(db) as conn:
+        led = get_cash_balance(conn, mode="dhan-live")
+        kinds = [r[0] for r in conn.execute(
+            "SELECT kind FROM cash_ledger WHERE mode='dhan-live'").fetchall()]
+    assert abs(led - 49_994.65) < 0.01          # exact to the paisa
+    assert "reconcile" in kinds                  # recorded as a reconcile, not a deposit
+    # already in sync now -> no-op
+    assert rd.main(["reconcile", "--db", str(db), "--mode", "dhan-live"]) == 0
+
+
 def test_cli_record_explicit_amount(tmp_path):
     db = tmp_path / "pf.duckdb"
     assert rd.main(["record", "--amount", "50000", "--db", str(db), "--mode", "dhan-live"]) == 0
