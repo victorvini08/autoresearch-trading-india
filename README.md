@@ -1,4 +1,4 @@
-# autoresearch
+# autoresearch-trading
 
 A framework for building **LLM-driven autoresearch trading systems**: an
 immutable walk-forward evaluator with anti-overfit gates, and four swappable
@@ -44,8 +44,11 @@ the installed library.
 Requires Python ≥ 3.11. With [uv](https://docs.astral.sh/uv/):
 
 ```bash
-uv add autoresearch          # or: pip install autoresearch
+uv add autoresearch-trading   # or: pip install autoresearch-trading
 ```
+
+The distribution is `autoresearch-trading`; the importable package is
+`autoresearch` (e.g. `from autoresearch.interfaces import StrategyBase`).
 
 To work on the reference system, clone the repo and sync:
 
