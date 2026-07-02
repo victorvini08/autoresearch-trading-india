@@ -17,7 +17,7 @@ from datetime import date, datetime
 import pytest
 
 from scripts import dashboard
-from storage import portfolio_db
+from autoresearch.storage import portfolio_db
 
 
 def _extract_payload(html: str) -> dict:

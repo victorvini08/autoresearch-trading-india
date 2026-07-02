@@ -29,14 +29,14 @@ from datetime import date, datetime, time, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-from data.nse_calendar import is_calendar_current, is_trading_day
+from autoresearch.data.nse_calendar import is_calendar_current, is_trading_day
 from scripts import daily_report, dashboard, premarket_scan
 # DhanExecutor lands in scripts.executors after Phase 4 (handoff §3,
 # scripts/executors/dhan.py NEW). For now import only the protocol-level
 # symbols; _build_executor() defers the DhanExecutor import to call-time
 # so module import doesn't break before Phase 4.
 from scripts.executors.protocol import Executor, ExecutionSummary, PreflightSkipped
-from storage.portfolio_db import HALT_FILE_PATH
+from autoresearch.storage.portfolio_db import HALT_FILE_PATH
 
 IST = ZoneInfo("Asia/Kolkata")
 

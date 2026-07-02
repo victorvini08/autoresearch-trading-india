@@ -16,7 +16,7 @@ import duckdb
 import pytest
 
 from scripts import premarket_scan
-from storage import portfolio_db
+from autoresearch.storage import portfolio_db
 
 
 @pytest.fixture

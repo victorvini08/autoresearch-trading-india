@@ -20,8 +20,8 @@ from zoneinfo import ZoneInfo
 import duckdb
 import pytest
 
-from brokers.dhan import Fill, OrderRequest
-from brokers.dhan_mock import DhanMock
+from autoresearch.brokers.dhan import Fill, OrderRequest
+from autoresearch.brokers.dhan_mock import DhanMock
 from scripts.executors.dhan import DhanExecutor
 
 
@@ -39,9 +39,9 @@ def test_dhan_broker_warns_but_constructs_when_sebi_algo_id_empty(
     monkeypatch.setenv("DHAN_ACCESS_TOKEN", "fake")
     monkeypatch.setenv("DHAN_CLIENT_ID", "1000001234")
     monkeypatch.delenv("SEBI_ALGO_ID", raising=False)
-    from brokers.dhan import DhanBroker
+    from autoresearch.brokers.dhan import DhanBroker
     import logging
-    with caplog.at_level(logging.WARNING, logger="brokers.dhan"):
+    with caplog.at_level(logging.WARNING, logger="autoresearch.brokers.dhan"):
         broker = DhanBroker()
     assert broker.algo_id == ""
     assert any("SEBI_ALGO_ID is unset" in r.message for r in caplog.records)
@@ -51,7 +51,7 @@ def test_dhan_broker_stamps_correlation_id_when_present(monkeypatch) -> None:
     monkeypatch.setenv("DHAN_ACCESS_TOKEN", "fake")
     monkeypatch.setenv("DHAN_CLIENT_ID", "1000001234")
     monkeypatch.setenv("SEBI_ALGO_ID", "ALGO_VOLUNTARY")
-    from brokers.dhan import DhanBroker
+    from autoresearch.brokers.dhan import DhanBroker
     broker = DhanBroker()
     assert broker.algo_id == "ALGO_VOLUNTARY"
 
@@ -68,7 +68,7 @@ def test_get_cash_aliases_availabel_balance_typo(monkeypatch) -> None:
     monkeypatch.setenv("DHAN_ACCESS_TOKEN", "fake")
     monkeypatch.setenv("DHAN_CLIENT_ID", "1000001234")
     monkeypatch.setenv("SEBI_ALGO_ID", "ALGO_TEST")
-    from brokers.dhan import DhanBroker
+    from autoresearch.brokers.dhan import DhanBroker
     broker = DhanBroker()
 
     # Live response shape: typo'd key only, no canonical alias.
@@ -92,7 +92,7 @@ def test_get_cash_does_not_overwrite_existing_canonical_key(monkeypatch) -> None
     monkeypatch.setenv("DHAN_ACCESS_TOKEN", "fake")
     monkeypatch.setenv("DHAN_CLIENT_ID", "1000001234")
     monkeypatch.setenv("SEBI_ALGO_ID", "ALGO_TEST")
-    from brokers.dhan import DhanBroker
+    from autoresearch.brokers.dhan import DhanBroker
     broker = DhanBroker()
     monkeypatch.setattr(
         broker, "_request",
@@ -112,7 +112,7 @@ def test_holdings_raw_treats_dh1111_500_as_empty(monkeypatch) -> None:
     monkeypatch.setenv("DHAN_ACCESS_TOKEN", "fake")
     monkeypatch.setenv("DHAN_CLIENT_ID", "1000001234")
     monkeypatch.setenv("SEBI_ALGO_ID", "ALGO_TEST")
-    from brokers.dhan import DhanBroker
+    from autoresearch.brokers.dhan import DhanBroker
     broker = DhanBroker()
 
     class _FakeResp:
@@ -139,7 +139,7 @@ def test_holdings_raw_raises_on_other_500s(monkeypatch) -> None:
     monkeypatch.setenv("DHAN_ACCESS_TOKEN", "fake")
     monkeypatch.setenv("DHAN_CLIENT_ID", "1000001234")
     monkeypatch.setenv("SEBI_ALGO_ID", "ALGO_TEST")
-    from brokers.dhan import DhanBroker
+    from autoresearch.brokers.dhan import DhanBroker
     import requests as _r
     broker = DhanBroker()
 
@@ -163,7 +163,7 @@ def test_get_positions_merge_does_not_crash_on_empty_holdings(monkeypatch) -> No
     monkeypatch.setenv("DHAN_ACCESS_TOKEN", "fake")
     monkeypatch.setenv("DHAN_CLIENT_ID", "1000001234")
     monkeypatch.setenv("SEBI_ALGO_ID", "ALGO_TEST")
-    from brokers.dhan import DhanBroker
+    from autoresearch.brokers.dhan import DhanBroker
     broker = DhanBroker()
 
     # /v2/positions returns one intraday position
@@ -212,7 +212,7 @@ def test_dhan_get_fills_extracts_trade_id_from_raw(monkeypatch) -> None:
     monkeypatch.setenv("DHAN_ACCESS_TOKEN", "fake")
     monkeypatch.setenv("DHAN_CLIENT_ID", "1000001234")
     monkeypatch.setenv("SEBI_ALGO_ID", "ALGO_TEST")
-    from brokers.dhan import DhanBroker
+    from autoresearch.brokers.dhan import DhanBroker
 
     # Two trade legs sharing one orderId — the previous code would have
     # collided on the actual_fills PK.
@@ -288,7 +288,7 @@ def prices_db(tmp_path: Path) -> Path:
 
 @pytest.fixture
 def portfolio_db_fx(tmp_path: Path) -> Path:
-    from storage import portfolio_db
+    from autoresearch.storage import portfolio_db
     p = tmp_path / "portfolio.duckdb"
     conn = duckdb.connect(str(p))
     try:
@@ -305,7 +305,7 @@ def test_exit_only_signal_liquidates_held_position(
     executor must SELL every held position, not skip the day."""
     monkeypatch.setenv("DHAN_MOCK", "1")
     # Isolate halt + consent so test doesn't touch real state
-    from storage import portfolio_db as pdb
+    from autoresearch.storage import portfolio_db as pdb
     halt = tmp_path / "halt.json"
     monkeypatch.setattr(pdb, "HALT_FILE_PATH", halt)
     from scripts import halt as halt_mod
@@ -354,7 +354,7 @@ def test_fraction_change_suppresses_small_target_delta(
     """Two consecutive runs with target_fraction differing by < 0.5pp must not
     produce a second order (the old form of the guard never fired)."""
     monkeypatch.setenv("DHAN_MOCK", "1")
-    from storage import portfolio_db as pdb
+    from autoresearch.storage import portfolio_db as pdb
     halt = tmp_path / "halt.json"
     monkeypatch.setattr(pdb, "HALT_FILE_PATH", halt)
     from scripts import halt as halt_mod

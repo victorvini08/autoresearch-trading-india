@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import date
 
-from data.bse import (
+from autoresearch.data.bse import (
     parse_announcements,
     resolve_scrip_code,
 )

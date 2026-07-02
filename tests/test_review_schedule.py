@@ -12,7 +12,7 @@ from datetime import date
 
 import pytest
 
-from storage import portfolio_db
+from autoresearch.storage import portfolio_db
 import scripts.review_schedule as sched
 
 
@@ -118,7 +118,7 @@ def test_backfill_targets_do_not_count_as_rebalance(tmp_path):
 # ---- duplicate-run guard (per-day, not per-month) ------------------------
 
 def _seed_monthly_audit(rw, review_id, run_at):
-    from storage import realworld_db
+    from autoresearch.storage import realworld_db
     realworld_db.insert_audit(
         rw, review_id=review_id, run_at=run_at,
         mode="dhan-paper", trigger="monthly", input_snapshot_hash="h",
@@ -130,7 +130,7 @@ def _seed_monthly_audit(rw, review_id, run_at):
 
 def test_already_reviewed_on_same_day(tmp_path):
     from datetime import datetime
-    from storage import realworld_db
+    from autoresearch.storage import realworld_db
     rw = realworld_db.connect(tmp_path / "rw.duckdb")
     assert not sched.already_reviewed_on(rw, "dhan-paper", date(2026, 6, 1))
     _seed_monthly_audit(rw, "rev-1", datetime(2026, 6, 1, 16, 0, 0))
@@ -144,7 +144,7 @@ def test_two_reviews_in_one_calendar_month_both_allowed(tmp_path):
     # June calendar. A per-DAY guard must let both run; a per-month guard would
     # wrongly block June.
     from datetime import datetime
-    from storage import realworld_db
+    from autoresearch.storage import realworld_db
     rw = realworld_db.connect(tmp_path / "rw.duckdb")
     _seed_monthly_audit(rw, "rev-may", datetime(2026, 6, 1, 16, 0, 0))
     assert not sched.already_reviewed_on(rw, "dhan-paper", date(2026, 6, 29))

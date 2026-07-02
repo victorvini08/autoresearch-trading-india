@@ -4,7 +4,7 @@ leak-free-execution invariant.
 from datetime import date
 from pathlib import Path
 
-import prepare
+from autoresearch.research import prepare
 from strategy import resolve_active_universe
 
 UBD = {
@@ -59,7 +59,7 @@ def test_engine_has_no_cheat_on_close():
     """Leak-free-execution invariant: orders fill at next-bar OPEN. A future
     edit enabling cheat-on-close/open would silently reintroduce price
     look-ahead — this sentinel fails loudly if so."""
-    src = Path("backtest/engine.py").read_text()
+    src = Path("autoresearch/backtest/engine.py").read_text()
     assert "set_coc(True)" not in src
     assert "cheat_on_close" not in src
     assert "cheat_on_open=True" not in src

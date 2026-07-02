@@ -21,9 +21,9 @@ import duckdb
 import numpy as np
 import pandas as pd
 
-import prepare
-from prepare import _load_feeds, _pit_universe
-from backtest.engine import run_backtest
+from autoresearch.research import prepare
+from autoresearch.research.prepare import _load_feeds, _pit_universe
+from autoresearch.backtest.engine import run_backtest
 from strategy import IndiaMomentumQualityCarry
 from experiments.lowvol_engine import IndiaLowVolatilityCarry
 

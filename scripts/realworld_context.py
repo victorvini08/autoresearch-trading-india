@@ -30,7 +30,7 @@ from typing import Any
 
 import duckdb
 
-from data import realworld_review_validator as V
+from autoresearch.data import realworld_review_validator as V
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 JOURNAL_PATH = REPO_ROOT / "state" / "realworld_journal.md"
@@ -160,7 +160,7 @@ def gather_review_input(
     (assemble_review_input) has no DuckDB import cost."""
     from scripts.reconciliation import compute_reconciliation_for_date
     from scripts.trade_context import compute_trade_context_for_date
-    from storage import portfolio_db, realworld_db
+    from autoresearch.storage import portfolio_db, realworld_db
 
     reconciliation = compute_reconciliation_for_date(d, mode)
     trade_context = compute_trade_context_for_date(d, mode)

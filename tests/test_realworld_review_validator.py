@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import pytest
 
-from data import realworld_review_validator as V
+from autoresearch.data import realworld_review_validator as V
 
 
 def _ctx(**overrides):

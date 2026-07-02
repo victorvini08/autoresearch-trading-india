@@ -7,7 +7,7 @@ from unittest.mock import patch
 import duckdb
 import pytest
 
-from brokers.dhan_mock import DhanMock
+from autoresearch.brokers.dhan_mock import DhanMock
 from scripts.executors.dhan import DhanExecutor
 
 
@@ -39,7 +39,7 @@ def portfolio_db(tmp_path: Path) -> Path:
 @pytest.fixture
 def halt_file(tmp_path: Path, monkeypatch) -> Path:
     p = tmp_path / "halt.json"
-    import storage.portfolio_db as pdb
+    import autoresearch.storage.portfolio_db as pdb
     monkeypatch.setattr(pdb, "HALT_FILE_PATH", p)
     return p
 

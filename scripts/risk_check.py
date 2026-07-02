@@ -27,7 +27,7 @@ import json
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
-from storage.portfolio_db import LedgerState, HALT_FILE_PATH as HALT_FILE
+from autoresearch.storage.portfolio_db import LedgerState, HALT_FILE_PATH as HALT_FILE
 
 
 @dataclass(frozen=True)

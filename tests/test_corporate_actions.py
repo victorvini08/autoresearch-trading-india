@@ -6,7 +6,7 @@ from datetime import date, datetime, timedelta
 
 import pytest
 
-from data.corporate_actions import (
+from autoresearch.data.corporate_actions import (
     CorporateAction,
     format_action_summary,
     get_actions_for_tickers_on_date,
@@ -16,7 +16,7 @@ from data.corporate_actions import (
     upsert_action,
 )
 from scripts.reconciliation import compute_reconciliation_for_date
-from storage import portfolio_db
+from autoresearch.storage import portfolio_db
 
 
 # === Round-trip + helpers ===================================================
@@ -120,7 +120,7 @@ def db_with_holdings(tmp_path):
 def test_q6_no_ledger_file_returns_ok(db_with_holdings, monkeypatch, tmp_path):
     # Point the CA loader at a non-existent path
     monkeypatch.setattr(
-        "data.corporate_actions.DEFAULT_CA_PATH",
+        "autoresearch.data.corporate_actions.DEFAULT_CA_PATH",
         tmp_path / "absent.json",
     )
     out = compute_reconciliation_for_date(
@@ -145,7 +145,7 @@ def test_q6_ledger_with_no_today_hits_returns_ok(
         ca_path,
     )
     monkeypatch.setattr(
-        "data.corporate_actions.DEFAULT_CA_PATH", ca_path,
+        "autoresearch.data.corporate_actions.DEFAULT_CA_PATH", ca_path,
     )
     out = compute_reconciliation_for_date(
         date(2026, 5, 26), "dhan-paper", db_with_holdings,
@@ -167,7 +167,7 @@ def test_q6_ca_on_held_ticker_today_warns_and_lists(
         ca_path,
     )
     monkeypatch.setattr(
-        "data.corporate_actions.DEFAULT_CA_PATH", ca_path,
+        "autoresearch.data.corporate_actions.DEFAULT_CA_PATH", ca_path,
     )
     out = compute_reconciliation_for_date(
         date(2026, 5, 26), "dhan-paper", db_with_holdings,

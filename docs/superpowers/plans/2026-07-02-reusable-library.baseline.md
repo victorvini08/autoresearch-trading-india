@@ -33,3 +33,10 @@ Captured 2026-07-02 on branch `library-refactor` **before any source changes**
 Run the full suite ONCE and diff the FAILED set against the 13 above:
 `uv run pytest -q 2>&1 | grep -E "^FAILED" | sort`
 The set must be a subset of the pinned list. Avoid re-running repeatedly.
+
+## Update (Task 1): known-flaky (added)
+- tests/test_prepare_parallel.py::test_serial_equals_parallel — nondeterministic
+  DuckDB single-writer lock timing under ProcessPool (read_only connect fails when
+  another test holds a read-write lock). PASSES in isolation and on repeated file
+  runs (2 passed); the evaluator equivalence it checks is unchanged. Same locking
+  category as the documented test_e2e XFAIL. Not a logic regression from the move.

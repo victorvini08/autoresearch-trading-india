@@ -276,12 +276,12 @@ def ingest_bse_for_universe(
     """
     import time
 
-    from data.bse import (
+    from autoresearch.data.bse import (
         build_scrip_map,
         fetch_bse_announcements,
         resolve_scrip_code,
     )
-    from data.universe import UniverseRow, load_universe
+    from autoresearch.data.universe import UniverseRow, load_universe
 
     snap_date = as_of_universe
     if snap_date is None:
@@ -432,7 +432,7 @@ def count_news(
     short-circuits the LLM classifiers — the dominant precompute cost). Pass
     include_low_signal=True for the raw count.
     """
-    from data.news_filter import is_low_signal
+    from autoresearch.data.news_filter import is_low_signal
 
     if isinstance(on_date, str):
         on_date = datetime.fromisoformat(on_date).date()
@@ -471,7 +471,7 @@ def read_news(ticker: str | None, start, end, *, include_low_signal: bool = Fals
     """
     import pandas as pd
 
-    from data.news_filter import is_low_signal
+    from autoresearch.data.news_filter import is_low_signal
 
     if isinstance(start, str):
         start = datetime.fromisoformat(start).date()

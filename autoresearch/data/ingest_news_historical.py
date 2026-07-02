@@ -37,7 +37,7 @@ import requests
 from bs4 import BeautifulSoup
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
-from data.ingest_news import (
+from autoresearch.data.ingest_news import (
     Article,
     _hash_id,
     fetch_nse_filings,

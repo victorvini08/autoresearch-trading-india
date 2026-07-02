@@ -108,7 +108,7 @@ def run_prepare_promotion() -> dict:
     for mod_name in ("strategy", "prepare"):
         if mod_name in sys.modules:
             importlib.reload(sys.modules[mod_name])
-    import prepare
+    from autoresearch.research import prepare
     import strategy
     return prepare.evaluate(strategy, mode="promotion")
 

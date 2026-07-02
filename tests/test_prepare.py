@@ -5,7 +5,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from prepare import (
+from autoresearch.research.prepare import (
     BACKTEST_END,
     BACKTEST_START,
     INITIAL_CASH,
@@ -61,7 +61,7 @@ def test_find_strategy_class_returns_residual_reversal():
 
 def test_research_mode_hides_test_set(monkeypatch):
     feeds = _synthetic_feeds(["FAKE1"])
-    monkeypatch.setattr("prepare._load_feeds", lambda *_a, **_kw: feeds)
+    monkeypatch.setattr("autoresearch.research.prepare._load_feeds", lambda *_a, **_kw: feeds)
     strat_mod = importlib.import_module("strategy")
     result = evaluate(strat_mod, mode="research")
     assert "validation_sortino_mean" in result
@@ -74,7 +74,7 @@ def test_research_mode_hides_test_set(monkeypatch):
 
 def test_promotion_mode_reveals_test_set(monkeypatch):
     feeds = _synthetic_feeds(["FAKE1"])
-    monkeypatch.setattr("prepare._load_feeds", lambda *_a, **_kw: feeds)
+    monkeypatch.setattr("autoresearch.research.prepare._load_feeds", lambda *_a, **_kw: feeds)
     strat_mod = importlib.import_module("strategy")
     result = evaluate(strat_mod, mode="promotion")
     assert "test_sortino" in result
@@ -91,7 +91,7 @@ def test_evaluate_rejects_unknown_mode():
 
 def test_evaluate_returns_finite_validation_sortino(monkeypatch):
     feeds = _synthetic_feeds(["FAKE1"])
-    monkeypatch.setattr("prepare._load_feeds", lambda *_a, **_kw: feeds)
+    monkeypatch.setattr("autoresearch.research.prepare._load_feeds", lambda *_a, **_kw: feeds)
     strat_mod = importlib.import_module("strategy")
     result = evaluate(strat_mod, mode="research")
     assert np.isfinite(result["validation_sortino_mean"])
@@ -100,7 +100,7 @@ def test_evaluate_returns_finite_validation_sortino(monkeypatch):
 
 def test_side_panel_includes_pretax_and_posttax_returns(monkeypatch):
     feeds = _synthetic_feeds(["FAKE1"])
-    monkeypatch.setattr("prepare._load_feeds", lambda *_a, **_kw: feeds)
+    monkeypatch.setattr("autoresearch.research.prepare._load_feeds", lambda *_a, **_kw: feeds)
     strat_mod = importlib.import_module("strategy")
     result = evaluate(strat_mod, mode="research")
     sp = result["side_panel"]
@@ -123,7 +123,7 @@ def test_validate_risk_now_receives_non_empty_positions_df():
     fabricated >100% gross trips backtest.risk.validate. Uses the same
     validate_risk function prepare.py uses; we do not need to run a real fold
     to verify wiring."""
-    from backtest.risk import validate as validate_risk
+    from autoresearch.backtest.risk import validate as validate_risk
 
     fake_positions = pd.DataFrame({"max_gross_frac": [0.95, 1.20, 0.80]})
     fake_trades = pd.DataFrame({"x": range(25)})       # >= MIN_TRADES
@@ -144,7 +144,7 @@ def test_min_active_universe_uses_thinnest_in_window() -> None:
     """The pre-2022-07 PIT universe is ~5 names; the strategy is squeezed
     into the thinnest snapshot active during the validation window, so the
     fold-skip floor must see that 5, not the historical union."""
-    from prepare import _min_active_universe
+    from autoresearch.research.prepare import _min_active_universe
 
     thin = frozenset(f"T{i}" for i in range(5))
     full = frozenset(f"S{i}" for i in range(200))
@@ -163,7 +163,7 @@ def test_min_active_universe_uses_thinnest_in_window() -> None:
 def test_thin_universe_folds_are_below_floor() -> None:
     """A 5-name fold is below MIN_FOLD_UNIVERSE and must be skipped; a
     200-name fold is above it and must be scored."""
-    from prepare import MIN_FOLD_UNIVERSE, _min_active_universe
+    from autoresearch.research.prepare import MIN_FOLD_UNIVERSE, _min_active_universe
 
     thin = frozenset(f"T{i}" for i in range(5))
     full = frozenset(f"S{i}" for i in range(200))
@@ -174,6 +174,6 @@ def test_thin_universe_folds_are_below_floor() -> None:
 
 
 def test_evaluator_version_is_stamped() -> None:
-    from prepare import EVALUATOR_VERSION
+    from autoresearch.research.prepare import EVALUATOR_VERSION
 
     assert isinstance(EVALUATOR_VERSION, str) and EVALUATOR_VERSION

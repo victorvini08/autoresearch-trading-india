@@ -15,17 +15,17 @@ import backtrader as bt
 import duckdb
 import pandas as pd
 
-import prepare
-from prepare import (
+from autoresearch.research import prepare
+from autoresearch.research.prepare import (
     WARMUP_CALENDAR_DAYS,
     _find_strategy_class,
     _load_feeds,
     _pit_universe,
 )
-from backtest.engine import (
+from autoresearch.backtest.engine import (
     DhanDeliveryCommission,
 )
-from backtest.costs import DEFAULT_SLIPPAGE_BPS
+from autoresearch.backtest.costs import DEFAULT_SLIPPAGE_BPS
 
 CASH = 500_000
 SPAN_START = date(2019, 1, 1)   # full path — breach is path-dependent

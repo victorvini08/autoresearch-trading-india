@@ -21,13 +21,13 @@ import duckdb
 import numpy as np
 import pandas as pd
 
-import prepare
-from prepare import (
+from autoresearch.research import prepare
+from autoresearch.research.prepare import (
     BACKTEST_END, TEST_BOUNDARY, WARMUP_CALENDAR_DAYS,
     _find_strategy_class, _load_feeds, _pit_universe, _score_window,
     count_hyperparameters,
 )
-from backtest.anti_overfit import StrategySummary, run_all_gates
+from autoresearch.backtest.anti_overfit import StrategySummary, run_all_gates
 
 LOWVOL_MOD = 'experiments.lowvol_engine'
 MOM_MOD = 'strategy'

@@ -29,7 +29,7 @@ import numpy as np
 import pandas as pd
 from scipy.stats import spearmanr
 
-from prepare import _pit_universe
+from autoresearch.research.prepare import _pit_universe
 
 PRICES_DB = 'storage/prices.duckdb'
 FUND_DB = 'storage/fundamentals.duckdb'

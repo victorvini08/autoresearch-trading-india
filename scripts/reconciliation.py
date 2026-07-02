@@ -44,7 +44,7 @@ from typing import Any
 
 import duckdb
 
-from storage.portfolio_db import (
+from autoresearch.storage.portfolio_db import (
     DEFAULT_DB_PATH,
     compute_fy_tax_reserve,
     connect,
@@ -54,7 +54,7 @@ from storage.portfolio_db import (
 
 # Safety-state DD thresholds — single source of truth is data/safety_state.py
 # (Step 2.a). Reconciliation Q5 reports the snapshot; the state machine acts.
-from data.safety_state import (  # noqa: E402 — module-level re-export
+from autoresearch.data.safety_state import (  # noqa: E402 — module-level re-export
     DD_HALTED_REVIEW,
     DD_RISK_REDUCED,
     DD_WATCH,
@@ -494,7 +494,7 @@ def _q6_corporate_actions(
     traded. Informational — surfaces dividends, splits, bonuses, etc. so
     they're not mistaken for unexplained PnL or position drift.
     """
-    from data.corporate_actions import (
+    from autoresearch.data.corporate_actions import (
         format_action_summary,
         get_actions_for_tickers_on_date,
         load_corporate_actions,

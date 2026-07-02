@@ -2,13 +2,13 @@ from datetime import date, datetime
 
 import pytest
 
-from llm.cache import (
+from autoresearch.llm.cache import (
     MACRO_TICKER_SENTINEL,
     cache_put,
     events_ticker_key,
     sentiment_ticker_key,
 )
-from llm.features import (
+from autoresearch.llm.features import (
     EVENTS_DEFAULT,
     events,
     macro_regime,
@@ -19,8 +19,8 @@ from llm.features import (
 
 @pytest.fixture(autouse=True)
 def _isolate_cache_and_news(monkeypatch, tmp_path):
-    import data.ingest_news as news_mod
-    import llm.cache as cache_mod
+    import autoresearch.data.ingest_news as news_mod
+    import autoresearch.llm.cache as cache_mod
     monkeypatch.setattr(cache_mod, "DB_PATH", tmp_path / "llm_cache.sqlite")
     monkeypatch.setattr(news_mod, "DB_PATH", tmp_path / "news.duckdb")
 
@@ -127,7 +127,7 @@ def test_sentiment_and_events_dont_collide():
 
 def _seed_news_rows(rows: list[dict]) -> None:
     """Insert raw rows directly into the news table for test setup."""
-    from data.ingest_news import _upsert
+    from autoresearch.data.ingest_news import _upsert
     _upsert(rows)
 
 

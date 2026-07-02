@@ -2,7 +2,7 @@
 from datetime import date
 from pathlib import Path
 
-from data.ingest_gdelt import _parse_gkg, _stamps_for, compute_day_features
+from autoresearch.data.ingest_gdelt import _parse_gkg, _stamps_for, compute_day_features
 
 
 def _row(domain, themes, locations, tone):
@@ -41,10 +41,10 @@ def test_compute_day_features_aggregates(monkeypatch):
         ("ECON_TRADE;ECON_FREETRADE", 0.5),
     ]
     monkeypatch.setattr(
-        "data.ingest_gdelt.fetch_gkg_records",
+        "autoresearch.data.ingest_gdelt.fetch_gkg_records",
         lambda stamp, **kw: fake,
     )
-    monkeypatch.setattr("data.ingest_gdelt.time.sleep", lambda *_: None)
+    monkeypatch.setattr("autoresearch.data.ingest_gdelt.time.sleep", lambda *_: None)
     f = compute_day_features(date(2024, 6, 4))
     assert f is not None
     # 6 sampled slices × 4 recs = 24
@@ -59,9 +59,9 @@ def test_compute_day_features_aggregates(monkeypatch):
 
 def test_compute_day_features_none_when_no_files(monkeypatch):
     monkeypatch.setattr(
-        "data.ingest_gdelt.fetch_gkg_records", lambda stamp, **kw: None
+        "autoresearch.data.ingest_gdelt.fetch_gkg_records", lambda stamp, **kw: None
     )
-    monkeypatch.setattr("data.ingest_gdelt.time.sleep", lambda *_: None)
+    monkeypatch.setattr("autoresearch.data.ingest_gdelt.time.sleep", lambda *_: None)
     assert compute_day_features(date(2024, 6, 4)) is None
 
 
@@ -76,14 +76,14 @@ def test_stamps_use_fixed_utc_cadence():
 def test_ingest_writes_features_keyed_at_news_day_plus_one(tmp_path, monkeypatch):
     """Point-in-time: news day D → row valid at D+1, readable by the
     macro snapshot for a decision on D+1."""
-    from data.ingest_gdelt import ingest_gdelt
-    from llm.classify import _macro_snapshot
+    from autoresearch.data.ingest_gdelt import ingest_gdelt
+    from autoresearch.llm.classify import _macro_snapshot
 
     monkeypatch.setattr(
-        "data.ingest_gdelt.fetch_gkg_records",
+        "autoresearch.data.ingest_gdelt.fetch_gkg_records",
         lambda stamp, **kw: [("EPU_POLICY;ECON_CENTRALBANK", -4.0)],
     )
-    monkeypatch.setattr("data.ingest_gdelt.time.sleep", lambda *_: None)
+    monkeypatch.setattr("autoresearch.data.ingest_gdelt.time.sleep", lambda *_: None)
     db = tmp_path / "macro.duckdb"
     res = ingest_gdelt(db, date(2024, 6, 3), date(2024, 6, 3))
     assert res["days"] == 1

@@ -11,8 +11,8 @@ from datetime import date, datetime
 
 import pytest
 
-from data.live_health import _dd_protection_pp, compute_live_health
-from storage import portfolio_db
+from autoresearch.data.live_health import _dd_protection_pp, compute_live_health
+from autoresearch.storage import portfolio_db
 
 
 def test_dd_protection_sign():

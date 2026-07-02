@@ -7,19 +7,19 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from llm.classify import classify_macro_regime_batch
+from autoresearch.llm.classify import classify_macro_regime_batch
 
 
 @pytest.fixture(autouse=True)
 def _isolate_cache(monkeypatch, tmp_path):
-    import llm.cache as cache_mod
+    import autoresearch.llm.cache as cache_mod
     monkeypatch.setattr(cache_mod, "DB_PATH", tmp_path / "llm_cache.sqlite")
 
 
 @pytest.fixture(autouse=True)
 def _stub_snapshot(monkeypatch):
     monkeypatch.setattr(
-        "llm.classify._macro_snapshot",
+        "autoresearch.llm.classify._macro_snapshot",
         lambda _d, *a, **k: {"india_vix": 18.0},
     )
 

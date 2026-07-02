@@ -61,8 +61,8 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from data.ingest_prices import read_prices  # noqa: E402
-from data.universe import get_universe_at  # noqa: E402
+from autoresearch.data.ingest_prices import read_prices  # noqa: E402
+from autoresearch.data.universe import get_universe_at  # noqa: E402
 
 
 _MIN_BARS_PER_FEED = 60

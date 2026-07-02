@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from datetime import date
 
-import data.ingest_prices as ip
+import autoresearch.data.ingest_prices as ip
 
 
 def _capture(monkeypatch):

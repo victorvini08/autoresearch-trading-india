@@ -27,12 +27,12 @@ import duckdb
 import numpy as np
 import pandas as pd
 
-import prepare
-from prepare import (
+from autoresearch.research import prepare
+from autoresearch.research.prepare import (
     BACKTEST_END, TEST_BOUNDARY, WARMUP_CALENDAR_DAYS,
     _find_strategy_class, _load_feeds, _pit_universe,
 )
-from backtest.engine import run_backtest
+from autoresearch.backtest.engine import run_backtest
 
 MACRO_DB = 'storage/macro.duckdb'
 CASH_D = (1.065) ** (1 / 252) - 1

@@ -7,7 +7,7 @@ from pathlib import Path
 import duckdb
 import pytest
 
-from data.ingest_earnings import compute_sue_from_fundamentals
+from autoresearch.data.ingest_earnings import compute_sue_from_fundamentals
 
 
 def _seed_fundamentals(
@@ -55,7 +55,7 @@ def test_sue_rejects_exceptional_item_and_clips(tmp_path) -> None:
     monster SUE. The spike quarter emits no SUE (soft-degrade), the
     seasonal-RW denominator is not contaminated by it, and every emitted
     |SUE| is within the robust clip band."""
-    from data.ingest_earnings import _SUE_CLIP
+    from autoresearch.data.ingest_earnings import _SUE_CLIP
 
     fdb = tmp_path / "f.duckdb"
     edb = tmp_path / "e.duckdb"
@@ -122,7 +122,7 @@ def _seed_earn(p: Path, ticker: str, ad: date, sue: float) -> None:
 
 
 def test_negative_surprise_blocks(tmp_path) -> None:
-    from data.pead import pead_signal
+    from autoresearch.data.pead import pead_signal
 
     edb = tmp_path / "e.duckdb"
     _seed_earn(edb, "ACME", date(2025, 2, 10), -1.4)
@@ -135,7 +135,7 @@ def test_negative_surprise_blocks(tmp_path) -> None:
 
 
 def test_positive_surprise_no_block(tmp_path) -> None:
-    from data.pead import pead_signal
+    from autoresearch.data.pead import pead_signal
 
     edb = tmp_path / "e.duckdb"
     _seed_earn(edb, "ACME", date(2025, 2, 10), 2.0)
@@ -147,7 +147,7 @@ def test_positive_surprise_no_block(tmp_path) -> None:
 
 
 def test_stale_surprise_soft_degrades(tmp_path) -> None:
-    from data.pead import pead_signal
+    from autoresearch.data.pead import pead_signal
 
     edb = tmp_path / "e.duckdb"
     _seed_earn(edb, "ACME", date(2024, 1, 1), -3.0)
@@ -159,7 +159,7 @@ def test_stale_surprise_soft_degrades(tmp_path) -> None:
 
 
 def test_no_earnings_db_returns_none(tmp_path) -> None:
-    from data.pead import pead_signal
+    from autoresearch.data.pead import pead_signal
 
     assert (
         pead_signal(
@@ -172,7 +172,7 @@ def test_no_earnings_db_returns_none(tmp_path) -> None:
 
 
 def test_severe_negative_sets_sever(tmp_path) -> None:
-    from data.pead import pead_signal
+    from autoresearch.data.pead import pead_signal
 
     edb = tmp_path / "e.duckdb"
     _seed_earn(edb, "ACME", date(2025, 2, 10), -2.5)

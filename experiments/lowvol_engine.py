@@ -48,7 +48,7 @@ from datetime import date
 import backtrader as bt
 import numpy as np
 
-from data.sectors import SectorAssignment, assign_sectors
+from autoresearch.data.sectors import SectorAssignment, assign_sectors
 from strategy import (
     _REBALANCE_PARITY,
     construct_gross_targets,

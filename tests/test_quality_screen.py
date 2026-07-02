@@ -5,12 +5,12 @@ from __future__ import annotations
 from datetime import date
 from pathlib import Path
 
-from data.quality_screen import (
+from autoresearch.data.quality_screen import (
     FundamentalsRow,
     apply_quality_screen,
     load_fundamentals,
 )
-from data.sectors import SectorAssignment
+from autoresearch.data.sectors import SectorAssignment
 
 
 def _fund(ticker: str, roe: float, de: float, opm: float) -> FundamentalsRow:

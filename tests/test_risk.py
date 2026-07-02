@@ -1,6 +1,6 @@
 import pandas as pd
 
-from backtest.risk import (
+from autoresearch.backtest.risk import (
     MAX_DRAWDOWN_FRAC,
     MAX_GROSS_EXPOSURE,
     MIN_TRADES,

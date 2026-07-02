@@ -34,10 +34,10 @@ import duckdb
 # no-op stub (see _get_general_news_by_date below) and macro_regime
 # falls back to numeric-only classification (RBI + FRED India + NSE
 # indices + FII/DII), which is still informative.
-from data.ingest_prices import DB_PATH as PRICES_DB
-from prepare import BACKTEST_END, BACKTEST_START
-from llm.classify import classify_macro_regime_batch
-from llm.provider import ClaudeCodeProvider, CodexProvider, Provider
+from autoresearch.data.ingest_prices import DB_PATH as PRICES_DB
+from autoresearch.research.prepare import BACKTEST_END, BACKTEST_START
+from autoresearch.llm.classify import classify_macro_regime_batch
+from autoresearch.llm.provider import ClaudeCodeProvider, CodexProvider, Provider
 
 
 def _get_general_news_by_date(d: date, *, lookback_days: int = 3, limit: int = 15) -> list:

@@ -33,10 +33,10 @@ from datetime import date
 from pathlib import Path
 from typing import Any
 
-from storage import portfolio_db
-from storage.portfolio_db import DEFAULT_DB_PATH, connect
+from autoresearch.storage import portfolio_db
+from autoresearch.storage.portfolio_db import DEFAULT_DB_PATH, connect
 
-REPO = Path(__file__).resolve().parent.parent
+REPO = Path(__file__).resolve().parent.parent.parent  # autoresearch/data/ -> repo root
 MACRO_DB = REPO / "storage" / "macro.duckdb"
 
 # Thresholds. Mirrored from the existing layers so the panel agrees with them:

@@ -21,7 +21,7 @@ from pathlib import Path
 
 import duckdb
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
+REPO_ROOT = Path(__file__).resolve().parent.parent.parent  # autoresearch/storage/ -> repo root
 DEFAULT_DB_PATH = REPO_ROOT / "storage" / "portfolio.duckdb"
 HALT_FILE_PATH = REPO_ROOT / "state" / "halt.json"
 

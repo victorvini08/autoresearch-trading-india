@@ -38,8 +38,8 @@ from typing import Iterable, Iterator, TypeVar
 
 from pathlib import Path
 
-from data.ingest_macro import read_fii_dii, read_macro_window
-from data.ingest_news import read_news
+from autoresearch.data.ingest_macro import read_fii_dii, read_macro_window
+from autoresearch.data.ingest_news import read_news
 
 from .cache import (
     MACRO_TICKER_SENTINEL,

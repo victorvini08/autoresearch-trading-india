@@ -42,7 +42,7 @@ from pathlib import Path
 
 import numpy as np
 
-from backtest.metrics import SORTINO_DSTD_FLOOR
+from autoresearch.backtest.metrics import SORTINO_DSTD_FLOOR
 
 logger = logging.getLogger(__name__)
 

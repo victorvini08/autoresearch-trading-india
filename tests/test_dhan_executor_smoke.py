@@ -20,7 +20,7 @@ from unittest.mock import patch
 import duckdb
 import pytest
 
-from brokers.dhan_mock import DhanMock
+from autoresearch.brokers.dhan_mock import DhanMock
 from scripts.executors.dhan import DhanExecutor
 
 
@@ -66,7 +66,7 @@ def portfolio_db(tmp_path: Path) -> Path:
 def halt_file(tmp_path: Path, monkeypatch) -> Path:
     p = tmp_path / "halt.json"
     # Reroute storage.portfolio_db.HALT_FILE_PATH to our temp
-    import storage.portfolio_db as pdb
+    import autoresearch.storage.portfolio_db as pdb
 
     monkeypatch.setattr(pdb, "HALT_FILE_PATH", p)
     return p
@@ -416,7 +416,7 @@ def test_sweep_retries_missed_leg_without_overfill(
     """Sweep-to-fill: a leg that doesn't fill on the first pass (IOC cancel) is
     re-fired on the next pass and fills — and because each pass re-sizes the
     RESIDUAL from the live book, the name is never over-bought."""
-    from brokers.dhan import OrderResponse, STATUS_CANCELLED
+    from autoresearch.brokers.dhan import OrderResponse, STATUS_CANCELLED
 
     monkeypatch.setenv("DHAN_MOCK", "1")
     mock = DhanMock(prices_db=prices_db, initial_cash_inr=50_000.0, slippage_bps=0.0)

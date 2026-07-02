@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from datetime import date
 
-from data.ingest_fii_dii_history import parse_fii_dii_table
+from autoresearch.data.ingest_fii_dii_history import parse_fii_dii_table
 
 
 _SAMPLE_HTML = """\

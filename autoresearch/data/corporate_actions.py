@@ -15,7 +15,7 @@ from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
+REPO_ROOT = Path(__file__).resolve().parent.parent.parent  # autoresearch/data/ -> repo root
 DEFAULT_CA_PATH = REPO_ROOT / "storage" / "corporate_actions.json"
 
 # Action types we care about. `dividend` and `split` come from yfinance for

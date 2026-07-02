@@ -14,14 +14,14 @@ import duckdb
 import numpy as np
 import pandas as pd
 
-import prepare
-from prepare import (
+from autoresearch.research import prepare
+from autoresearch.research.prepare import (
     BACKTEST_START, TEST_BOUNDARY, WARMUP_CALENDAR_DAYS, MIN_FOLD_UNIVERSE,
     _load_feeds, _min_active_universe, _pit_universe, _score_window,
     _sub_period_sortinos, _walk_forward_folds,
 )
-from backtest.metrics import sortino
-from backtest.engine import run_backtest
+from autoresearch.backtest.metrics import sortino
+from autoresearch.backtest.engine import run_backtest
 from strategy import IndiaMomentumQualityCarry
 from experiments.defmom_engine import IndiaDefensiveMomentum
 from experiments.qualmom_engine import IndiaQualityMomentum

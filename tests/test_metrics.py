@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from backtest.metrics import (
+from autoresearch.backtest.metrics import (
     calmar,
     hit_rate,
     max_drawdown,

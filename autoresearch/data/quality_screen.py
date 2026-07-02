@@ -29,7 +29,7 @@ from pathlib import Path
 
 import duckdb
 
-from data.sectors import SectorAssignment
+from autoresearch.data.sectors import SectorAssignment
 
 logger = logging.getLogger(__name__)
 

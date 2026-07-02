@@ -22,7 +22,7 @@ import sys
 from datetime import date, datetime
 from pathlib import Path
 
-from storage import portfolio_db
+from autoresearch.storage import portfolio_db
 
 REPORTS_DIR = Path("state/reports")
 DASHBOARD_FILENAME = "dashboard.html"
@@ -472,8 +472,8 @@ def _safety_state_for_day(
     if not modes:
         return None
     try:
-        from data.safety_state import evaluate_state
-        from storage import portfolio_db as _pdb
+        from autoresearch.data.safety_state import evaluate_state
+        from autoresearch.storage import portfolio_db as _pdb
 
         mode = modes[0]
         df = _pdb.get_equity_curve(conn, mode=mode)
@@ -515,7 +515,7 @@ def _live_health_for_bucket(modes: tuple[str, ...], db_path: Path | None) -> dic
     error the JS renders inline, rather than taking down the whole dashboard
     build. Returns None when the bucket has no equity history yet."""
     try:
-        from data.live_health import compute_live_health
+        from autoresearch.data.live_health import compute_live_health
 
         return compute_live_health(
             mode=modes[0], db_path=db_path or portfolio_db.DEFAULT_DB_PATH

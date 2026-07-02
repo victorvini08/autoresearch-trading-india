@@ -14,8 +14,8 @@ import os
 import numpy as np
 import pytest
 
-from data.ingest_prices import ingest_prices
-from prepare import BACKTEST_END, BACKTEST_START, evaluate
+from autoresearch.data.ingest_prices import ingest_prices
+from autoresearch.research.prepare import BACKTEST_END, BACKTEST_START, evaluate
 
 # TWEAK: NSE blue-chip tickers, all in Nifty 500. ingest_prices appends
 # '.NS' internally for yfinance.

@@ -13,7 +13,7 @@ from datetime import datetime
 
 import pytest
 
-from storage import realworld_db
+from autoresearch.storage import realworld_db
 
 
 @pytest.fixture

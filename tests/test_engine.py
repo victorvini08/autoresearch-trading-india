@@ -3,7 +3,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from backtest.engine import run_backtest
+from autoresearch.backtest.engine import run_backtest
 # Branch mean-reversion-quant-strategy: strategy.py is the residual
 # mean-reversion stat-arb book; aliased so the engine tests stay
 # strategy-agnostic.

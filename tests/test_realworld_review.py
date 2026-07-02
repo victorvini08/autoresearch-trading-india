@@ -13,8 +13,8 @@ from datetime import date, datetime
 
 import pytest
 
-from data import realworld_review_validator as V
-from storage import realworld_db
+from autoresearch.data import realworld_review_validator as V
+from autoresearch.storage import realworld_db
 import scripts.realworld_context as ctx
 import scripts.realworld_review as review
 
@@ -194,7 +194,7 @@ def test_output_json_stored_in_audit(tmp_path):
 
 # ---- maybe_run_monthly_review (the gate daily_report calls) --------------
 
-from storage import portfolio_db
+from autoresearch.storage import portfolio_db
 
 
 def _seed_strategy_target(path, d):

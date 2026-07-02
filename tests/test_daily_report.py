@@ -12,7 +12,7 @@ import pytest
 
 from scripts import daily_report
 from scripts.executors.protocol import ExecutionSummary
-from storage import portfolio_db
+from autoresearch.storage import portfolio_db
 
 
 @pytest.fixture

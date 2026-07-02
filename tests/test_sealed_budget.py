@@ -11,12 +11,12 @@ from __future__ import annotations
 
 from datetime import date
 
-import backtest.sealed_budget as B
+import autoresearch.backtest.sealed_budget as B
 
 
 def test_frozen_boundary_matches_prepare_sealed_end():
     # The initial frozen boundary IS the end of the burned sealed window.
-    import prepare
+    from autoresearch.research import prepare
     assert B.INITIAL_FROZEN_BOUNDARY == prepare.BACKTEST_END
 
 

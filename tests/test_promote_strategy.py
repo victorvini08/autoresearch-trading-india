@@ -14,7 +14,7 @@ from datetime import datetime
 import pytest
 
 import scripts.promote_strategy as promote
-from storage import realworld_db
+from autoresearch.storage import realworld_db
 
 
 INCUMBENT = '''import backtrader as bt

@@ -9,7 +9,7 @@ from datetime import date, timedelta
 
 import pytest
 
-from data.safety_state import (
+from autoresearch.data.safety_state import (
     DD_HALTED_REVIEW,
     DD_RISK_REDUCED,
     DD_WATCH,

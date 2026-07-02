@@ -13,8 +13,8 @@ import argparse
 import logging
 from datetime import date
 
-from data.ingest_prices import DB_PATH as PRICES_DB
-from data.universe import DEFAULT_UNIVERSE_DB, backfill_snapshots
+from autoresearch.data.ingest_prices import DB_PATH as PRICES_DB
+from autoresearch.data.universe import DEFAULT_UNIVERSE_DB, backfill_snapshots
 
 
 def main(argv: list[str] | None = None) -> int:

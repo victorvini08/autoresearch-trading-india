@@ -39,7 +39,7 @@ if str(REPO) not in sys.path:
 
 import duckdb  # noqa: E402
 
-from storage import portfolio_db  # noqa: E402
+from autoresearch.storage import portfolio_db  # noqa: E402
 
 PRICES_DB = REPO / "storage" / "prices.duckdb"
 

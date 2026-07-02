@@ -17,7 +17,7 @@ import sqlite3
 from pathlib import Path
 from typing import Any
 
-DB_PATH = Path(__file__).parent.parent / "storage" / "llm_cache.sqlite"
+DB_PATH = Path(__file__).parent.parent.parent / "storage" / "llm_cache.sqlite"  # autoresearch/llm/ -> repo root
 
 # Ticker-key conventions: macro features have no ticker, so we use a sentinel.
 # Sentiment and events share (date, ticker), so we prefix the ticker key with

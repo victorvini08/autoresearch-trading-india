@@ -56,7 +56,7 @@ from datetime import date
 import backtrader as bt
 import numpy as np
 
-from data.sectors import (
+from autoresearch.data.sectors import (
     SectorAssignment,
     assign_sectors,
 )

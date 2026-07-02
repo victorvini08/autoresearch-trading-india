@@ -18,7 +18,7 @@ from types import SimpleNamespace
 import pytest
 
 from scripts.ledger_writer import write_execution_result
-from storage import portfolio_db
+from autoresearch.storage import portfolio_db
 
 MODE = "dhan-paper"
 

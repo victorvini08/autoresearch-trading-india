@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 
 
 def _bhav_5y() -> dict:
-    from data.ingest_prices import DB_PATH, ingest_range
+    from autoresearch.data.ingest_prices import DB_PATH, ingest_range
 
     end = date.today()
     start = end - timedelta(days=5 * 365 + 30)
@@ -37,7 +37,7 @@ def _bhav_5y() -> dict:
 
 
 def _filings_5y() -> int:
-    from data.ingest_news_historical import backfill_nse_filings
+    from autoresearch.data.ingest_news_historical import backfill_nse_filings
 
     news_db = Path("storage/news.duckdb")
     end = date.today()
@@ -47,8 +47,8 @@ def _filings_5y() -> int:
 
 
 def _rbi_5y() -> int:
-    from data.ingest_news import write_articles
-    from data.ingest_news_historical import fetch_rbi_press_releases
+    from autoresearch.data.ingest_news import write_articles
+    from autoresearch.data.ingest_news_historical import fetch_rbi_press_releases
 
     news_db = Path("storage/news.duckdb")
     end = date.today()
@@ -59,8 +59,8 @@ def _rbi_5y() -> int:
 
 
 def _sebi_5y() -> int:
-    from data.ingest_news import write_articles
-    from data.ingest_news_historical import fetch_sebi_press_releases
+    from autoresearch.data.ingest_news import write_articles
+    from autoresearch.data.ingest_news_historical import fetch_sebi_press_releases
 
     news_db = Path("storage/news.duckdb")
     end = date.today()
@@ -74,7 +74,7 @@ def _macro_long() -> dict:
     """Re-run FRED with a 5-year lookback so monthly series (CPI, repo) populate."""
     import os
 
-    from data.ingest_macro import DB_PATH, ingest_fred, ingest_yfinance_indices
+    from autoresearch.data.ingest_macro import DB_PATH, ingest_fred, ingest_yfinance_indices
 
     end = date.today()
     start = end - timedelta(days=5 * 365 + 30)
@@ -88,7 +88,7 @@ def _macro_long() -> dict:
 
 def _bse_news_5y() -> dict:
     """PRIMARY 5y per-ticker news: BSE announcements API (9+ years, no bot-wall)."""
-    from data.ingest_news import ingest_bse_for_universe
+    from autoresearch.data.ingest_news import ingest_bse_for_universe
 
     news_db = Path("storage/news.duckdb")
     universe_db = Path("storage/universe.duckdb")
@@ -100,8 +100,8 @@ def _bse_news_5y() -> dict:
 
 def _earnings_5y() -> int:
     """PRIMARY 5y earnings: yfinance .NS get_earnings_dates for the universe."""
-    from data.ingest_earnings import ingest_yfinance_earnings
-    from data.universe import get_live_universe
+    from autoresearch.data.ingest_earnings import ingest_yfinance_earnings
+    from autoresearch.data.universe import get_live_universe
 
     universe_db = Path("storage/universe.duckdb")
     earnings_db = Path("storage/news.duckdb")  # earnings_calendar lives alongside news

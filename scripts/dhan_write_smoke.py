@@ -51,7 +51,7 @@ from datetime import datetime, time as dtime
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-from brokers.dhan import (
+from autoresearch.brokers.dhan import (
     ORDER_TYPE_LIMIT,
     STATUS_TRADED,
     DhanBroker,

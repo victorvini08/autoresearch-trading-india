@@ -24,7 +24,7 @@ from datetime import date, datetime
 import pytest
 
 import scripts.realworld_validator as V
-from storage import realworld_db
+from autoresearch.storage import realworld_db
 
 
 # ── fakes / fixtures ──────────────────────────────────────────────────────
@@ -250,8 +250,7 @@ def test_run_candidate_backtests_runs_both_capitals_serial(monkeypatch):
     """The ₹50k and ₹5L runs must (a) each see the right INITIAL_CASH, and
     (b) run SERIAL — prepare's parallel workers re-import by name and wouldn't
     see the in-process INITIAL_CASH override, so the harness forces serial."""
-    import prepare
-
+    from autoresearch.research import prepare
     seen = []
 
     def fake_eval(module, mode="research"):
@@ -274,8 +273,7 @@ def test_run_candidate_backtests_runs_both_capitals_serial(monkeypatch):
 
 
 def test_run_fresh_sealed_reveal_overrides_boundaries_and_restores(monkeypatch):
-    import prepare
-
+    from autoresearch.research import prepare
     seen = {}
 
     def fake_eval(module, mode="research"):

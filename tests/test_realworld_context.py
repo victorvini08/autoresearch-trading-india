@@ -13,8 +13,8 @@ from datetime import date, datetime
 
 import pytest
 
-from storage import portfolio_db
-from data import realworld_review_validator as V
+from autoresearch.storage import portfolio_db
+from autoresearch.data import realworld_review_validator as V
 import scripts.realworld_context as ctx
 
 

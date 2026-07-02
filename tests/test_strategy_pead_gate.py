@@ -24,7 +24,7 @@ pytestmark = pytest.mark.skip(
     "journal 2026-05-18. Pipeline + SUE robustification retained as infra."
 )
 
-from prepare import count_hyperparameters  # noqa: E402
+from autoresearch.research.prepare import count_hyperparameters  # noqa: E402
 from strategy import IndiaMomentumQualityCarry  # noqa: E402
 
 

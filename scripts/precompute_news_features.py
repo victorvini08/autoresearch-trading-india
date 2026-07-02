@@ -31,10 +31,10 @@ from datetime import date, timedelta
 
 import duckdb
 
-from data.ingest_prices import DB_PATH as PRICES_DB
-from data.universe import get_live_universe
-from llm.classify import classify_events_batch, classify_sentiment_batch
-from llm.provider import ClaudeCodeProvider, CodexProvider, Provider
+from autoresearch.data.ingest_prices import DB_PATH as PRICES_DB
+from autoresearch.data.universe import get_live_universe
+from autoresearch.llm.classify import classify_events_batch, classify_sentiment_batch
+from autoresearch.llm.provider import ClaudeCodeProvider, CodexProvider, Provider
 
 
 def trading_days(start: date, end: date) -> list[date]:

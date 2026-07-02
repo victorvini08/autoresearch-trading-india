@@ -6,8 +6,8 @@ from datetime import date
 import pandas as pd
 import pytest
 
-import prepare
-from backtest.anti_overfit import (
+from autoresearch.research import prepare
+from autoresearch.backtest.anti_overfit import (
     StrategySummary,
     run_all_gates,
     universe_respect_gate,

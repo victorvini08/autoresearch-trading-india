@@ -151,7 +151,7 @@ def test_strategy_uses_order_target_percent_only():
 
 def test_single_strategy_class_is_residual_reversal():
     import strategy as s
-    from prepare import _find_strategy_class, count_hyperparameters
+    from autoresearch.research.prepare import _find_strategy_class, count_hyperparameters
 
     cls = _find_strategy_class(s)
     assert cls.__name__ == "IndiaMomentumQualityCarry"

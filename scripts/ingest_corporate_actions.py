@@ -24,14 +24,14 @@ import logging
 from datetime import date, timedelta
 from pathlib import Path
 
-from data.corporate_actions import (
+from autoresearch.data.corporate_actions import (
     DEFAULT_CA_PATH,
     CorporateAction,
     load_corporate_actions,
     save_corporate_actions,
     upsert_action,
 )
-from storage.portfolio_db import connect
+from autoresearch.storage.portfolio_db import connect
 
 logger = logging.getLogger(__name__)
 

@@ -6,14 +6,14 @@ from unittest.mock import MagicMock
 import pandas as pd
 import pytest
 
-from llm.classify import classify_events_batch
-from llm.provider import ClaudeCodeProvider
+from autoresearch.llm.classify import classify_events_batch
+from autoresearch.llm.provider import ClaudeCodeProvider
 
 
 @pytest.fixture(autouse=True)
 def _isolate(monkeypatch, tmp_path):
-    import data.ingest_news as news_mod
-    import llm.cache as cache_mod
+    import autoresearch.data.ingest_news as news_mod
+    import autoresearch.llm.cache as cache_mod
     monkeypatch.setattr(cache_mod, "DB_PATH", tmp_path / "llm_cache.sqlite")
     monkeypatch.setattr(news_mod, "DB_PATH", tmp_path / "news.duckdb")
 
@@ -30,7 +30,7 @@ def _seed_news(monkeypatch, items: list[dict]) -> None:
         return pd.DataFrame(items) if items else pd.DataFrame(
             {"headline": [], "summary": []}
         )
-    monkeypatch.setattr("llm.classify.read_news", fake_read)
+    monkeypatch.setattr("autoresearch.llm.classify.read_news", fake_read)
 
 
 _ALL_FLAGS = (
@@ -156,7 +156,7 @@ def test_not_fired_with_nonzero_severity_rejected(monkeypatch):
 def test_classify_events_live_with_real_news():
     from datetime import timedelta
 
-    from data.ingest_news import ingest_finnhub_news
+    from autoresearch.data.ingest_news import ingest_finnhub_news
 
     today = date.today()
     target = today - timedelta(days=2)

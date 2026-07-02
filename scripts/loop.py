@@ -52,7 +52,7 @@ MAX_TRADE_HISTORY = 50
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from llm.provider import ClaudeCodeProvider, CodexProvider, Provider  # noqa: E402
+from autoresearch.llm.provider import ClaudeCodeProvider, CodexProvider, Provider  # noqa: E402
 from scripts._dashboard import render_dashboard  # noqa: E402
 
 # Modules a generated strategy.py is allowed to import. The loop runs
@@ -404,7 +404,7 @@ def evaluate_anti_overfit_gates(
     loop must NEVER touch the sealed 2025→2026 window; that is revealed once
     at the human promotion gate (CLAUDE.md hard constraint §9).
     """
-    from backtest.anti_overfit import StrategySummary, run_all_gates
+    from autoresearch.backtest.anti_overfit import StrategySummary, run_all_gates
 
     ao = (metrics or {}).get("anti_overfit") or {}
     val_mean = float(ao.get("sortino_val_mean", 0.0))
@@ -447,7 +447,7 @@ def run_prepare_research() -> dict:
     for mod_name in ("strategy", "prepare"):
         if mod_name in sys.modules:
             importlib.reload(sys.modules[mod_name])
-    import prepare
+    from autoresearch.research import prepare
     import strategy
     return prepare.evaluate(strategy, mode="research")
 
@@ -857,14 +857,14 @@ def main(argv: list[str] | None = None) -> int:
     # strategy (this iteration's starting point), captured BEFORE the edit is
     # applied. The parsimony gate then penalises only knobs the variant ADDS.
     try:
-        import prepare as _prep
+        import autoresearch.research.prepare as _prep
         import strategy as _cur_strat
         importlib.reload(_cur_strat)
         baseline_hyperparams = _prep.count_hyperparameters(
             _prep._find_strategy_class(_cur_strat)
         )
     except Exception:  # noqa: BLE001 — fall back to spec baseline
-        from backtest.anti_overfit import BASELINE_HYPERPARAMS
+        from autoresearch.backtest.anti_overfit import BASELINE_HYPERPARAMS
         baseline_hyperparams = BASELINE_HYPERPARAMS
 
     print(f"[loop {args.iteration_id}] provider={args.provider}"

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from backtest.costs import (
+from autoresearch.backtest.costs import (
     DP_CHARGE_INR,
     GST_RATE,
     NSE_TRANSACTION_RATE,

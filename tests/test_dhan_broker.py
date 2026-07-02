@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from brokers.dhan import (
+from autoresearch.brokers.dhan import (
     DhanBroker,
     OrderRequest,
     parse_scrip_master,
@@ -47,7 +47,7 @@ def test_place_order_stamps_sebi_algo_id(monkeypatch, tmp_path) -> None:
     cache = tmp_path / "scrip_master.csv"
     cache.write_text(_SCRIP_MASTER_CSV)
 
-    with patch("brokers.dhan.requests.Session") as session_cls:
+    with patch("autoresearch.brokers.dhan.requests.Session") as session_cls:
         session = MagicMock()
         session_cls.return_value = session
         # The POST /v2/orders call returns this
@@ -76,7 +76,7 @@ def test_limit_order_requires_price(monkeypatch, tmp_path) -> None:
     _set_env(monkeypatch)
     cache = tmp_path / "scrip.csv"
     cache.write_text(_SCRIP_MASTER_CSV)
-    with patch("brokers.dhan.requests.Session") as session_cls:
+    with patch("autoresearch.brokers.dhan.requests.Session") as session_cls:
         session_cls.return_value = MagicMock()
         b = DhanBroker(scrip_master_cache=cache)
         with pytest.raises(ValueError):
@@ -87,7 +87,7 @@ def test_unknown_ticker_raises_keyerror(monkeypatch, tmp_path) -> None:
     _set_env(monkeypatch)
     cache = tmp_path / "scrip.csv"
     cache.write_text(_SCRIP_MASTER_CSV)
-    with patch("brokers.dhan.requests.Session") as session_cls:
+    with patch("autoresearch.brokers.dhan.requests.Session") as session_cls:
         session_cls.return_value = MagicMock()
         b = DhanBroker(scrip_master_cache=cache)
         with pytest.raises(KeyError):

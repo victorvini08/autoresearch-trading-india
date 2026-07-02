@@ -10,7 +10,7 @@ from datetime import date
 import pytest
 
 from scripts import risk_check
-from storage.portfolio_db import LedgerState
+from autoresearch.storage.portfolio_db import LedgerState
 
 
 def _state(**overrides) -> LedgerState:

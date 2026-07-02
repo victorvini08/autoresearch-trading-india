@@ -150,7 +150,7 @@ def main(argv: list[str] | None = None) -> int:
 
     # Step 1: universe construction
     print(f"=== Step 1: Universe at {as_of} ===")
-    from data.universe import compute_universe, fetch_nifty500_constituents
+    from autoresearch.data.universe import compute_universe, fetch_nifty500_constituents
 
     try:
         constituents = fetch_nifty500_constituents()

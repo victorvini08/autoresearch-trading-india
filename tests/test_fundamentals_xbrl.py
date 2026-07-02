@@ -14,8 +14,8 @@ from pathlib import Path
 
 import pytest
 
-import data.fundamentals_xbrl as fx
-from data.fundamentals_xbrl import (
+import autoresearch.data.fundamentals_xbrl as fx
+from autoresearch.data.fundamentals_xbrl import (
     NseFetchError,
     NseResultRow,
     parse_xbrl_facts,

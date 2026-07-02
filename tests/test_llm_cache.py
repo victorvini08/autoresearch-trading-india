@@ -1,11 +1,11 @@
 import pytest
 
-from llm.cache import cache_get, cache_put, cache_size
+from autoresearch.llm.cache import cache_get, cache_put, cache_size
 
 
 @pytest.fixture(autouse=True)
 def _isolate_cache(monkeypatch, tmp_path):
-    import llm.cache as mod
+    import autoresearch.llm.cache as mod
     monkeypatch.setattr(mod, "DB_PATH", tmp_path / "llm_cache.sqlite")
 
 

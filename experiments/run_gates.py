@@ -21,8 +21,8 @@ from pathlib import Path
 
 import pandas as pd
 
-import prepare
-from prepare import EVALUATOR_VERSION, evaluate
+from autoresearch.research import prepare
+from autoresearch.research.prepare import EVALUATOR_VERSION, evaluate
 
 RESULTS = Path("experiments/results")
 

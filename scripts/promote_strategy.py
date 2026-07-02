@@ -27,7 +27,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
-from storage import realworld_db
+from autoresearch.storage import realworld_db
 
 
 @dataclass(frozen=True)

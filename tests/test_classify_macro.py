@@ -5,13 +5,13 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from llm.classify import classify_macro_regime_batch
-from llm.provider import ClaudeCodeProvider
+from autoresearch.llm.classify import classify_macro_regime_batch
+from autoresearch.llm.provider import ClaudeCodeProvider
 
 
 @pytest.fixture(autouse=True)
 def _isolate_cache(monkeypatch, tmp_path):
-    import llm.cache as cache_mod
+    import autoresearch.llm.cache as cache_mod
     monkeypatch.setattr(cache_mod, "DB_PATH", tmp_path / "llm_cache.sqlite")
 
 
@@ -19,7 +19,7 @@ def _isolate_cache(monkeypatch, tmp_path):
 def _stub_fred(monkeypatch):
     """Stub the Indian macro snapshot; avoid a real DuckDB read."""
     monkeypatch.setattr(
-        "llm.classify._macro_snapshot",
+        "autoresearch.llm.classify._macro_snapshot",
         lambda _d, *a, **k: {
             "india_vix": 18.5,
             "india_vix_pct_252d": 0.62,

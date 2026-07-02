@@ -38,8 +38,8 @@ from typing import Any
 
 import duckdb
 
-from data.universe import DEFAULT_UNIVERSE_DB, get_universe_at
-from storage.portfolio_db import DEFAULT_DB_PATH, connect
+from autoresearch.data.universe import DEFAULT_UNIVERSE_DB, get_universe_at
+from autoresearch.storage.portfolio_db import DEFAULT_DB_PATH, connect
 
 # Must match strategy.py params (IndiaMomentumQuality defaults).
 BETA_WINDOW = 252        # lookback_days
@@ -329,7 +329,7 @@ def _closed_trade_attribution(
     if not trades:
         return []
 
-    from backtest.costs import commission_usd
+    from autoresearch.backtest.costs import commission_usd
 
     nifty = _NiftyReader(macro_db)
     rows: list[dict[str, Any]] = []

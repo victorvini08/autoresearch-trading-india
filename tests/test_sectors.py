@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from data.sectors import (
+from autoresearch.data.sectors import (
     CANONICAL_SECTORS,
     SectorAssignment,
     assign_sectors,

@@ -20,7 +20,7 @@ from pathlib import Path
 
 import duckdb
 
-from data.quality_screen import load_fundamentals
+from autoresearch.data.quality_screen import load_fundamentals
 
 logger = logging.getLogger(__name__)
 

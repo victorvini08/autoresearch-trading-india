@@ -59,7 +59,7 @@ def main(argv: list[str] | None = None) -> int:
             summary["fred"] = "SKIPPED:no_key"
         else:
             logger.info("=== FRED India macros ===")
-            from data.ingest_macro import DB_PATH, ingest_fred
+            from autoresearch.data.ingest_macro import DB_PATH, ingest_fred
             try:
                 counts = ingest_fred(DB_PATH, macro_start, end)
                 summary["fred"] = counts
@@ -69,7 +69,7 @@ def main(argv: list[str] | None = None) -> int:
 
     if not args.skip_yf:
         logger.info("=== yfinance Indian indices history ===")
-        from data.ingest_macro import DB_PATH, ingest_yfinance_indices
+        from autoresearch.data.ingest_macro import DB_PATH, ingest_yfinance_indices
         try:
             counts = ingest_yfinance_indices(DB_PATH, macro_start, end)
             summary["yfinance"] = counts
@@ -79,7 +79,7 @@ def main(argv: list[str] | None = None) -> int:
 
     if not args.skip_fii_dii:
         logger.info("=== NSE FII/DII recent ===")
-        from data.ingest_macro import DB_PATH, ingest_fii_dii_recent
+        from autoresearch.data.ingest_macro import DB_PATH, ingest_fii_dii_recent
         try:
             n = ingest_fii_dii_recent(DB_PATH)
             summary["fii_dii_recent"] = n
@@ -89,7 +89,7 @@ def main(argv: list[str] | None = None) -> int:
 
     if not args.skip_bhav:
         logger.info("=== NSE bhav (last ~%d trading days) ===", args.days)
-        from data.ingest_prices import DB_PATH, ingest_range
+        from autoresearch.data.ingest_prices import DB_PATH, ingest_range
         try:
             result = ingest_range(DB_PATH, bhav_start, end)
             summary["nse_bhav"] = result

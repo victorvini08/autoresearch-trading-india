@@ -34,7 +34,7 @@ from datetime import date, datetime, timezone
 from types import SimpleNamespace
 from pathlib import Path
 
-from brokers.dhan import (
+from autoresearch.brokers.dhan import (
     ORDER_TYPE_MARKET,
     STATUS_REJECTED,
     STATUS_TRADED,
@@ -46,7 +46,7 @@ from scripts.executors.protocol import (
     PreflightSkipped,
 )
 from scripts.halt import set_halt, show_halt
-from storage import portfolio_db
+from autoresearch.storage import portfolio_db
 
 logger = logging.getLogger(__name__)
 
@@ -139,7 +139,7 @@ class DhanExecutor:
         # Personal-Algo registration form exists in the Dhan portal. The
         # DhanBroker constructor logs a warning if SEBI_ALGO_ID is unset.
         if use_mock:
-            from brokers.dhan_mock import DhanMock
+            from autoresearch.brokers.dhan_mock import DhanMock
             from scripts.premarket_scan import _default_quote_fetch
 
             def _yfinance_today_open(ticker: str) -> float | None:
@@ -161,7 +161,7 @@ class DhanExecutor:
                 initial_cash_inr=self.initial_cash_inr,
                 mode=self.mode,
             )
-        from brokers.dhan import DhanBroker
+        from autoresearch.brokers.dhan import DhanBroker
 
         return DhanBroker()
 
@@ -382,7 +382,7 @@ class DhanExecutor:
         # vs "what we did". Full-replacement semantics: clear and re-upsert so
         # a rerun with a shrunk signal set doesn't leave orphan rows behind.
         try:
-            from storage import portfolio_db as _pdb_t
+            from autoresearch.storage import portfolio_db as _pdb_t
 
             with _pdb_t.connect(self.portfolio_db) as _t_conn:
                 _pdb_t.delete_targets_for_day(
@@ -410,7 +410,7 @@ class DhanExecutor:
         #     straight through; the halt-only check above does NOT catch that.
         try:
             from scripts import risk_check as _risk_check
-            from storage import portfolio_db as _pdb
+            from autoresearch.storage import portfolio_db as _pdb
 
             with _pdb.connect(self.portfolio_db) as _conn:
                 state = _pdb.load_state(_conn, self.mode, as_of_date)
@@ -497,7 +497,7 @@ class DhanExecutor:
                     f"cur={_cur_frac:.3f} target={_f_target:.3f}"
                 )
                 try:
-                    from storage import portfolio_db as _pdb_cf
+                    from autoresearch.storage import portfolio_db as _pdb_cf
 
                     with _pdb_cf.connect(self.portfolio_db) as _cf_conn:
                         _pdb_cf.upsert_target(
@@ -705,7 +705,7 @@ class DhanExecutor:
         # never existed in the India build. new_positions is the post-fill
         # broker state marked at the latest close ≤ as_of_date.
         try:
-            from storage import portfolio_db as _pdb
+            from autoresearch.storage import portfolio_db as _pdb
             from scripts.ledger_writer import write_execution_result
 
             post = self.broker.get_positions()

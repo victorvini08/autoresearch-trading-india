@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-from data.safety_state import SafetyState
+from autoresearch.data.safety_state import SafetyState
 from scripts.safety_evaluator import (
     evaluate_and_persist,
     load_prior_state,
@@ -21,7 +21,7 @@ from scripts.safety_evaluator import (
     write_halt,
     write_risk_multiplier,
 )
-from storage import portfolio_db
+from autoresearch.storage import portfolio_db
 
 MODE = "dhan-paper"
 

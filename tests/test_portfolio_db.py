@@ -20,7 +20,7 @@ from datetime import date, datetime, timedelta
 import duckdb
 import pytest
 
-from storage import portfolio_db
+from autoresearch.storage import portfolio_db
 
 
 @pytest.fixture
@@ -808,7 +808,7 @@ def test_ytd_tax_estimate_zero_when_net_loss(conn):
 
 def test_ytd_fy_start_jan_mar_uses_previous_year_april(conn):
     """A January date is in the FY that started the previous calendar year."""
-    from storage.portfolio_db import _fy_start_for
+    from autoresearch.storage.portfolio_db import _fy_start_for
     assert _fy_start_for(date(2024, 1, 15)) == date(2023, 4, 1)
     assert _fy_start_for(date(2024, 3, 31)) == date(2023, 4, 1)
     assert _fy_start_for(date(2024, 4, 1)) == date(2024, 4, 1)

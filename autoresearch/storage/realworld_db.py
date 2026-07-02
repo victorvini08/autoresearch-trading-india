@@ -26,7 +26,7 @@ from pathlib import Path
 
 import duckdb
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
+REPO_ROOT = Path(__file__).resolve().parent.parent.parent  # autoresearch/storage/ -> repo root
 DEFAULT_DB_PATH = REPO_ROOT / "storage" / "realworld.duckdb"
 
 # Hypothesis lifecycle. PENDING = passed the review validator, awaiting the

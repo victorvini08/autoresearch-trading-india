@@ -35,7 +35,7 @@ import duckdb
 
 IST = ZoneInfo("Asia/Kolkata")
 
-from brokers.dhan import (
+from autoresearch.brokers.dhan import (
     EXCHANGE_NSE_EQ,
     ORDER_TYPE_LIMIT,
     ORDER_TYPE_MARKET,
@@ -106,7 +106,7 @@ class DhanMock:
         # Single source of truth for "real cash" lives in portfolio_db.get_cash_balance
         # (which now anchors the initial deposit by mode). Reusing it here keeps the
         # mock and the dashboard from disagreeing on what the balance is.
-        from storage import portfolio_db
+        from autoresearch.storage import portfolio_db
 
         conn = duckdb.connect(str(self.portfolio_db), read_only=True)
         try:

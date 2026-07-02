@@ -5,7 +5,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from llm.provider import ClaudeCodeProvider, CodexProvider
+from autoresearch.llm.provider import ClaudeCodeProvider, CodexProvider
 
 
 def test_claude_provider_uses_subprocess(monkeypatch):

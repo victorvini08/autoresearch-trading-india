@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-from brokers.dhan_token import (
+from autoresearch.brokers.dhan_token import (
     RenewResult,
     TokenStatus,
     read_env_var,
@@ -84,7 +84,7 @@ def _mock_resp(status_code: int, json_body: dict | None = None, text: str = ""):
 
 
 def test_validate_token_parses_profile() -> None:
-    with patch("brokers.dhan_token.requests.get") as g:
+    with patch("autoresearch.brokers.dhan_token.requests.get") as g:
         g.return_value = _mock_resp(
             200, {"dhanClientId": "1111664515", "tokenValidity": "16/05/2026 13:36"}
         )
@@ -97,7 +97,7 @@ def test_validate_token_parses_profile() -> None:
 
 
 def test_validate_token_401_is_invalid() -> None:
-    with patch("brokers.dhan_token.requests.get") as g:
+    with patch("autoresearch.brokers.dhan_token.requests.get") as g:
         g.return_value = _mock_resp(401, text="unauthorized")
         st = validate_token("expiredtoken")
     assert not st.valid
@@ -107,7 +107,7 @@ def test_validate_token_401_is_invalid() -> None:
 def test_validate_token_network_error_is_invalid() -> None:
     import requests
 
-    with patch("brokers.dhan_token.requests.get", side_effect=requests.ConnectionError("down")):
+    with patch("autoresearch.brokers.dhan_token.requests.get", side_effect=requests.ConnectionError("down")):
         st = validate_token("tok")
     assert not st.valid
     assert "network" in (st.error or "")
@@ -117,7 +117,7 @@ def test_validate_token_network_error_is_invalid() -> None:
 
 
 def test_renew_token_uses_get_and_parses_token_field() -> None:
-    with patch("brokers.dhan_token.requests.get") as g:
+    with patch("autoresearch.brokers.dhan_token.requests.get") as g:
         g.return_value = _mock_resp(
             200,
             {
@@ -135,7 +135,7 @@ def test_renew_token_uses_get_and_parses_token_field() -> None:
 
 
 def test_renew_token_http_400_returns_error() -> None:
-    with patch("brokers.dhan_token.requests.get") as g:
+    with patch("autoresearch.brokers.dhan_token.requests.get") as g:
         g.return_value = _mock_resp(
             400,
             text='{"errorCode":"DH-905","errorMessage":"Missing required fields"}',
@@ -146,7 +146,7 @@ def test_renew_token_http_400_returns_error() -> None:
 
 
 def test_renew_token_missing_token_field() -> None:
-    with patch("brokers.dhan_token.requests.get") as g:
+    with patch("autoresearch.brokers.dhan_token.requests.get") as g:
         g.return_value = _mock_resp(200, {"createTime": "x", "expiryTime": "y"})
         res = renew_token("tok", "cid")
     assert not res.ok

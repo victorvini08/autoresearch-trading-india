@@ -236,8 +236,7 @@ def run_candidate_backtests(
     dynamically-loaded module work. The validator is rare/on-demand, so the
     serial cost is irrelevant."""
     module = _materialize_module(candidate_text)
-    import prepare
-
+    from autoresearch.research import prepare
     prev_workers = os.environ.get("PREPARE_MAX_WORKERS")
     os.environ["PREPARE_MAX_WORKERS"] = "1"
     orig_cash = prepare.INITIAL_CASH
@@ -351,8 +350,7 @@ def run_fresh_sealed_reveal(
     boundary. Boundaries are always restored, so the burned window can't leak
     into a later run."""
     module = _materialize_module(candidate_text)
-    import prepare
-
+    from autoresearch.research import prepare
     prev_workers = os.environ.get("PREPARE_MAX_WORKERS")
     os.environ["PREPARE_MAX_WORKERS"] = "1"
     orig_tb, orig_be = prepare.TEST_BOUNDARY, prepare.BACKTEST_END
@@ -390,7 +388,7 @@ class ValidationRunResult:
 
 
 def _default_provider():
-    from llm.provider import ClaudeCodeProvider
+    from autoresearch.llm.provider import ClaudeCodeProvider
     return ClaudeCodeProvider(model=REVIEW_MODEL)
 
 
@@ -410,7 +408,7 @@ def _bonferroni_family(conn, mode: str) -> int:
     vetted against the CURRENT incumbent since the last promotion, +1, capped at
     10 (mirrors the loop's BONFERRONI_FAMILY_CAP). A promotion resets the
     episode (new incumbent ⇒ new family)."""
-    from storage import realworld_db
+    from autoresearch.storage import realworld_db
 
     versions = realworld_db.get_strategy_versions(conn, mode)
     promoted_at = [v["created_at"] for v in versions if v["status"] == "PROMOTED"]
@@ -423,8 +421,8 @@ def _sealed_state(conn, mode: str) -> tuple[date, date | None]:
     """Derive the current sealed boundary + last-reveal date from prior REVEALED
     challengers. With no fresh reveal ever spent (the live state), this is the
     initial burned boundary and no prior reveal."""
-    from backtest.sealed_budget import INITIAL_FROZEN_BOUNDARY
-    from storage import realworld_db
+    from autoresearch.backtest.sealed_budget import INITIAL_FROZEN_BOUNDARY
+    from autoresearch.storage import realworld_db
 
     revealed = [
         v for v in realworld_db.get_strategy_versions(conn, mode)
@@ -484,8 +482,8 @@ def run_validation(
     (VALIDATOR_REJECTED). The hypothesis stays PENDING while a challenger is in
     flight (the strategy_versions row owns the promotion lifecycle); it flips to
     VALIDATOR_KEPT only when the challenger is actually promoted (5.f)."""
-    from backtest import sealed_budget as SB
-    from storage import realworld_db
+    from autoresearch.backtest import sealed_budget as SB
+    from autoresearch.storage import realworld_db
 
     provider = provider or _default_provider()
     now = now or datetime.now()

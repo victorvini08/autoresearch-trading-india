@@ -2,7 +2,7 @@
 
 Strategy code calls these to gate decisions:
 
-    from llm.features import macro_regime, sentiment, events, news_volume
+    from autoresearch.llm.features import macro_regime, sentiment, events, news_volume
 
     regime = macro_regime(today)            # → 'risk_on' | 'risk_off' | 'neutral' | 'shock' | None
     sent = sentiment("RELIANCE", today)     # → {'score', 'confidence', 'is_actionable'} | None
@@ -31,7 +31,7 @@ from datetime import date
 
 from dotenv import load_dotenv
 
-from data.ingest_news import count_news
+from autoresearch.data.ingest_news import count_news
 
 from .cache import (
     MACRO_TICKER_SENTINEL,
@@ -103,7 +103,7 @@ def macro_signals(d: date) -> dict:
     NOT available (do not rely on): FII/DII flows, policy/repo rate —
     insufficient history (see program.md).
     """
-    from llm.classify import _macro_snapshot  # lazy: avoid import cycle
+    from autoresearch.llm.classify import _macro_snapshot  # lazy: avoid import cycle
 
     snap = _macro_snapshot(d)
     return {k: v for k, v in snap.items() if k in _MACRO_SIGNAL_KEYS}

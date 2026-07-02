@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from datetime import date
 
-from data import nse_calendar as cal
+from autoresearch.data import nse_calendar as cal
 
 
 def test_muharram_2026_is_a_holiday():

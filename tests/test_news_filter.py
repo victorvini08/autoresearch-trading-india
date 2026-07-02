@@ -1,7 +1,7 @@
 """Unit tests for the BSE/NSE low-signal procedural-filing filter."""
 import pytest
 
-from data.news_filter import is_low_signal
+from autoresearch.data.news_filter import is_low_signal
 
 # (title, expected_is_noise) for source='bse'
 _NOISE = [

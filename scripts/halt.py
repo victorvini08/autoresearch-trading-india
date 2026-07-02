@@ -28,7 +28,7 @@ import sys
 import uuid
 from datetime import datetime, timezone
 
-from storage.portfolio_db import HALT_FILE_PATH
+from autoresearch.storage.portfolio_db import HALT_FILE_PATH
 
 
 def set_halt(reason: str, *, set_by: str = "manual") -> dict:

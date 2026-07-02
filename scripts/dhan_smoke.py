@@ -28,7 +28,7 @@ def main() -> int:
 
     use_mock = os.environ.get("DHAN_MOCK", "1") in ("1", "true", "True")
     if use_mock:
-        from brokers.dhan_mock import DhanMock
+        from autoresearch.brokers.dhan_mock import DhanMock
         from pathlib import Path
 
         broker = DhanMock(
@@ -37,7 +37,7 @@ def main() -> int:
         )
         print("== DhanMock (paper) ==")
     else:
-        from brokers.dhan import DhanBroker
+        from autoresearch.brokers.dhan import DhanBroker
 
         broker = DhanBroker()
         print("== Dhan (live) ==")

@@ -9,7 +9,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from backtest.anti_overfit import (
+from autoresearch.backtest.anti_overfit import (
     BASELINE_HYPERPARAMS,
     DEFAULT_PARSIMONY_DELTA_SORTINO,
     RW_MC_PERMUTATIONS,
@@ -25,7 +25,7 @@ from backtest.anti_overfit import (
     sealed_test_gate,
     sub_period_stationarity_gate,
 )
-from backtest.metrics import sortino as _scalar_sortino
+from autoresearch.backtest.metrics import sortino as _scalar_sortino
 
 
 def _summary(

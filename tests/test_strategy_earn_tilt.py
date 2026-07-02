@@ -34,7 +34,7 @@ pytestmark = pytest.mark.skip(
     "signature). Earnings overlay closed out. See journal 2026-05-18."
 )
 
-from prepare import count_hyperparameters  # noqa: E402
+from autoresearch.research.prepare import count_hyperparameters  # noqa: E402
 from strategy import IndiaMomentumQualityCarry  # noqa: E402
 
 

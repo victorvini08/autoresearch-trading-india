@@ -15,7 +15,7 @@ import pytest
 
 import scripts.realworld_shadow as shadow
 import scripts.review_schedule as sched
-from storage import realworld_db
+from autoresearch.storage import realworld_db
 
 
 CURRENT_STRATEGY = "entry_pct = 0.30\n"      # incumbent marker

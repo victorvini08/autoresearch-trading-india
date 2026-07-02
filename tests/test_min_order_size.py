@@ -12,8 +12,8 @@ from pathlib import Path
 import duckdb
 import pytest
 
-from brokers.dhan import OrderRequest
-from brokers.dhan_mock import DhanMock
+from autoresearch.brokers.dhan import OrderRequest
+from autoresearch.brokers.dhan_mock import DhanMock
 from scripts.executors.dhan import DhanExecutor, MIN_ORDER_INR
 
 
@@ -40,7 +40,7 @@ def prices_db(tmp_path: Path) -> Path:
 
 @pytest.fixture
 def portfolio_db_empty(tmp_path: Path) -> Path:
-    from storage import portfolio_db
+    from autoresearch.storage import portfolio_db
     p = tmp_path / "portfolio.duckdb"
     conn = duckdb.connect(str(p))
     try:

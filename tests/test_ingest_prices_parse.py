@@ -8,7 +8,7 @@ from pathlib import Path
 import duckdb
 import pytest
 
-from data.ingest_prices import (
+from autoresearch.data.ingest_prices import (
     DailyBar,
     parse_bhav_csv,
     write_bars,

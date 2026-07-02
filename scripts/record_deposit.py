@@ -31,8 +31,8 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from storage import portfolio_db
-from storage.portfolio_db import (
+from autoresearch.storage import portfolio_db
+from autoresearch.storage.portfolio_db import (
     _INITIAL_DEPOSIT_BY_MODE,
     connect,
     get_cash_balance,
@@ -44,7 +44,7 @@ RECONCILE_TOL = 0.01  # ₹ — the daily reconcile keeps books exact to the pai
 
 
 def _broker_cash() -> float:
-    from brokers.dhan import DhanBroker
+    from autoresearch.brokers.dhan import DhanBroker
 
     return float(DhanBroker().get_cash().get("availableBalance", 0.0))
 

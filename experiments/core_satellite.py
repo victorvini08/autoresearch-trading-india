@@ -40,8 +40,8 @@ import duckdb
 import numpy as np
 import pandas as pd
 
-import prepare
-from prepare import (
+from autoresearch.research import prepare
+from autoresearch.research.prepare import (
     WARMUP_CALENDAR_DAYS,
     _find_strategy_class,
     _load_feeds,

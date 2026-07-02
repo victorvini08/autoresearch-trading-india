@@ -17,7 +17,7 @@ from datetime import timedelta
 import pandas as pd
 import pytest
 
-import prepare
+from autoresearch.research import prepare
 import strategy as strategy_mod
 
 _SUBSET = 12

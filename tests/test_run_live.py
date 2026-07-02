@@ -18,7 +18,7 @@ import pytest
 
 from scripts import run_live, premarket_scan, daily_report, dashboard
 from scripts.executors.protocol import ExecutionSummary, PreflightSkipped
-from storage import portfolio_db
+from autoresearch.storage import portfolio_db
 
 
 @pytest.fixture

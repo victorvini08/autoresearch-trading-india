@@ -22,7 +22,7 @@ from pathlib import Path
 
 import duckdb
 
-from data.fundamentals_xbrl import (
+from autoresearch.data.fundamentals_xbrl import (
     NseFetchError,
     XbrlFacts,
     _nse_session,
@@ -30,8 +30,8 @@ from data.fundamentals_xbrl import (
     fetch_nse_results,
     parse_xbrl_facts,
 )
-from data.sectors import assign_sectors
-from data.universe import load_universe, snapshot_dates
+from autoresearch.data.sectors import assign_sectors
+from autoresearch.data.universe import load_universe, snapshot_dates
 
 logger = logging.getLogger(__name__)
 

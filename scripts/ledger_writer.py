@@ -32,8 +32,8 @@ from typing import Literal
 
 import duckdb
 
-from backtest.costs import commission_usd, DEFAULT_SLIPPAGE_BPS
-from storage import portfolio_db
+from autoresearch.backtest.costs import commission_usd, DEFAULT_SLIPPAGE_BPS
+from autoresearch.storage import portfolio_db
 
 
 # All rows written by this writer are denominated in INR (Indian mode is

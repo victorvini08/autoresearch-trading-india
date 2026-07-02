@@ -31,7 +31,7 @@ from datetime import date, datetime, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-from storage import portfolio_db
+from autoresearch.storage import portfolio_db
 
 logger = logging.getLogger(__name__)
 

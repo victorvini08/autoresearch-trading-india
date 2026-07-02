@@ -18,7 +18,7 @@ from scripts.reconciliation import (
     DD_WATCH,
     compute_reconciliation_for_date,
 )
-from storage import portfolio_db
+from autoresearch.storage import portfolio_db
 
 MODE = "dhan-paper"
 INITIAL_DEPOSIT = 100_000.0
@@ -298,7 +298,7 @@ def _insert_realized_trade(
     sell_date - holding_days."""
     if buy_date is None:
         buy_date = sell_date - timedelta(days=holding_days)
-    from storage.portfolio_db import compute_tax
+    from autoresearch.storage.portfolio_db import compute_tax
     tax_paid = compute_tax(pnl, holding_days)
     conn.execute(
         "INSERT INTO realized_trades (trade_id, sell_fill_id, buy_lot_id, "

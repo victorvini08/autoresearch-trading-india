@@ -8,7 +8,7 @@ from unittest.mock import MagicMock, patch
 
 import pandas as pd
 
-from data.ingest_earnings import ingest_yfinance_earnings, load_calendar
+from autoresearch.data.ingest_earnings import ingest_yfinance_earnings, load_calendar
 
 
 def _fake_earnings_df() -> pd.DataFrame:

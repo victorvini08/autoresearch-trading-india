@@ -10,7 +10,7 @@ import time
 from datetime import date, timedelta
 from pathlib import Path
 
-from data.ingest_prices import ingest_date
+from autoresearch.data.ingest_prices import ingest_date
 
 DB = Path("storage/prices.duckdb")
 DONE = Path("experiments/results/be_reingest_done.log")

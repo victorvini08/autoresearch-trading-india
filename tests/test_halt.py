@@ -6,7 +6,7 @@ import json
 import pytest
 
 from scripts import halt
-from storage import portfolio_db
+from autoresearch.storage import portfolio_db
 
 
 @pytest.fixture

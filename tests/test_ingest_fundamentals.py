@@ -7,16 +7,16 @@ from pathlib import Path
 import duckdb
 import pytest
 
-import data.ingest_fundamentals as ingf
-from data.fundamentals_xbrl import NseFetchError, XbrlFacts
-from data.ingest_fundamentals import (
+import autoresearch.data.ingest_fundamentals as ingf
+from autoresearch.data.fundamentals_xbrl import NseFetchError, XbrlFacts
+from autoresearch.data.ingest_fundamentals import (
     LookaheadError,
     QuarterFacts,
     assert_no_lookahead,
     coverage_report,
     derive_ttm,
 )
-from data.quality_screen import load_fundamentals
+from autoresearch.data.quality_screen import load_fundamentals
 
 
 def _facts(rev, ebit, pat, eq, debt, der=None) -> XbrlFacts:

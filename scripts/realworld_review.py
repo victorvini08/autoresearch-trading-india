@@ -24,13 +24,13 @@ from dataclasses import dataclass
 from datetime import date, datetime
 from pathlib import Path
 
-from data import realworld_review_validator as V
+from autoresearch.data import realworld_review_validator as V
 from scripts.realworld_context import (
     JOURNAL_PATH,
     ReviewInput,
     gather_review_input,
 )
-from storage import realworld_db
+from autoresearch.storage import realworld_db
 
 PROMPT_VERSION = "v1"
 # Matches the documented autoresearch stack (Opus for the loop). Only used by
@@ -150,7 +150,7 @@ def _gen_review_id(ri: ReviewInput, now: datetime) -> str:
 
 
 def _default_provider():
-    from llm.provider import ClaudeCodeProvider
+    from autoresearch.llm.provider import ClaudeCodeProvider
     return ClaudeCodeProvider(model=REVIEW_MODEL)
 
 
@@ -308,7 +308,7 @@ def maybe_run_monthly_review(
     the month's last rebalance-execution day, and only once per day. Returns
     None when it's not the trigger day (and never touches the LLM then)."""
     from scripts import review_schedule as sched
-    from storage import portfolio_db as pdb
+    from autoresearch.storage import portfolio_db as pdb
 
     pconn = pdb.connect(portfolio_db_path) if portfolio_db_path else pdb.connect()
     try:

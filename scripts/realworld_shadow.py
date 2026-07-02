@@ -24,7 +24,7 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 
 import scripts.review_schedule as sched
-from storage import realworld_db
+from autoresearch.storage import realworld_db
 
 # Minimum rebalance cycles a challenger must run in shadow before it can be
 # promoted (spec §10 / Codex: >=4 cycles or 8-12 weeks).

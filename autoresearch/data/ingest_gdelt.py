@@ -223,7 +223,7 @@ def ingest_gdelt(
     Idempotent: re-running skips news-days already present unless
     skip_existing=False.
     """
-    from data.ingest_macro import read_macro_window, write_macro_series
+    from autoresearch.data.ingest_macro import read_macro_window, write_macro_series
 
     written = 0
     days_done = 0
@@ -263,7 +263,7 @@ def ingest_gdelt(
 def main(argv: list[str] | None = None) -> int:
     import argparse
 
-    from data.ingest_macro import DB_PATH
+    from autoresearch.data.ingest_macro import DB_PATH
 
     p = argparse.ArgumentParser(description=__doc__)
     today = date.today()

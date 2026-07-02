@@ -33,7 +33,7 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-from brokers.dhan_token import (
+from autoresearch.brokers.dhan_token import (
     read_env_var,
     renew_token,
     update_env_var,

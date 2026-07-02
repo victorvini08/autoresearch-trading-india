@@ -8,7 +8,7 @@ from pathlib import Path
 import duckdb
 import pytest
 
-from data.universe import (
+from autoresearch.data.universe import (
     MIN_LISTING_TRADING_DAYS,
     TARGET_UNIVERSE_SIZE,
     UniverseRow,
@@ -231,7 +231,7 @@ def test_get_universe_at_filters_etfs_from_stale_snapshot(tmp_path: Path) -> Non
     this, LIQUIDCASE leaked from a stale snapshot and — scoring top-tier on the
     low-vol/low-drawdown quality factors — climbed to the #1 live holding."""
     import duckdb
-    from data.universe import _ETF_EXCLUDE
+    from autoresearch.data.universe import _ETF_EXCLUDE
 
     assert "LIQUIDCASE" in _ETF_EXCLUDE  # precondition: it IS on the exclude list
     universe_db = tmp_path / "universe.duckdb"

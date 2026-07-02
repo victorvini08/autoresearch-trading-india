@@ -26,9 +26,9 @@ import backtrader as bt
 import numpy as np
 import pandas as pd
 
-from backtest.anti_overfit import compute_rw_mc_null
-from backtest.engine import run_backtest
-from backtest.metrics import (
+from autoresearch.backtest.anti_overfit import compute_rw_mc_null
+from autoresearch.backtest.engine import run_backtest
+from autoresearch.backtest.metrics import (
     calmar,
     hit_rate,
     max_drawdown,
@@ -36,10 +36,10 @@ from backtest.metrics import (
     sortino,
     turnover,
 )  # max_drawdown also used directly to compute the chained-fold aggregate DD
-from backtest.risk import MIN_TRADES as _CATASTROPHE_MIN_TRADES
-from backtest.risk import validate as validate_risk
-from data.ingest_prices import read_prices
-from data.universe import get_universe_at, snapshot_dates
+from autoresearch.backtest.risk import MIN_TRADES as _CATASTROPHE_MIN_TRADES
+from autoresearch.backtest.risk import validate as validate_risk
+from autoresearch.data.ingest_prices import read_prices
+from autoresearch.data.universe import get_universe_at, snapshot_dates
 
 BACKTEST_START = date(2017, 7, 1)
 # 2026-06-10 window extension (user-approved): the PIT universe rebuild

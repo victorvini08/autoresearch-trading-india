@@ -23,7 +23,7 @@ from datetime import date, datetime
 from pathlib import Path
 
 from scripts.executors.protocol import ExecutionSummary
-from storage import portfolio_db
+from autoresearch.storage import portfolio_db
 
 REPORTS_DIR = Path("state/reports")
 

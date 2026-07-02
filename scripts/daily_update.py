@@ -46,16 +46,16 @@ load_dotenv()
 # ingest_macro, ingest_prices, get_live_universe — survive verbatim
 # per spec §13.2. The US-specific finnhub helper is replaced; see the
 # news step below for the Phase 6 wiring TODO.
-from data.ingest_earnings import ingest_earnings
-from data.ingest_macro import ingest_macro
-from data.ingest_prices import ingest_prices
-from data.universe import get_live_universe
-from llm.classify import (
+from autoresearch.data.ingest_earnings import ingest_earnings
+from autoresearch.data.ingest_macro import ingest_macro
+from autoresearch.data.ingest_prices import ingest_prices
+from autoresearch.data.universe import get_live_universe
+from autoresearch.llm.classify import (
     classify_events_batch,
     classify_macro_regime_batch,
     classify_sentiment_batch,
 )
-from llm.provider import ClaudeCodeProvider, CodexProvider, Provider
+from autoresearch.llm.provider import ClaudeCodeProvider, CodexProvider, Provider
 
 
 def _make_provider(provider_name: str, model: str | None) -> Provider:
@@ -135,12 +135,12 @@ def main(argv: list[str] | None = None) -> int:
     t0 = time.time()
     month_start = today_d.replace(day=1)
     try:
-        from data.universe import (
+        from autoresearch.data.universe import (
             DEFAULT_UNIVERSE_DB,
             compute_universe,
             snapshot_dates,
         )
-        from data.ingest_prices import DB_PATH as _PRICES_DB
+        from autoresearch.data.ingest_prices import DB_PATH as _PRICES_DB
 
         if month_start not in set(snapshot_dates(DEFAULT_UNIVERSE_DB)):
             rows = compute_universe(month_start, _PRICES_DB, DEFAULT_UNIVERSE_DB)
@@ -190,7 +190,7 @@ def main(argv: list[str] | None = None) -> int:
         try:
             from pathlib import Path
 
-            from data.ingest_fundamentals import snapshot_live
+            from autoresearch.data.ingest_fundamentals import snapshot_live
 
             n_fund = snapshot_live(
                 Path("storage/universe.duckdb"), on_date=today_d,

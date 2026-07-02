@@ -10,7 +10,7 @@ from datetime import date
 import numpy as np
 import pandas as pd
 
-from prepare import _as_date, _score_window
+from autoresearch.research.prepare import _as_date, _score_window
 from strategy import IndiaMomentumQualityCarry
 
 

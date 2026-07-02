@@ -8,8 +8,8 @@ from pathlib import Path
 import duckdb
 import pytest
 
-from brokers.dhan import OrderRequest
-from brokers.dhan_mock import DhanMock
+from autoresearch.brokers.dhan import OrderRequest
+from autoresearch.brokers.dhan_mock import DhanMock
 
 
 @pytest.fixture
@@ -138,7 +138,7 @@ def test_order_ids_unique_across_instances(prices_db: Path) -> None:
 
 
 def _make_portfolio_db(tmp_path: Path) -> Path:
-    from storage import portfolio_db
+    from autoresearch.storage import portfolio_db
     p = tmp_path / "portfolio.duckdb"
     conn = duckdb.connect(str(p))
     try:
@@ -150,7 +150,7 @@ def _make_portfolio_db(tmp_path: Path) -> Path:
 
 def test_cash_hydrates_from_ledger(tmp_path: Path, prices_db: Path) -> None:
     from datetime import datetime
-    from storage import portfolio_db
+    from autoresearch.storage import portfolio_db
     p = _make_portfolio_db(tmp_path)
     conn = duckdb.connect(str(p))
     try:
@@ -166,7 +166,7 @@ def test_cash_hydrates_from_ledger(tmp_path: Path, prices_db: Path) -> None:
                  initial_cash_inr=50_000.0, mode="dhan-paper")
     # Hydrated cash = mode's initial deposit (from portfolio_db) + ledger sum.
     # Reference the constant so the test stays correct if the deposit changes.
-    from storage.portfolio_db import _INITIAL_DEPOSIT_BY_MODE
+    from autoresearch.storage.portfolio_db import _INITIAL_DEPOSIT_BY_MODE
     expected = _INITIAL_DEPOSIT_BY_MODE["dhan-paper"] - 12_050.0
     assert m.get_cash()["availableBalance"] == pytest.approx(expected, abs=0.01)
 
@@ -238,7 +238,7 @@ def test_phase_b_uses_bhav_for_backfill_dates(prices_db: Path) -> None:
 
 
 def test_positions_hydrate_from_open_lots(tmp_path: Path, prices_db: Path) -> None:
-    from storage import portfolio_db
+    from autoresearch.storage import portfolio_db
     p = _make_portfolio_db(tmp_path)
     conn = duckdb.connect(str(p))
     try:
