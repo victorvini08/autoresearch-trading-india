@@ -79,6 +79,19 @@ def commission_usd(notional: float, side: str) -> float:  # noqa: N802 — back-
     return commission_inr(notional, side)
 
 
+from autoresearch.interfaces import CostModel
+
+
+class IndiaCostModel(CostModel):
+    """Reference CostModel for Dhan CNC delivery (delegates to the functions above)."""
+
+    def commission(self, notional: float, side: str) -> float:
+        return commission_inr(notional, side)
+
+    def round_trip_cost(self, notional: float) -> float:
+        return round_trip_cost_inr(notional)
+
+
 __all__ = [
     "DEFAULT_SLIPPAGE_BPS",
     "NSE_TRANSACTION_RATE",

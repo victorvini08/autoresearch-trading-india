@@ -56,6 +56,8 @@ from datetime import date
 import backtrader as bt
 import numpy as np
 
+from autoresearch.interfaces import StrategyBase
+
 from autoresearch.data.sectors import (
     SectorAssignment,
     assign_sectors,
@@ -612,7 +614,7 @@ def low_vol_eligible(
     return {t for t, v in vols.items() if v <= median_vol}
 
 
-class IndiaMomentumQualityCarry(bt.Strategy):
+class IndiaMomentumQualityCarry(StrategyBase):
     '''Long-only PIT-universe momentum-quality carry with fixed slots.'''
 
     _ADV_WINDOW = 20

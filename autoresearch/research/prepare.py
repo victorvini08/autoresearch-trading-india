@@ -326,9 +326,15 @@ def _sub_period_sortinos(
 
 def _find_strategy_class(module: ModuleType) -> type:
     """Return the single bt.Strategy subclass defined in `module`."""
+    # Exclude the library's StrategyBase marker: strategy modules import it as
+    # their base, so it is a bt.Strategy subclass present in the module
+    # namespace but is NOT the strategy under evaluation.
+    from autoresearch.interfaces import StrategyBase
     candidates = [
         cls for _, cls in inspect.getmembers(module, inspect.isclass)
-        if issubclass(cls, bt.Strategy) and cls is not bt.Strategy
+        if issubclass(cls, bt.Strategy)
+        and cls is not bt.Strategy
+        and cls is not StrategyBase
     ]
     if not candidates:
         raise RuntimeError(

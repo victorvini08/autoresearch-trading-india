@@ -48,6 +48,7 @@ from autoresearch.brokers.dhan import (
     OrderResponse,
     Position,
 )
+from autoresearch.interfaces import Broker
 
 logger = logging.getLogger(__name__)
 
@@ -64,7 +65,7 @@ class _MockOrder:
 
 
 @dataclass
-class DhanMock:
+class DhanMock(Broker):
     """In-memory simulator. Pass the prices DuckDB path so fills can be priced
     from the most-recent close.
     """

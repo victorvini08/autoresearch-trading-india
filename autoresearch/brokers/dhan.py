@@ -45,6 +45,8 @@ from pathlib import Path
 import requests
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
+from autoresearch.interfaces import Broker
+
 logger = logging.getLogger(__name__)
 
 DHAN_BASE = "https://api.dhan.co"
@@ -213,7 +215,7 @@ def cache_scrip_master(cache_path: Path) -> dict[str, dict[str, str]]:
 # ──────────────────────────────────────────────────────────────────────
 
 
-class DhanBroker:
+class DhanBroker(Broker):
     """REST client for Dhan HQ Trading API. Trading endpoints only."""
 
     mode: str = "dhan-live"   # callers may override (dhan-paper uses DhanMock)

@@ -204,19 +204,24 @@ def validate_strategy_edit(
     for node in tree.body:
         if isinstance(node, ast.ClassDef):
             for base in node.bases:
-                if (
+                # Accept either the raw backtrader base (bt.Strategy) or the
+                # library's StrategyBase marker (from autoresearch.interfaces).
+                is_bt_strategy = (
                     isinstance(base, ast.Attribute)
                     and base.attr == "Strategy"
                     and isinstance(base.value, ast.Name)
                     and base.value.id == "bt"
-                ):
+                )
+                is_strategy_base = isinstance(base, ast.Name) and base.id == "StrategyBase"
+                if is_bt_strategy or is_strategy_base:
                     strategy_classes.append(node)
+                    break
 
     if len(strategy_classes) == 0:
-        return False, "no bt.Strategy subclass defined"
+        return False, "no bt.Strategy/StrategyBase subclass defined"
     if len(strategy_classes) > 1:
         names = [c.name for c in strategy_classes]
-        return False, f"multiple bt.Strategy subclasses: {names}"
+        return False, f"multiple strategy subclasses: {names}"
 
     cls = strategy_classes[0]
     method_names = {n.name for n in cls.body if isinstance(n, ast.FunctionDef)}

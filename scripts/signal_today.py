@@ -89,9 +89,14 @@ def _load_feeds(
 
 def _find_strategy_class(module) -> type:
     """Return the single bt.Strategy subclass defined in `module`."""
+    # Exclude the library's StrategyBase marker (strategy modules import it as
+    # their base); it is a bt.Strategy subclass but not the strategy itself.
+    from autoresearch.interfaces import StrategyBase
     candidates = [
         cls for _, cls in inspect.getmembers(module, inspect.isclass)
-        if issubclass(cls, bt.Strategy) and cls is not bt.Strategy
+        if issubclass(cls, bt.Strategy)
+        and cls is not bt.Strategy
+        and cls is not StrategyBase
     ]
     if not candidates:
         raise RuntimeError(f"No bt.Strategy subclass in {module.__name__}")
