@@ -380,7 +380,8 @@ def ingest_today(news_db: Path) -> dict[str, int]:
 # ──────────────────────────────────────────────────────────────────────
 
 
-DB_PATH = Path("storage/news.duckdb")
+from autoresearch.config import DEFAULT_CONFIG as _CFG
+DB_PATH = _CFG.db("news.duckdb")  # repo-root storage/ (was CWD-relative)
 
 
 def _upsert(rows: list[dict]) -> int:

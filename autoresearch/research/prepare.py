@@ -26,6 +26,7 @@ import backtrader as bt
 import numpy as np
 import pandas as pd
 
+from autoresearch.config import DEFAULT_CONFIG as _CFG
 from autoresearch.backtest.anti_overfit import compute_rw_mc_null
 from autoresearch.backtest.engine import run_backtest
 from autoresearch.backtest.metrics import (
@@ -41,7 +42,7 @@ from autoresearch.backtest.risk import validate as validate_risk
 from autoresearch.data.ingest_prices import read_prices
 from autoresearch.data.universe import get_universe_at, snapshot_dates
 
-BACKTEST_START = date(2017, 7, 1)
+BACKTEST_START = _CFG.backtest_start  # date(2017, 7, 1)
 # 2026-06-10 window extension (user-approved): the PIT universe rebuild
 # (109 monthly 200-name snapshots from 2017-06, survivorship-verified) plus
 # the 2016+ bhav price backfill make validation folds honest from ~2018-11.
@@ -53,8 +54,8 @@ BACKTEST_START = date(2017, 7, 1)
 # PIT universe is degenerate, so a missing early snapshot can never
 # fabricate membership. Old value: date(2020, 1, 1).
 # Sealed test UNCHANGED: 2025-01 → 2026-05-14 (already spent; never reused).
-BACKTEST_END = date(2026, 5, 14)
-TEST_BOUNDARY = date(2025, 1, 1)
+BACKTEST_END = _CFG.backtest_end  # date(2026, 5, 14)
+TEST_BOUNDARY = _CFG.test_boundary  # date(2025, 1, 1)
 TRAIN_DAYS = 504
 VAL_DAYS = 126
 SLIDE_DAYS = 63
@@ -91,8 +92,8 @@ MIN_FOLD_UNIVERSE = 50
 # calendar days ≈ 370 trading days, comfortably > 274 with holiday margin.
 # Excluded from scoring, so over-provisioning costs only load time, never
 # correctness.
-WARMUP_CALENDAR_DAYS = 520
-INITIAL_CASH = 50_000.0
+WARMUP_CALENDAR_DAYS = _CFG.warmup_calendar_days  # 520
+INITIAL_CASH = _CFG.initial_cash  # 50_000.0
 
 # Personal-take-home estimate. Indian resident on Indian (domestic) equities:
 # flat 15% STCG (holding < 12 months) and 10% LTCG on gains above a ₹1L

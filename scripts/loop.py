@@ -29,9 +29,10 @@ from datetime import date, datetime
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-STRATEGY_PATH = REPO_ROOT / "strategy.py"
+from autoresearch.config import DEFAULT_CONFIG as _CFG
+STRATEGY_PATH = _CFG.strategy_path  # REPO_ROOT / "strategy.py"
 PROGRAM_PATH = REPO_ROOT / "program.md"
-JOURNAL_PATH = REPO_ROOT / "journal.md"
+JOURNAL_PATH = _CFG.journal_path  # REPO_ROOT / "journal.md"
 ITER_DIR = REPO_ROOT / "iterations"
 ITER_LOG_PATH = ITER_DIR / "log.csv"
 ITER_LOG_FIELDS = [

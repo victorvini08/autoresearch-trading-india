@@ -35,7 +35,8 @@ from autoresearch.data.universe import load_universe, snapshot_dates
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_FUNDAMENTALS_DB = Path("storage/fundamentals.duckdb")
+from autoresearch.config import DEFAULT_CONFIG as _CFG
+DEFAULT_FUNDAMENTALS_DB = _CFG.db("fundamentals.duckdb")  # repo-root storage/
 _PIT_BAND_DAYS = 75
 
 

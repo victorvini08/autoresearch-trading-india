@@ -394,7 +394,8 @@ def latest_universe_date(universe_db: Path) -> date | None:
     return row[0] if row and row[0] else None
 
 
-DEFAULT_UNIVERSE_DB = Path("storage/universe.duckdb")
+from autoresearch.config import DEFAULT_CONFIG as _CFG
+DEFAULT_UNIVERSE_DB = _CFG.db("universe.duckdb")  # repo-root storage/
 
 
 def snapshot_dates(universe_db: Path = DEFAULT_UNIVERSE_DB) -> list[date]:

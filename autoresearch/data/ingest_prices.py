@@ -508,7 +508,8 @@ def ingest_range(
 # ──────────────────────────────────────────────────────────────────────
 
 
-DB_PATH = Path("storage/prices.duckdb")
+from autoresearch.config import DEFAULT_CONFIG as _CFG
+DB_PATH = _CFG.db("prices.duckdb")  # repo-root storage/ (was CWD-relative)
 
 
 def read_prices(ticker: str, start, end):

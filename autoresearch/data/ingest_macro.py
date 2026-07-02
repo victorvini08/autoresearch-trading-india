@@ -428,7 +428,8 @@ def ingest_fii_dii_recent(macro_db: Path) -> int:
 # ──────────────────────────────────────────────────────────────────────
 
 
-DB_PATH = Path("storage/macro.duckdb")
+from autoresearch.config import DEFAULT_CONFIG as _CFG
+DB_PATH = _CFG.db("macro.duckdb")  # repo-root storage/ (was CWD-relative)
 
 
 def read_macro(series_id: str, start, end):
