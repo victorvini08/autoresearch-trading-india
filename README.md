@@ -1,81 +1,204 @@
-# autoresearch-trading-india
+# autoresearch
 
-LLM-driven autoresearch swing-trading system for Indian equities (NSE, CNC delivery) via the Dhan HQ Trading API.
+A framework for building **LLM-driven autoresearch trading systems**: an
+immutable walk-forward evaluator with anti-overfit gates, and four swappable
+extension points — **Broker**, **DataProvider**, **StrategyBase**, **CostModel** —
+so you can target your own market, broker, and signal.
 
-**Status:** v1 **paper-only** (`dhan-paper`; runs against an in-memory mock Dhan client with `DHAN_MOCK=1`). Live mode (`dhan-live`) is built but disabled by `state/halt.json` until 4 weeks of clean paper validation. The paper account is **₹1,00,000**. The nightly autoresearch loop is **not** scheduled — `strategy.py` is locked and strategy evolution is on-demand only.
+It ships with a complete **reference implementation**: a long-only,
+delivery-only swing-trading system for Indian equities (NSE) executing through
+the Dhan HQ Trading API, using only free public data. That reference is the
+repo itself — `strategy.py` at the root, `scripts/` for operations — built on
+top of the same `autoresearch` package you install.
 
-This repo is the India-market rebuild of the abandoned `autoresearch-trading-us` (US stocks via IBKR), which found that US fractional-commission economics make the strategy unprofitable at small capital. Indian equities + Dhan delivery (free brokerage) restore the economics.
+> ⚠️ **Not financial advice.** This is research/engineering infrastructure. The
+> reference system can place real orders with real money. Backtests overfit,
+> live markets differ from simulations, and you are solely responsible for any
+> capital you deploy. Start in paper mode and read the code before trading.
 
 ---
 
-## Quickstart
+## The idea
+
+Three layers, decoupled by small interfaces:
+
+1. **Research harness** (`autoresearch.research`, `autoresearch.backtest`) — a
+   walk-forward evaluator with anti-overfit gates (Bonferroni correction,
+   random-walk Monte-Carlo null, sub-period stationarity, parsimony budget,
+   cost-aware Sortino). This is the immutable part you don't edit.
+2. **Strategy** (`StrategyBase`) — your signal, as a `backtrader` strategy that
+   changes positions only via `order_target_percent`.
+3. **Execution + data** (`Broker`, `DataProvider`, `CostModel`) — how orders
+   reach a venue, how prices/universe are sourced, and what trading costs apply.
+
+The **autoresearch loop** (`scripts/loop.py`) closes the circle: an LLM reads a
+journal of past hypotheses, proposes one edit to your `strategy.py`, runs the
+evaluator, and KEEP/REVERTs against the gates — so your editable `strategy.py`
+and `journal.md` are *your project's files*, while the immutable machinery is
+the installed library.
+
+---
+
+## Install
+
+Requires Python ≥ 3.11. With [uv](https://docs.astral.sh/uv/):
 
 ```bash
-# 1. Install dependencies
-curl -LsSf https://astral.sh/uv/install.sh | sh   # if uv is not installed
-uv sync
+uv add autoresearch          # or: pip install autoresearch
+```
 
-# 2. Configure environment
-cp .env.example .env
-# Edit .env: DHAN_ACCESS_TOKEN, DHAN_CLIENT_ID, FRED_API_KEY (SEBI_ALGO_ID is optional).
-# Keep DHAN_MOCK=1 to run paper-only against the mock client (default for v1).
+To work on the reference system, clone the repo and sync:
 
-# 3. Run tests
-uv run pytest -q
-
-# 4. Walk-forward backtest of the current strategy (research mode — sealed test stays hidden)
-uv run python prepare.py research
-
-# 5. Paper-trade today
-uv run python -m scripts.run_live --date $(date +%Y-%m-%d)
-
-# 6. Generate the dashboard
-uv run python -m scripts.dashboard
-open state/reports/dashboard.html
+```bash
+git clone <this-repo>
+cd autoresearch-trading-india
+uv sync --extra dev
 ```
 
 ---
 
-## Architecture
+## Quickstart (no data, no credentials)
 
-**Three layers — broker/market-agnostic at the top, India-specific at the bottom:**
+Run a toy backtest on deterministic **synthetic** data to see the extension
+points wired together:
 
-1. **Autoresearch loop** (`scripts/loop.py`, `scripts/run_overnight.py`) — reads `journal.md`, proposes a `strategy.py` edit, runs the walk-forward backtest (`prepare.py`) under anti-overfit gates (`backtest/anti_overfit.py`), and KEEPs/REVERTs. *Currently unscheduled — the strategy is locked.*
-2. **Strategy** (`strategy.py`) — `IndiaMomentumQualityCarry`, a `backtrader.Strategy`: cross-sectional **12-1 momentum-quality selection** over the point-in-time top-200-by-ADV universe → **bounded gross-targeting** (deploy down the ranked list, ≤10% per name, ≤25% per sector) → **downside-vol-targeted gross** (`clip(0.12 / downside_vol_ann, 0, 0.99)`, risk input = MAX of a slow ~6m and fast ~1m downside semi-deviation) → a between-rebalance **structural MA exit**. Rebalances biweekly (fixed-parity alternate Fridays). The locked signal is **purely price-derived** — it does not read the LLM classifiers.
-3. **Executor + data** (`scripts/run_live.py`, `scripts/executors/`, `brokers/`, `data/`) — translates target weights into `order_target_percent` orders, places them via Dhan (or the mock), reconciles fills, and writes the ledger (`storage/portfolio_db.py` → `storage/portfolio.duckdb`).
+```bash
+uv run python examples/minimal/run.py
+```
 
-On top sits a **real-world paper-trading + self-improving review layer**: daily reconciliation (`scripts/reconciliation.py`), a deterministic equity-driven **safety state machine** (`data/safety_state.py`, `scripts/safety_evaluator.py`), a **month-end LLM review** gated by deterministic policy checks (`scripts/realworld_review.py`, `data/realworld_review_validator.py`, `storage/realworld_db.py`), and a faithful **paper-trading replay harness** (`scripts/replay_paper.py`).
+This uses `SyntheticDataProvider(DataProvider)` + `MinimalMomentum(StrategyBase)`
+through the backtest engine. See [`examples/minimal/`](examples/minimal/).
 
----
+You can also generate a synthetic prices + universe pair directly:
 
-## What's different from a typical algo repo
-
-1. **Karpathy 3-file pattern** — `prepare.py` (immutable evaluator), `strategy.py` (editable signal), `journal.md` (append-only memory). Kept surgical.
-2. **Anti-overfit gates are first-class** — sealed test set (2025-01→2026-05), Bonferroni p-correction, random-walk Monte Carlo, parsimony budget, sub-period stationarity. The loop *will* try to overfit; the gates exist because of that. Variants are also validated at ≥10× capital (₹5L).
-3. **Cost model matches the broker** — `backtest/costs.py` mirrors Dhan delivery (₹0 brokerage, STT, ₹14.75 DP charge per scrip per sell). Sortino is net of these.
-4. **Robustness over raw Sortino** — strategies are picked by real-world robustness (gates + worst-case + drawdown), not by beating a baseline validation Sortino.
-5. **Honest about its edge** — see below.
+```bash
+uv run autoresearch-data            # writes storage/prices.duckdb + universe.duckdb
+```
 
 ---
 
-## Honest performance note
+## Getting the data (real market data)
 
-The locked book's edge is **drawdown protection, not return alpha.** An early sealed-test reveal of +12.07% (vs Nifty −1.94%) was later traced to a GOLD/SILVER **ETF leak**; the de-leaked, equity-only sealed return is ≈ **−2.8% vs Nifty −1.94%**, with max drawdown **9.2% < 14.8%**. The book runs ~46% deployed with roughly symmetric up/down capture (~0.28 over the clean validation era) — it **lags sustained bull markets by design** and protects in down/flat regimes. Five separate alpha-lever experiments (low-vol prefilter, inverse-vol sizing, higher vol-target, illiquidity tilt, breadth-confirmed convexity) were tested and rejected as non-robust; the conclusion on file is that this is a defensive sleeve at its risk-adjusted optimum, and the robust way to add bull capture is a **portfolio-level index blend** (`scripts/blend_frontier.py`), not strategy tuning.
+**All data is free and self-fetched** — there is no dataset to buy. The reference
+system scrapes free public archives into local DuckDB stores. The only
+credential is a free [FRED API key](https://fred.stlouisfed.org/docs/api/api_key.html)
+for macro series.
+
+| Data | Source (free) | Store |
+|---|---|---|
+| Stock prices | NSE bhav archive (daily ZIPs) | `storage/prices.duckdb` |
+| Universe | derived point-in-time from price history | `storage/universe.duckdb` |
+| Macro | FRED (`FRED_API_KEY`) + yfinance indices (India VIX / Nifty) | `storage/macro.duckdb` |
+| Fundamentals | yfinance + NSE XBRL filings | `storage/fundamentals.duckdb` |
+| News | MoneyControl / Pulse RSS / NSE filings / RBI / SEBI | `storage/news.duckdb` |
+
+The data stores are **git-ignored and never shipped in the wheel** — you
+regenerate them locally. Two steps:
+
+```bash
+cp .env.example .env            # add FRED_API_KEY (optional but recommended)
+
+# 1. Fast bootstrap: last ~30 days, enough to start
+uv run python -m scripts.bootstrap_ingest
+
+# 2. Optional deep history for backtests (~hours, resumable)
+uv run python -m scripts.backfill_5y --all
+uv run python -m scripts.backfill_universe
+```
+
+**Bringing your own market?** Ignore NSE ingestion entirely and implement
+`DataProvider` for your source, returning the documented table shape (below).
 
 ---
 
-## Documentation
+## Run the reference system
 
-- `CLAUDE.md` / `AGENTS.md` — project context, locked decisions, hard constraints, daily operation, setup (kept in sync)
-- `PRODUCTION_STRATEGY.md` — canonical locked-strategy definition + caveats
-- `STRATEGY_DEVELOPMENT_PLAN.md` — goal + guardrails for on-demand development
-- `docs/superpowers/specs/2026-05-14-india-autoresearch-trading-design.md` — original design spec
-- `docs/superpowers/specs/2026-05-28-realworld-autoresearch-design.md` — real-world paper + review layer design
-- `docs/strategy-candidates.md` — rigorously-tested-but-not-promoted ideas
-- `docs/handoff-india-pivot.md`, `docs/learnings-from-us-build.md` — predecessor (US) lessons
+The India reference lives at the repo root (`strategy.py`) and in `scripts/`. It
+defaults to paper mode (`DHAN_MOCK=1`), so no broker account is needed to try it.
+
+```bash
+# Walk-forward backtest of the current strategy.py (+ anti-overfit gates)
+uv run autoresearch-eval research
+# equivalently: uv run python -m autoresearch.research.prepare research
+
+# One end-to-end paper run for today
+uv run python -m scripts.run_live --date $(date +%Y-%m-%d)
+
+# One autoresearch loop iteration (LLM proposes a strategy.py edit, gated)
+uv run python -m scripts.loop --iterations 1
+```
+
+The operational commands (`run_live`, `daily_update`, `premarket_scan`,
+`daily_report`, `loop`) live in `scripts/` and run from a clone with
+`python -m scripts.<name>`. Enabling real live trading requires explicit,
+deliberate steps (a halt-flag gate + a paper-validation window) — see the code
+and `CLAUDE.md`.
 
 ---
+
+## Build your own
+
+Implement the interfaces in `autoresearch.interfaces` and point the evaluator at
+your strategy. The India/Dhan classes are the reference implementations.
+
+```python
+from autoresearch.interfaces import Broker, DataProvider, StrategyBase, CostModel
+```
+
+- **`StrategyBase`** — subclass it; change positions only via
+  `order_target_percent`. Put your strategy in a `strategy.py` at your project
+  root (this is the file the autoresearch loop edits).
+- **`Broker`** — `place_order / get_positions / get_holdings / get_cash /
+  get_fills / …`. Reference: `DhanBroker`, `DhanMock`.
+- **`DataProvider`** — `read_prices` + `pit_universe`. Reference: NSE bhav ingest.
+- **`CostModel`** — `commission` + `round_trip_cost`. Reference: `IndiaCostModel`.
+
+### DataProvider table-schema contract
+
+The library reads adjusted daily bars in this shape (DuckDB `daily_bars` in the
+reference impl):
+
+```
+daily_bars(ticker TEXT, dt DATE, open DOUBLE, high DOUBLE, low DOUBLE,
+           close DOUBLE, volume DOUBLE)   -- split/bonus-adjusted close
+```
+
+A point-in-time universe must be derivable from bar history alone (never a
+"current membership" list — that injects survivorship bias). See
+[`examples/minimal/provider.py`](examples/minimal/provider.py) for a working
+implementation and `autoresearch/interfaces/data_provider.py` for the full
+contract.
+
+---
+
+## The research + anti-overfit harness
+
+`autoresearch.research.prepare` is the immutable evaluator. It walk-forwards over
+train/validation folds, holds out a sealed test window, and scores each variant
+against **atomic** gates — a variant that fails any gate is rejected, not
+partially accepted. This is the point of the framework: the loop *will* try to
+overfit, and the gates are what catch it. Settings that a downstream user
+changes (capital, currency, universe size, cadence, vol target, dates, storage
+paths) live in `autoresearch.config.Config` with the India values as defaults.
+
+---
+
+## Repository layout
+
+```
+autoresearch/            # the installable library
+  interfaces/            #   Broker, DataProvider, StrategyBase, CostModel (ABCs)
+  config.py              #   typed Config (India defaults)
+  research/prepare.py    #   immutable walk-forward evaluator + gates
+  backtest/              #   engine, metrics, risk, costs
+  brokers/ data/ llm/ storage/   # India/Dhan reference implementations
+strategy.py              # reference strategy (loop-editable, at repo root)
+journal.md               # reference autoresearch memory (at repo root)
+scripts/                 # reference operational CLIs
+examples/minimal/        # runnable synthetic-data example
+tests/                   # test suite
+```
 
 ## License
 
-Private — no license granted.
+[MIT](LICENSE).
