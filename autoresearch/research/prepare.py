@@ -824,7 +824,9 @@ def evaluate(strategy_module: ModuleType, mode: str = "research") -> dict:
     return out
 
 
-if __name__ == "__main__":
+def main() -> None:
+    """Console entry point: evaluate the strategy module named by argv (default
+    ``strategy`` from the current working directory)."""
     import sys
     mode = sys.argv[1] if len(sys.argv) > 1 else "research"
     strat_mod = importlib.import_module("strategy")
@@ -832,3 +834,7 @@ if __name__ == "__main__":
     print(f"\n=== mode={mode} ===")
     for k, v in result.items():
         print(f"  {k}: {v}")
+
+
+if __name__ == "__main__":
+    main()

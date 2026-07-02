@@ -1,7 +1,7 @@
 [project]
-name = "autoresearch-trading-india"
+name = "autoresearch"
 version = "0.1.0"
-description = "LLM-driven autoresearch swing trading on Indian equities (Nifty 500 liquid slice via Dhan HQ)"
+description = "Framework for LLM-driven autoresearch trading systems: walk-forward evaluator, anti-overfit gates, and swappable Broker/DataProvider/StrategyBase/CostModel interfaces. Ships an India/Dhan reference implementation."
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
@@ -33,8 +33,21 @@ dev = [
     "mypy>=1.13.0",
 ]
 
-[tool.uv]
-package = false
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+# Ship the library package only — never the repo-root strategy.py, scripts/,
+# or any storage/ data. A downstream user brings their own strategy + data.
+packages = ["autoresearch"]
+
+[project.scripts]
+# Library entry points (work from an installed wheel). The reference
+# operational commands (run_live, loop, daily_update, ...) live in scripts/ and
+# are run from a clone via `python -m scripts.<name>` — see the README.
+autoresearch-eval = "autoresearch.research.prepare:main"
+autoresearch-data = "autoresearch.data.synthetic:main"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

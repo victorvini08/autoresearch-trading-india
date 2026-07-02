@@ -14,6 +14,9 @@ venv/
 env/
 .python-version.local
 *.egg-info/
+# Build artifacts
+dist/
+build/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
