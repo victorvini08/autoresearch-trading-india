@@ -44,3 +44,13 @@ The set must be a subset of the pinned list. Avoid re-running repeatedly.
   same DuckDB single-writer lock-timing flakiness as test_serial_equals_parallel.
   PASSES in isolation; flakes intermittently in full-suite runs (passed in the
   Task 2 gate, failed in the Task 3 gate — pure ordering). Not a logic regression.
+
+## Update (final): state-dependent (not a refactor regression)
+- tests/test_dhan_executor_smoke.py::test_dhan_executor_paper_runs_end_to_end —
+  in a FULL-SUITE run, an earlier test can write a real HALTED state to the
+  gitignored operational `state/halt.json` (safety evaluator computes a >16% DD
+  from the shared real portfolio.duckdb). The executor's safety-halt read path
+  is not covered by this test's `HALT_FILE_PATH` monkeypatch, so it then skips.
+  On a clean halt state ALL 11 executor smoke tests PASS (`rm state/halt.json`).
+  Pre-existing shared-state test-isolation gap (same class as the pinned-13,
+  present in the original flat layout too); NOT caused by the package refactor.
