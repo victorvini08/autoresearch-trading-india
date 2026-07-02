@@ -21,10 +21,17 @@ env/
 # uv
 .uv/
 
-# DuckDB / SQLite data stores — now tracked via Git LFS (see .gitattributes)
-# so a fresh clone gets the populated DBs. Transient WAL/journal stay ignored.
+# DuckDB / SQLite data stores — NOT committed (they are large and rebuildable).
+# A fresh clone regenerates them via the ingest/bootstrap scripts — see the
+# README "Getting the data" section. The built wheel ships none of these.
+storage/*.duckdb
 storage/*.duckdb.wal
+storage/*.duckdb.bak*
+storage/*.sqlite
 storage/*.sqlite-journal
+storage/*.bak*
+**/llm_cache.sqlite
+storage/backups/
 storage/bse_scrip_map.json
 storage/dhan_scrip_master.csv
 storage/nifty500_cache.json

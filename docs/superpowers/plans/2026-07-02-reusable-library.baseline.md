@@ -40,3 +40,7 @@ The set must be a subset of the pinned list. Avoid re-running repeatedly.
   another test holds a read-write lock). PASSES in isolation and on repeated file
   runs (2 passed); the evaluator equivalence it checks is unchanged. Same locking
   category as the documented test_e2e XFAIL. Not a logic regression from the move.
+- tests/test_dhan_executor_smoke.py::test_dhan_executor_paper_runs_end_to_end —
+  same DuckDB single-writer lock-timing flakiness as test_serial_equals_parallel.
+  PASSES in isolation; flakes intermittently in full-suite runs (passed in the
+  Task 2 gate, failed in the Task 3 gate — pure ordering). Not a logic regression.
