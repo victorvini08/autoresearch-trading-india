@@ -101,22 +101,60 @@ strategy knobs (respects the parsimony budget).
 - Synthetic-data bootstrap: a small generator (or committed synthetic fixture) so
   `prepare.py research` and the paper run work on a fresh clone with no real data.
 
+## Data onboarding (how a new user gets prices/fundamentals/etc.)
+
+Central to usability. Key fact: **all data is free and self-fetched** — the system
+uses only free public sources (locked decision; Dhan's paid Data API is not used).
+A new user does not buy or download a dataset; the library scrapes public archives
+into local DuckDB stores. Only credential required is a free `FRED_API_KEY`.
+
+Sources → stores:
+- Stock prices → NSE bhav archive (public daily ZIPs) → `prices.duckdb`
+- Macro → FRED (`FRED_API_KEY`) + yfinance indices (India VIX / Nifty)
+- Fundamentals → yfinance snapshots + NSE XBRL filings (`ingest_fundamentals`,
+  `fundamentals_xbrl`)
+- News → MoneyControl / Pulse RSS / NSE filings / RBI / SEBI
+- Universe → built point-in-time from the price history itself
+
+The flow already exists (`scripts/bootstrap_ingest.py`, `scripts/backfill_5y.py`,
+`scripts/backfill_universe.py`); this work makes it discoverable and reusable:
+
+1. **README "Getting the data" section** — exact commands, what each fetches,
+   rough time/size, and the FRED-key note. Two-step: fast bootstrap (~30 days) to
+   start, then optional long backfill (~hours, resumable) for backtest history.
+2. **Single clean `console_scripts` front door** — e.g. `autoresearch-data bootstrap`
+   / `autoresearch-data backfill`, wrapping the existing scripts. No new logic.
+3. **Document the `DataProvider` contract explicitly** — the exact table schemas
+   the library expects (e.g. `daily_bars(ticker, dt, open, high, low, close,
+   volume)` and the fundamentals schema) so a "build your own market" user knows
+   precisely what to supply instead of reverse-engineering it.
+4. **Config-driven storage paths** — ingest DB paths are semi-hardcoded
+   (`DB_PATH = Path("storage/prices.duckdb")`) but functions already accept a path
+   arg; wire them to `Config` so a user can point at their own storage location.
+
+Distinguishes two users: the India reference user runs the flow above verbatim; the
+build-your-own-market user ignores NSE ingestion entirely and implements
+`DataProvider` for their own source, feeding the documented table shapes.
+
 ## README (final step)
 
 Library-audience rewrite: what it is; the three swappable layers; `uv`/`pip`
-quickstart; "run the India reference system"; "build your own broker/strategy
-against the ABCs"; the research + anti-overfit harness; honest risk disclaimer
-(this is a reference system that can trade real money — not financial advice).
-Plus MIT `LICENSE`.
+quickstart; a **"Getting the data"** section (bootstrap → backfill commands,
+free sources, FRED-key note); "run the India reference system"; "build your own
+broker/strategy against the ABCs" with the `DataProvider` table-schema contract;
+the research + anti-overfit harness; honest risk disclaimer (this is a reference
+system that can trade real money — not financial advice). Plus MIT `LICENSE`.
 
 ## Phasing
 
 1. Package skeleton + move modules + rewrite imports → tests green.
-2. Extract the four ABCs; India classes implement them → tests green.
-3. `Config` object; lift hardcoded India settings → tests green.
+2. Extract the four ABCs (incl. `DataProvider` + documented table-schema contract);
+   India classes implement them → tests green.
+3. `Config` object; lift hardcoded India settings incl. storage paths → tests green.
 4. Untrack real DBs; synthetic-data bootstrap; wheel excludes data.
-5. `pyproject.toml` build/packaging + `console_scripts` → `uv build` works.
-6. MIT `LICENSE` + rewritten README + `examples/india`.
+5. `pyproject.toml` build/packaging + `console_scripts` (ops entrypoints +
+   `autoresearch-data` bootstrap/backfill front door) → `uv build` works.
+6. MIT `LICENSE` + rewritten README (incl. "Getting the data") + `examples/india`.
 
 ## Risks / notes
 
