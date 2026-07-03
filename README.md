@@ -62,12 +62,13 @@ uv sync --extra dev
 
 ## Start your own project
 
-Not sure where to begin after installing? Just run **`autoresearch`** — with no
-arguments it prints exactly what to do next. The fastest way in is to scaffold a
-project that **runs immediately**, then edit three files:
+Not sure where to begin after installing? Just run **`autoresearch`** (or
+**`autoresearch-trading`** — same command, matching the install name) with no
+arguments and it prints exactly what to do next. The fastest way in is to
+scaffold a project that **runs immediately**, then edit three files:
 
 ```bash
-autoresearch                      # prints "what to do next"
+autoresearch-trading              # prints "what to do next" (or: autoresearch)
 autoresearch init my-quant        # scaffold a project (alias: autoresearch-init)
 cd my-quant
 python run.py                     # backtests on synthetic data — no setup

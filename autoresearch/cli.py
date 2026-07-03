@@ -7,16 +7,27 @@ points exposed as ``autoresearch-init`` / ``-eval`` / ``-data``.
 
 from __future__ import annotations
 
+import os
 import sys
 
 from autoresearch import __version__
 
-_HELP = f"""\
+_KNOWN_NAMES = {"autoresearch", "autoresearch-trading"}
+
+
+def _prog() -> str:
+    """The command name the user actually typed (so help echoes it back)."""
+    name = os.path.basename(sys.argv[0]) if sys.argv and sys.argv[0] else ""
+    return name if name in _KNOWN_NAMES else "autoresearch"
+
+
+def _help(prog: str) -> str:
+    return f"""\
 autoresearch-trading {__version__} — build LLM-driven autoresearch trading systems
 
 Get started:
-  autoresearch init my-project       scaffold a runnable starter project
-  cd my-project && python run.py      backtest on synthetic data (no setup)
+  {prog} init my-project      scaffold a runnable starter project
+  cd my-project && python run.py     backtest on synthetic data (no setup)
 
 Then edit, in order:  strategy.py  ->  provider.py  ->  config.py
 
@@ -38,7 +49,7 @@ def main(argv: list[str] | None = None) -> int:
     rest = args[1:]
 
     if cmd in ("help", "-h", "--help"):
-        print(_HELP)
+        print(_help(_prog()))
         return 0
     if cmd in ("version", "-V", "--version"):
         print(__version__)
@@ -55,8 +66,8 @@ def main(argv: list[str] | None = None) -> int:
         from autoresearch.data.synthetic import main as sub
         sys.argv = ["autoresearch-data", *rest]
     else:
-        print(f"autoresearch: unknown command '{cmd}'\n")
-        print(_HELP)
+        print(f"{_prog()}: unknown command '{cmd}'\n")
+        print(_help(_prog()))
         return 2
 
     return sub() or 0
