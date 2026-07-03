@@ -147,6 +147,14 @@ uv run python -m scripts.run_live --date $(date +%Y-%m-%d)
 uv run python -m scripts.loop --iterations 1
 ```
 
+> **The autoresearch loop needs an LLM CLI, not a Python SDK.** It drives the
+> model by shelling out to a local command, so there's no LLM package to
+> install. Install and sign in to **either** [Claude Code](https://claude.com/product/claude-code)
+> (the `claude` CLI) **or** the [OpenAI Codex CLI](https://github.com/openai/codex)
+> (the `codex` CLI) and put it on your PATH — the loop (and the optional LLM
+> classifiers) use whichever is available. Everything else — backtests, the
+> evaluator, paper trading — needs no LLM at all.
+
 The operational commands (`run_live`, `daily_update`, `premarket_scan`,
 `daily_report`, `loop`) live in `scripts/` and run from a clone with
 `python -m scripts.<name>`. Enabling real live trading requires explicit,
