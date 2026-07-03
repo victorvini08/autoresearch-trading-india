@@ -4,6 +4,19 @@ version = "0.1.0"
 description = "Framework for LLM-driven autoresearch trading systems: walk-forward evaluator, anti-overfit gates, and swappable Broker/DataProvider/StrategyBase/CostModel interfaces. Ships an India/Dhan reference implementation."
 readme = "README.md"
 requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "Aryan Mehta" }]
+keywords = ["trading", "quant", "backtesting", "walk-forward", "anti-overfit", "autoresearch", "algorithmic-trading"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Financial and Insurance Industry",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Topic :: Office/Business :: Financial :: Investment",
+    "Topic :: Scientific/Engineering",
+]
 dependencies = [
     "backtrader>=1.9.78.123",
     "duckdb>=1.1.0",
@@ -40,6 +53,17 @@ build-backend = "hatchling.build"
 # Ship the library package only — never the repo-root strategy.py, scripts/,
 # or any storage/ data. A downstream user brings their own strategy + data.
 packages = ["autoresearch"]
+
+[tool.hatch.build.targets.sdist]
+# By default the sdist would bundle the WHOLE repo (strategy.py, journal.md,
+# docs/, experiments/ ...). Restrict it to the library + license/readme so the
+# published source distribution never carries the trained strategy or research.
+only-include = ["autoresearch", "README.md", "LICENSE", "pyproject.toml"]
+
+[project.urls]
+Homepage = "https://github.com/victorvini08/autoresearch-trading-india"
+Repository = "https://github.com/victorvini08/autoresearch-trading-india"
+Issues = "https://github.com/victorvini08/autoresearch-trading-india/issues"
 
 [project.scripts]
 # Library entry points (work from an installed wheel). The reference
