@@ -46,6 +46,7 @@ packages = ["autoresearch"]
 # Library entry points (work from an installed wheel). The reference
 # operational commands (run_live, loop, daily_update, ...) live in scripts/ and
 # are run from a clone via `python -m scripts.<name>` — see the README.
+autoresearch-init = "autoresearch.scaffold:main"
 autoresearch-eval = "autoresearch.research.prepare:main"
 autoresearch-data = "autoresearch.data.synthetic:main"
 

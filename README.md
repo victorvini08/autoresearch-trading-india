@@ -60,10 +60,26 @@ uv sync --extra dev
 
 ---
 
+## Start your own project
+
+The fastest way in — scaffold a project that **runs immediately**, then edit
+three files:
+
+```bash
+autoresearch-init my-quant       # or: uv run autoresearch-init my-quant
+cd my-quant
+python run.py                     # backtests on synthetic data — no setup
+```
+
+You now own `strategy.py`, `provider.py`, `config.py`, and `journal.md`. Edit
+them in that order — your signal, your data, your knobs. The library stays
+installed and untouched. (`autoresearch-init` is one command in this package,
+not a separate install.)
+
 ## Quickstart (no data, no credentials)
 
-Run a toy backtest on deterministic **synthetic** data to see the extension
-points wired together:
+Or run the bundled example — a toy backtest on deterministic **synthetic** data
+that shows the extension points wired together:
 
 ```bash
 uv run python examples/minimal/run.py
