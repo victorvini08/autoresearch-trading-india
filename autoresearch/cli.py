@@ -40,6 +40,9 @@ Commands:
   help             Show this message
 
 Docs & source:   https://github.com/victorvini08/autoresearch-trading-india
+
+⚠  Use at your own risk. Research software, no warranty, NOT financial advice;
+   trading risks total loss of capital. Terms: DISCLAIMER.md in the repo.
 """
 
 

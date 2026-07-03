@@ -11,10 +11,19 @@ the Dhan HQ Trading API, using only free public data. That reference is the
 repo itself — `strategy.py` at the root, `scripts/` for operations — built on
 top of the same `autoresearch` package you install.
 
-> ⚠️ **Not financial advice.** This is research/engineering infrastructure. The
-> reference system can place real orders with real money. Backtests overfit,
-> live markets differ from simulations, and you are solely responsible for any
-> capital you deploy. Start in paper mode and read the code before trading.
+> ## ⚠️ Disclaimer — use at your own risk
+>
+> `autoresearch-trading` is research/engineering software provided **"AS IS",
+> with no warranty**, under the [MIT License](LICENSE). It is **not financial,
+> investment, or tax advice**, and its output (backtests, signals, orders) is
+> for educational purposes only. **Trading involves substantial risk, including
+> total loss of capital**, and past/backtested performance does not predict
+> future results. You use it **entirely at your own risk** and are solely
+> responsible for your trades, losses, credentials, and legal/regulatory
+> compliance. **To the maximum extent permitted by law, the author and
+> contributors accept no liability** for any losses or damages arising from its
+> use. Full terms: **[DISCLAIMER.md](DISCLAIMER.md)**. Start in paper mode and
+> read the code before risking real money.
 
 ---
 

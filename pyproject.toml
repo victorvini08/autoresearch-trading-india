@@ -1,6 +1,6 @@
 [project]
 name = "autoresearch-trading"
-version = "0.1.1"
+version = "0.1.2"
 description = "Framework for LLM-driven autoresearch trading systems: walk-forward evaluator, anti-overfit gates, and swappable Broker/DataProvider/StrategyBase/CostModel interfaces. Ships an India/Dhan reference implementation."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -58,7 +58,7 @@ packages = ["autoresearch"]
 # By default the sdist would bundle the WHOLE repo (strategy.py, journal.md,
 # docs/, experiments/ ...). Restrict it to the library + license/readme so the
 # published source distribution never carries the trained strategy or research.
-only-include = ["autoresearch", "README.md", "LICENSE", "pyproject.toml"]
+only-include = ["autoresearch", "README.md", "LICENSE", "DISCLAIMER.md", "pyproject.toml"]
 
 [project.urls]
 Homepage = "https://github.com/victorvini08/autoresearch-trading-india"
