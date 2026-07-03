@@ -828,6 +828,10 @@ def main() -> None:
     """Console entry point: evaluate the strategy module named by argv (default
     ``strategy`` from the current working directory)."""
     import sys
+    # Make the user's ./strategy.py importable — console-script entry points do
+    # not put the current working directory on sys.path the way `python x.py` does.
+    if os.getcwd() not in sys.path:
+        sys.path.insert(0, os.getcwd())
     mode = sys.argv[1] if len(sys.argv) > 1 else "research"
     strat_mod = importlib.import_module("strategy")
     result = evaluate(strat_mod, mode=mode)

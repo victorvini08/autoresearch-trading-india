@@ -31,7 +31,10 @@ from autoresearch.interfaces import StrategyBase
 
 class MyStrategy(StrategyBase):
     # Tune these, or let the autoresearch loop evolve the whole class.
-    params = dict(lookback=60, n_hold=5, rebalance_every=20)
+    # `universe_by_date` is injected by the evaluator (autoresearch-eval); declare
+    # it so evaluation works. This strategy trades all its feeds, which ARE the
+    # point-in-time universe the evaluator passes, so it respects it by construction.
+    params = dict(lookback=60, n_hold=5, rebalance_every=20, universe_by_date=None)
 
     def __init__(self):
         self._bar = 0

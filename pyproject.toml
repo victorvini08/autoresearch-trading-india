@@ -1,6 +1,6 @@
 [project]
 name = "autoresearch-trading"
-version = "0.1.2"
+version = "0.1.3"
 description = "Framework for LLM-driven autoresearch trading systems: walk-forward evaluator, anti-overfit gates, and swappable Broker/DataProvider/StrategyBase/CostModel interfaces. Ships an India/Dhan reference implementation."
 readme = "README.md"
 requires-python = ">=3.11"

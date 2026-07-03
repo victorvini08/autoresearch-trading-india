@@ -11,7 +11,9 @@ from autoresearch.interfaces import StrategyBase
 
 
 class MinimalMomentum(StrategyBase):
-    params = dict(lookback=60, n_hold=5, rebalance_every=20)
+    # `universe_by_date` is injected by the evaluator; declared so autoresearch-eval
+    # works too (this strategy trades all feeds = the universe the evaluator passes).
+    params = dict(lookback=60, n_hold=5, rebalance_every=20, universe_by_date=None)
 
     def __init__(self):
         self._bar = 0
