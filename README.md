@@ -62,11 +62,13 @@ uv sync --extra dev
 
 ## Start your own project
 
-The fastest way in — scaffold a project that **runs immediately**, then edit
-three files:
+Not sure where to begin after installing? Just run **`autoresearch`** — with no
+arguments it prints exactly what to do next. The fastest way in is to scaffold a
+project that **runs immediately**, then edit three files:
 
 ```bash
-autoresearch-init my-quant       # or: uv run autoresearch-init my-quant
+autoresearch                      # prints "what to do next"
+autoresearch init my-quant        # scaffold a project (alias: autoresearch-init)
 cd my-quant
 python run.py                     # backtests on synthetic data — no setup
 ```

@@ -1,6 +1,6 @@
 [project]
 name = "autoresearch-trading"
-version = "0.1.0"
+version = "0.1.1"
 description = "Framework for LLM-driven autoresearch trading systems: walk-forward evaluator, anti-overfit gates, and swappable Broker/DataProvider/StrategyBase/CostModel interfaces. Ships an India/Dhan reference implementation."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -69,6 +69,7 @@ Issues = "https://github.com/victorvini08/autoresearch-trading-india/issues"
 # Library entry points (work from an installed wheel). The reference
 # operational commands (run_live, loop, daily_update, ...) live in scripts/ and
 # are run from a clone via `python -m scripts.<name>` — see the README.
+autoresearch = "autoresearch.cli:main"
 autoresearch-init = "autoresearch.scaffold:main"
 autoresearch-eval = "autoresearch.research.prepare:main"
 autoresearch-data = "autoresearch.data.synthetic:main"
