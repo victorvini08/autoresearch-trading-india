@@ -31,6 +31,7 @@ from zoneinfo import ZoneInfo
 
 from autoresearch.data.nse_calendar import is_calendar_current, is_trading_day
 from scripts import daily_report, dashboard, premarket_scan
+from scripts.execution_mode import resolve_execution_mode
 # DhanExecutor lands in scripts.executors after Phase 4 (handoff §3,
 # scripts/executors/dhan.py NEW). For now import only the protocol-level
 # symbols; _build_executor() defers the DhanExecutor import to call-time
@@ -119,7 +120,7 @@ def run(
     prices_db: Path | None = None,
 ) -> tuple[int, ExecutionSummary]:
     """Programmatic entry point. Returns (exit_code, summary)."""
-    mode = mode or os.environ.get("EXECUTION_MODE", "dhan-paper")
+    mode = resolve_execution_mode(mode)
     today_ist = today_ist or datetime.now(IST).date()
 
     # Pre-flight: live-mode promotion consent. CLAUDE.md hard constraint #1
