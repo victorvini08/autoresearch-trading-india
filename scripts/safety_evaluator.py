@@ -22,6 +22,7 @@ from datetime import date, datetime
 from pathlib import Path
 
 from data.safety_state import SafetyState, evaluate_state
+from scripts.execution_mode import resolve_execution_mode
 from storage import portfolio_db
 from storage.portfolio_db import HALT_FILE_PATH
 
@@ -201,7 +202,8 @@ def evaluate_and_persist(
 
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(description=__doc__)
-    p.add_argument("--mode", default="dhan-paper")
+    p.add_argument("--mode", default=None,
+                   help="override EXECUTION_MODE env (default: dhan-paper)")
     p.add_argument(
         "--db-path", type=Path, default=None,
         help="override portfolio.duckdb location",
@@ -213,7 +215,8 @@ def main(argv: list[str] | None = None) -> int:
     args = p.parse_args(argv)
 
     s = evaluate_and_persist(
-        mode=args.mode, db_path=args.db_path, dry_run=args.dry_run,
+        mode=resolve_execution_mode(args.mode),
+        db_path=args.db_path, dry_run=args.dry_run,
     )
     if s is None:
         print("[safety] no equity history yet; state not written.")

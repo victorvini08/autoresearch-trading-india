@@ -22,6 +22,7 @@ from dataclasses import dataclass
 from datetime import date, datetime
 from pathlib import Path
 
+from scripts.execution_mode import resolve_execution_mode
 from scripts.executors.protocol import ExecutionSummary
 from storage import portfolio_db
 
@@ -288,8 +289,10 @@ def main(argv: list[str] | None = None) -> int:
         default=datetime.now(ZoneInfo("Asia/Kolkata")).date(),
         help="report date (YYYY-MM-DD); defaults to today in IST",
     )
-    p.add_argument("--mode", default="dhan-paper")
+    p.add_argument("--mode", default=None,
+                   help="override EXECUTION_MODE env (default: dhan-paper)")
     args = p.parse_args(argv)
+    mode = resolve_execution_mode(args.mode)
 
     with portfolio_db.connect() as conn:
         n_orders, gross_buy, gross_sell = conn.execute(
@@ -297,20 +300,20 @@ def main(argv: list[str] | None = None) -> int:
             "  COALESCE(SUM(CASE WHEN side='buy' THEN quantity * limit_price ELSE 0 END), 0), "
             "  COALESCE(SUM(CASE WHEN side='sell' THEN quantity * limit_price ELSE 0 END), 0) "
             "FROM submitted_orders WHERE as_of_date = ? AND mode = ?",
-            [args.date, args.mode],
+            [args.date, mode],
         ).fetchone()
         n_fills, total_commission = conn.execute(
             "SELECT COUNT(*), COALESCE(SUM(commission), 0) FROM actual_fills af "
             "JOIN submitted_orders so ON af.order_id = so.order_id "
             "WHERE so.as_of_date = ? AND so.mode = ?",
-            [args.date, args.mode],
+            [args.date, mode],
         ).fetchone()
         (n_discrepancies,) = conn.execute(
             "SELECT COUNT(*) FROM discrepancies WHERE as_of_date = ? AND mode = ?",
-            [args.date, args.mode],
+            [args.date, mode],
         ).fetchone()
     summary = ExecutionSummary(
-        mode=args.mode,
+        mode=mode,
         as_of_date=args.date,
         fill_date=None,
         n_orders=int(n_orders),
@@ -328,7 +331,7 @@ def main(argv: list[str] | None = None) -> int:
     # we don't need a separate launchd job.
     try:
         from scripts.safety_evaluator import evaluate_and_persist
-        s = evaluate_and_persist(mode=args.mode)
+        s = evaluate_and_persist(mode=mode)
         if s is None:
             print("[safety] no equity history yet; state not written.")
         else:
@@ -346,7 +349,7 @@ def main(argv: list[str] | None = None) -> int:
     # don't add a launchd job — same pattern as the safety block above.
     try:
         from scripts.realworld_review import maybe_run_monthly_review
-        res = maybe_run_monthly_review(d=args.date, mode=args.mode)
+        res = maybe_run_monthly_review(d=args.date, mode=mode)
         if res is not None:
             print(f"[review] {res.review_id} result={res.validator_result} "
                   f"cold_start={res.cold_start} accepted={res.n_accepted} "
