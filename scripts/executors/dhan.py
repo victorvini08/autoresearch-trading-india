@@ -176,6 +176,7 @@ class DhanExecutor:
         strategy_module: str = "strategy",
         source_tag: str = "run_live",
         skips: set[str] | None = None,
+        force_rebalance: bool = False,
     ) -> ExecutionSummary:
         """`skips`: tickers flagged by premarket_scan (>=5% pre-open move or
         VIX hard-halt). Built orders touching these names are dropped after
@@ -266,24 +267,29 @@ class DhanExecutor:
             # on the mock and has no idle-cash cost. signal_today honours the
             # flag on the seeded decision bar alone, so exactly one rebalance
             # fires; the marker (written below) prevents it recurring.
-            force_rebalance = (
+            bootstrap = (
                 self.mode == "dhan-live"
                 and live_positions == {}
                 and not _live_bootstrap_done()
             )
-            if force_rebalance:
+            if bootstrap:
                 logger.info(
                     "first-day live bootstrap: empty live book on %s — forcing "
                     "an initial rebalance so capital deploys immediately instead "
                     "of idling to the next rebalance Friday", as_of_date,
                 )
+            # A manual off-schedule rebalance (force_rebalance param, e.g. after a
+            # DDPI/broker issue skipped a scheduled one) forces the SAME decision
+            # as the bootstrap, but uses the REAL current book for deltas and does
+            # NOT touch the one-shot bootstrap marker below.
+            rebalance_now = force_rebalance or bootstrap
 
             signals_result = generate_signals(
                 target_date=as_of_date,
                 strategy_module_name=strategy_module,
                 current_positions=live_positions,
                 current_cash=live_cash,
-                force_rebalance=force_rebalance,
+                force_rebalance=rebalance_now,
             )
             # NB: the one-time bootstrap marker is written LATER — only once
             # the forced rebalance has produced a real equity order to place
@@ -574,7 +580,7 @@ class DhanExecutor:
             # floor) — a low-capital run that builds no whole-share equity order
             # never reaches here, so the bootstrap stays ARMED. See the marker
             # helpers near the top of this module.
-            if force_rebalance and not bootstrap_marked:
+            if bootstrap and not bootstrap_marked:
                 from scripts.cash_floor import CASH_FLOOR_TICKER as _BOOT_FLOOR_TKR
 
                 if any(r.ticker.upper() != _BOOT_FLOOR_TKR for r in reqs):

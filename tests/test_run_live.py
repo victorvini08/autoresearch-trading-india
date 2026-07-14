@@ -53,7 +53,7 @@ def _stub_executor(*, summary: ExecutionSummary = None,
     class Stub:
         mode = "dhan-paper"
 
-        def execute_day(self, as_of_date, *, strategy_module="strategy", source_tag="run_live", skips=None):
+        def execute_day(self, as_of_date, *, strategy_module="strategy", source_tag="run_live", skips=None, force_rebalance=False):
             if raise_exc is not None:
                 raise raise_exc
             if summary is not None:
