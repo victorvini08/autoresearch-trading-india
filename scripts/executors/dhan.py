@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import os
 from dataclasses import dataclass
 from datetime import date, datetime, timezone
@@ -60,6 +61,12 @@ FRACTION_CHANGE_THRESHOLD = 0.005   # 0.5pp — US repo learnings §4.2
 # execute regardless of size, otherwise orphan positions could persist.
 # Drift below this floor is left to the next biweekly rebalance.
 MIN_ORDER_INR = 1500.0
+# Headroom on the cash-floor funding sell: equity buys fill at market, which
+# can sit slightly above the stale close used for sizing. 0.5% over-provision
+# makes the first sweep pass fund cleanly; any tiny excess stays inside the
+# CASH_FLOOR_BUFFER as true cash (it is NOT re-parked — one share of the floor
+# is bigger than the typical excess).
+FUNDING_HEADROOM = 0.005
 DEFAULT_PRICES_DB = Path("storage/prices.duckdb")
 DEFAULT_PORTFOLIO_DB = Path("storage/portfolio.duckdb")
 
@@ -611,6 +618,68 @@ class DhanExecutor:
             _sweep_time.sleep(SWEEP_SETTLE_SEC)  # settle: IOC reaches terminal +
             #                                      position read becomes authoritative
 
+        # 4b. FLOOR-SWEEP: park ACTUAL residual idle cash into the cash-floor ETF.
+        # The main sweep sizes the floor from equity TARGETS, so when equities
+        # under-fill — whole-share rounding, or a name too expensive to fit the
+        # per-name cap at small capital (e.g. a ₹5,660 stock vs a ₹5,000 10% cap
+        # at ₹50k) — that shortfall stayed as cash earning 0%. Here we read the
+        # REAL post-fill broker cash and top the floor up with (cash - buffer),
+        # so idle capital earns the ~6.5% liquid-ETF yield instead of nothing.
+        # BUY-only, whole shares, IOC, residual recomputed each pass (can't
+        # over-buy). Runs BEFORE the `if not placed` early-exit: with funding-
+        # sized floor sells (no fraction-driven floor orders), a day whose only
+        # needed action is parking idle cash (e.g. a bootstrap where every name
+        # is cap-blocked) would otherwise exit early with the cash unparked.
+        # Quiet days stay quiet by construction: it only buys when cash exceeds
+        # the buffer by >= 1 whole share, and buying then drops cash below the
+        # buffer, so it cannot oscillate or churn.
+        if CASH_FLOOR_ENABLED:
+            try:
+                import time as _fs_time
+
+                from scripts.cash_floor import (
+                    CASH_FLOOR_BUFFER as _FS_BUFFER,
+                    CASH_FLOOR_TICKER as _FS_TKR,
+                )
+                _fs_px = _load_latest_closes(
+                    self.prices_db, tickers={_FS_TKR}, on_or_before=as_of_date,
+                ).get(_FS_TKR)
+                _fs_qty0 = next(
+                    (int(p.quantity) for p in self.broker.get_positions()
+                     if p.ticker == _FS_TKR), 0)
+                for _ in range(5):  # bounded; residual-recomputed each pass
+                    _fs_cash = float(self.broker.get_cash().get("availableBalance", 0.0))
+                    _post = [p for p in self.broker.get_positions() if p.quantity]
+                    _pxm = _load_latest_closes(
+                        self.prices_db,
+                        tickers={p.ticker for p in _post} | {_FS_TKR},
+                        on_or_before=as_of_date,
+                    )
+                    _equity = _fs_cash + sum(
+                        float(p.quantity) * float(_pxm.get(p.ticker, 0.0)) for p in _post)
+                    _deployable = _fs_cash - _FS_BUFFER * _equity   # keep the buffer
+                    if not _fs_px or _fs_px <= 0 or _deployable < _fs_px:
+                        break  # nothing left to park (< one share past the buffer)
+                    _fs_qty = int(_deployable / _fs_px)
+                    if _fs_qty < 1:
+                        break
+                    _fs_req = OrderRequest(transaction_type="BUY", ticker=_FS_TKR,
+                                           quantity=_fs_qty, validity=VALIDITY_IOC)
+                    _fs_resp = self.broker.place_order(_fs_req, as_of_date=as_of_date)
+                    placed.append((_fs_req, _fs_resp))
+                    _fs_time.sleep(SWEEP_SETTLE_SEC)
+                # Report what actually FILLED (position delta), not what was
+                # placed — an IOC cancel mid-loop made the old placed-count
+                # overstate the park (live 2026-07-14: noted +108, filled +54).
+                _fs_added = next(
+                    (int(p.quantity) for p in self.broker.get_positions()
+                     if p.ticker == _FS_TKR), 0) - _fs_qty0
+                if _fs_added > 0:
+                    notes.append(f"floor-sweep: parked residual cash → +{_fs_added} {_FS_TKR}")
+            except Exception as e:  # noqa: BLE001 — best-effort; never blocks the run
+                logger.warning("floor-sweep failed: %s: %s", type(e).__name__, e)
+
+
         # Nothing was placeable at all → non-rebalance day or every delta
         # suppressed (FRACTION_CHANGE_THRESHOLD / MIN_ORDER_INR).
         if not placed:
@@ -639,55 +708,6 @@ class DhanExecutor:
             notes.append(f"INCOMPLETE: {len(last_reqs)} unfilled residual leg(s): {shortfall}")
         else:
             notes.append(f"sweep-to-fill complete in <= {MAX_FILL_SWEEPS} passes")
-
-        # 4b. FLOOR-SWEEP: park ACTUAL residual idle cash into the cash-floor ETF.
-        # The main sweep sizes the floor from equity TARGETS, so when equities
-        # under-fill — whole-share rounding, or a name too expensive to fit the
-        # per-name cap at small capital (e.g. a ₹5,660 stock vs a ₹5,000 10% cap
-        # at ₹50k) — that shortfall stayed as cash earning 0%. Here we read the
-        # REAL post-fill broker cash and top the floor up with (cash - buffer),
-        # so idle capital earns the ~6.5% liquid-ETF yield instead of nothing.
-        # BUY-only, whole shares, IOC, residual recomputed each pass (can't
-        # over-buy). Reached only after a real rebalance placed orders (past the
-        # `if not placed` guard), so it never churns the floor on a quiet day.
-        if CASH_FLOOR_ENABLED:
-            try:
-                import time as _fs_time
-
-                from scripts.cash_floor import (
-                    CASH_FLOOR_BUFFER as _FS_BUFFER,
-                    CASH_FLOOR_TICKER as _FS_TKR,
-                )
-                _fs_px = _load_latest_closes(
-                    self.prices_db, tickers={_FS_TKR}, on_or_before=as_of_date,
-                ).get(_FS_TKR)
-                _fs_added = 0
-                for _ in range(5):  # bounded; residual-recomputed each pass
-                    _fs_cash = float(self.broker.get_cash().get("availableBalance", 0.0))
-                    _post = [p for p in self.broker.get_positions() if p.quantity]
-                    _pxm = _load_latest_closes(
-                        self.prices_db,
-                        tickers={p.ticker for p in _post} | {_FS_TKR},
-                        on_or_before=as_of_date,
-                    )
-                    _equity = _fs_cash + sum(
-                        float(p.quantity) * float(_pxm.get(p.ticker, 0.0)) for p in _post)
-                    _deployable = _fs_cash - _FS_BUFFER * _equity   # keep the buffer
-                    if not _fs_px or _fs_px <= 0 or _deployable < _fs_px:
-                        break  # nothing left to park (< one share past the buffer)
-                    _fs_qty = int(_deployable / _fs_px)
-                    if _fs_qty < 1:
-                        break
-                    _fs_req = OrderRequest(transaction_type="BUY", ticker=_FS_TKR,
-                                           quantity=_fs_qty, validity=VALIDITY_IOC)
-                    _fs_resp = self.broker.place_order(_fs_req, as_of_date=as_of_date)
-                    placed.append((_fs_req, _fs_resp))
-                    _fs_added += _fs_qty
-                    _fs_time.sleep(SWEEP_SETTLE_SEC)
-                if _fs_added:
-                    notes.append(f"floor-sweep: parked residual cash → +{_fs_added} {_FS_TKR}")
-            except Exception as e:  # noqa: BLE001 — best-effort; never blocks the run
-                logger.warning("floor-sweep failed: %s: %s", type(e).__name__, e)
 
         # 5. Reconcile fills
         fills = list(self.broker.get_fills())
@@ -875,9 +895,27 @@ class DhanExecutor:
           sub-share rounding drift from manufacturing a phantom 1-share trade
           (the expensive-name complement to the MIN_ORDER_INR floor)
         - Applies FRACTION_CHANGE_THRESHOLD on `target_fraction` (not target_qty,
-          which drifts daily due to mark-to-market — US repo learnings §4.5)
+          which drifts daily due to mark-to-market — US repo learnings §4.5),
+          comparing against the ACTUAL held fraction (see suppression comment)
+        - Cash-floor ticker is special-cased: its SELL is sized to fund the
+          equity buys (net funding), never to its fraction target; its BUYs
+          happen only in execute_day's post-fill floor-sweep. Kills the
+          sell-91-rebuy-54 round-trip observed live 2026-07-14.
         - Generates BUY for qty_delta > 0, SELL for qty_delta < 0; MKT orders
         """
+        # Cash-floor special-casing is active only when the floor is enabled
+        # AND present in targets (execute_day's injection guarantees the
+        # latter whenever the former holds; with the floor disabled this
+        # method treats every ticker generically, as before).
+        try:
+            from scripts.cash_floor import (
+                CASH_FLOOR_ENABLED as _fl_on,
+                CASH_FLOOR_TICKER as _fl_tkr,
+            )
+            floor_ticker = _fl_tkr if (_fl_on and _fl_tkr in targets) else None
+        except Exception:  # noqa: BLE001 — no floor module → no special-casing
+            floor_ticker = None
+
         cash = float(self.broker.get_cash().get("availableBalance", 0.0))
         positions = {p.ticker: p for p in self.broker.get_positions()}
 
@@ -890,11 +928,6 @@ class DhanExecutor:
 
         total_equity = cash + sum(
             (positions[t].quantity * prices.get(t, 0.0)) for t in positions
-        )
-
-        # Pull previous targets (for fraction-change suppression)
-        prev_targets = _load_prev_targets(
-            self.portfolio_db, mode=self.mode, before_date=as_of_date
         )
 
         order_reqs: list = []
@@ -922,6 +955,8 @@ class DhanExecutor:
 
         # 2. Walk through targets; size each
         for ticker, target_fraction in targets.items():
+            if ticker == floor_ticker:
+                continue  # floor is funding-sized below, never fraction-sized
             px = prices.get(ticker)
             if not px or px <= 0:
                 logger.warning("skip target %s: no price", ticker)
@@ -963,23 +998,28 @@ class DhanExecutor:
                 )
                 continue
             # Fraction-change suppression on fraction not qty (US repo
-            # learnings §4.5). The old form gated this on
-            # `target_qty == current_qty`, but that branch is unreachable —
-            # `delta == 0` was already filtered above, so the qty equality
-            # could never be true here, making the entire suppressor dead
-            # code (Codex finding B5). Drop the qty clause so the
-            # fraction-change guard actually fires on small fraction deltas
-            # that round to a 1-share change from mark drift.
+            # learnings §4.5). Comparand: the ACTUAL held fraction of the
+            # book — NOT the previously RECORDED target. desired_targets is
+            # written even when every order fails (the record of intent), so
+            # wish-to-wish comparison silently assumed the previous target
+            # was ACHIEVED; after the 2026-07-13 DH-906 all-reject rebalance,
+            # the 07-14 retry of ADANIPORTS 10% (actual book: 3.6%) looked
+            # like "no change" and was suppressed. |target - actual| is the
+            # real question ("is the book materially off target?") and still
+            # kills mark-drift churn: on carry-forward days the captured
+            # targets track the held book, so the gap stays ~0.
             #
             # Liquidations (target_fraction == 0 with a held position) MUST
             # bypass this guard — exits always fire. Without the bypass, an
             # exit with no prior captured target_fraction (e.g., a name we
             # hold from a stale rebalance whose row was pruned, or a manually
             # seeded position) would be suppressed by the no-change math
-            # (prev=0, target=0).
+            # (actual=0, target=0).
             if target_fraction > 0:
-                prev = prev_targets.get(ticker, 0.0)
-                if abs(target_fraction - prev) < self.fraction_change_threshold:
+                actual_fraction = (
+                    (current_qty * px) / total_equity if total_equity > 0 else 0.0
+                )
+                if abs(target_fraction - actual_fraction) < self.fraction_change_threshold:
                     continue
             if delta > 0:
                 gross_buy += delta * px
@@ -1003,6 +1043,33 @@ class DhanExecutor:
                         validity=VALIDITY_IOC,
                     )
                 )
+
+        # 3. Cash-floor funding sell: raise EXACTLY the cash the equity buys
+        # need (plus a small headroom for market-vs-close fill drift), not a
+        # sell down to the floor's fraction target. Equity SELL proceeds count
+        # as funding (Dhan credits them instantly — proven live 2026-07-14).
+        # Sized fresh on every sweep pass from live cash/positions, so an
+        # under-sell self-corrects next pass and a missed buy's cash is
+        # re-parked by the floor-sweep afterwards. Placed FIRST so the funds
+        # exist before any buy hits the exchange. No MIN_ORDER_INR here: a
+        # small funding sell is the price of executing the intent, and DP is
+        # per-scrip-per-day so it usually piggybacks on an already-paid sell.
+        if floor_ticker is not None and gross_buy > 0:
+            fl_px = prices.get(floor_ticker, 0.0) or 0.0
+            fl_pos = positions.get(floor_ticker)
+            fl_held = int(fl_pos.quantity) if fl_pos and fl_pos.quantity > 0 else 0
+            need = gross_buy * (1.0 + FUNDING_HEADROOM) - (cash + gross_sell)
+            if fl_px > 0 and fl_held > 0 and need > 0:
+                fl_qty = min(int(math.ceil(need / fl_px)), fl_held)
+                if fl_qty >= 1:
+                    gross_sell += fl_qty * fl_px
+                    order_reqs.insert(0, OrderRequest(
+                        transaction_type="SELL",
+                        ticker=floor_ticker,
+                        quantity=fl_qty,
+                        order_type=ORDER_TYPE_MARKET,
+                        validity=VALIDITY_IOC,
+                    ))
 
         return order_reqs, gross_buy, gross_sell
 
