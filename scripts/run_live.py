@@ -118,8 +118,17 @@ def run(
     mode: str | None = None,
     today_ist: date | None = None,
     prices_db: Path | None = None,
+    force_rebalance: bool = False,
 ) -> tuple[int, ExecutionSummary]:
-    """Programmatic entry point. Returns (exit_code, summary)."""
+    """Programmatic entry point. Returns (exit_code, summary).
+
+    `force_rebalance`: force a rebalance on a non-rebalance day (a deliberate
+    manual/off-schedule run, e.g. re-running a rebalance that a broker issue
+    skipped). It ALSO bypasses the execution-window guard, since that guard
+    exists to stop a *late cron* trading on stale data — an intentional manual
+    run at a normal market time is exactly what we want. All other gates
+    (halt, live-consent, trading-day) still apply.
+    """
     mode = resolve_execution_mode(mode)
     today_ist = today_ist or datetime.now(IST).date()
 
@@ -213,7 +222,7 @@ def run(
     # both. (In the US repo this gate was skipped for paper-mode because
     # paper there backfilled yesterday's signal overnight.)
     now_ist = datetime.now(IST)
-    if not _within_execution_window(now_ist):
+    if not force_rebalance and not _within_execution_window(now_ist):
         skip_summary = ExecutionSummary(
             mode=mode,
             as_of_date=today_ist,
@@ -264,7 +273,8 @@ def run(
             "halt-recommendations"
         )
     try:
-        summary = executor.execute_day(target_date, skips=skips)
+        summary = executor.execute_day(target_date, skips=skips,
+                                       force_rebalance=force_rebalance)
     except PreflightSkipped as e:
         skip_summary = ExecutionSummary(
             mode=mode, as_of_date=target_date, fill_date=None,
@@ -328,8 +338,13 @@ def main(argv: list[str] | None = None) -> int:
                    help="Override EXECUTION_MODE env (default: dhan-paper)")
     p.add_argument("--date", type=date.fromisoformat, default=None,
                    help="Override 'today in IST' (for backfill / replay)")
+    p.add_argument("--force-rebalance", action="store_true",
+                   help="Force a rebalance on a non-rebalance day and bypass the "
+                        "execution-window guard (deliberate manual/off-schedule "
+                        "run; halt + live-consent + trading-day gates still apply)")
     args = p.parse_args(argv)
-    code, _ = run(mode=args.mode, today_ist=args.date)
+    code, _ = run(mode=args.mode, today_ist=args.date,
+                  force_rebalance=args.force_rebalance)
     return code
 
 
