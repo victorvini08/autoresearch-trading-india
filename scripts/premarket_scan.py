@@ -249,12 +249,14 @@ def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--date", type=date.fromisoformat, default=None,
                    help="Date to label the scan (default: today in IST)")
-    p.add_argument("--mode", default="dhan-paper",
-                   help="Ledger mode to read positions from (default: dhan-paper)")
+    p.add_argument("--mode", default=None,
+                   help="Ledger mode to read positions from "
+                        "(default: EXECUTION_MODE env, else dhan-paper)")
     args = p.parse_args(argv)
 
+    from scripts.execution_mode import resolve_execution_mode
     today_ist = args.date or datetime.now(IST).date()
-    payload = scan(today_ist, mode=args.mode)
+    payload = scan(today_ist, mode=resolve_execution_mode(args.mode))
     print(f"[premarket] wrote scan for {today_ist}: "
           f"{len(payload['tickers'])} tickers, "
           f"vix_flag={payload['vix']['flag']}, "
