@@ -135,7 +135,8 @@ def update_corporate_actions(
 
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Ingest corporate actions for held tickers")
-    p.add_argument("--mode", default="dhan-paper")
+    p.add_argument("--mode", default=None,
+                   help="ledger mode (default: EXECUTION_MODE env, else dhan-paper)")
     p.add_argument("--lookback-days", type=int, default=90)
     return p.parse_args(argv)
 
@@ -143,7 +144,9 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 def main(argv: list[str] | None = None) -> int:
     logging.basicConfig(level=logging.INFO, format="%(message)s")
     args = _parse_args(argv)
-    n = update_corporate_actions(mode=args.mode, lookback_days=args.lookback_days)
+    from scripts.execution_mode import resolve_execution_mode
+    n = update_corporate_actions(mode=resolve_execution_mode(args.mode),
+                                 lookback_days=args.lookback_days)
     print(f"corporate_actions: {n} new record(s) added")
     return 0
 

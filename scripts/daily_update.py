@@ -68,6 +68,26 @@ def _make_provider(provider_name: str, model: str | None) -> Provider:
     )
 
 
+def _run_corporate_actions_step() -> None:
+    """Fetch fresh corporate actions for the ACTIVE book's held/traded
+    tickers. Mode comes from EXECUTION_MODE — hardcoding dhan-paper here left
+    live-held names exposed to the unadjusted-split phantom-loss bug (the
+    2026-06-10 repair class) once real money went live."""
+    try:
+        from scripts.execution_mode import resolve_execution_mode
+        from scripts.ingest_corporate_actions import update_corporate_actions
+
+        n_ca = update_corporate_actions(
+            mode=resolve_execution_mode(None), lookback_days=30,
+        )
+        print(f"[4c] corporate actions: {n_ca} new", flush=True)
+    except Exception as e:  # noqa: BLE001 — cron must not abort
+        print(
+            f"[4c] corporate actions FAILED (non-fatal): {e}",
+            flush=True,
+        )
+
+
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(description=__doc__)
     today = date.today()
@@ -205,16 +225,7 @@ def main(argv: list[str] | None = None) -> int:
     # Step 4c: corporate actions for held/traded tickers — yfinance, free.
     # Non-fatal: a yfinance hiccup just means we don't have fresh CA data
     # this morning; reconciliation will keep using whatever is on disk.
-    try:
-        from scripts.ingest_corporate_actions import update_corporate_actions
-
-        n_ca = update_corporate_actions(mode="dhan-paper", lookback_days=30)
-        print(f"[4c] corporate actions: {n_ca} new", flush=True)
-    except Exception as e:  # noqa: BLE001 — cron must not abort
-        print(
-            f"[4c] corporate actions FAILED (non-fatal): {e}",
-            flush=True,
-        )
+    _run_corporate_actions_step()
 
     if args.skip_classify:
         print("\n[skip-classify] not running classifiers.")
