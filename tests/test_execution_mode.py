@@ -99,3 +99,28 @@ def test_daily_report_threads_live_mode_into_report_safety_and_review(
     assert dr.main(["--date", "2026-07-10"]) == 0
 
     assert seen == {"report": "dhan-live", "safety": "dhan-live", "review": "dhan-live"}
+
+
+def test_premarket_scan_resolves_execution_mode(monkeypatch, capsys):
+    """premarket_scan's cron invocation passes no --mode; it must scan the
+    EXECUTION_MODE book, not default to the frozen dhan-paper one (live bug
+    2026-07-16: gap protection watched 5 paper names, missing 4 live names)."""
+    import scripts.premarket_scan as pm
+
+    seen = {}
+
+    def _fake_scan(d, *, mode="dhan-paper"):
+        seen["mode"] = mode
+        return {"tickers": {}, "vix": {"flag": False}, "halt_recommendations": []}
+
+    monkeypatch.setattr(pm, "scan", _fake_scan)
+    monkeypatch.setenv("EXECUTION_MODE", "dhan-live")
+    assert pm.main(["--date", "2026-07-16"]) == 0
+    assert seen["mode"] == "dhan-live"
+
+    monkeypatch.delenv("EXECUTION_MODE", raising=False)
+    assert pm.main(["--date", "2026-07-16"]) == 0
+    assert seen["mode"] == "dhan-paper"      # safe fallback unchanged
+
+    assert pm.main(["--date", "2026-07-16", "--mode", "dhan-paper"]) == 0
+    assert seen["mode"] == "dhan-paper"      # explicit flag still wins
