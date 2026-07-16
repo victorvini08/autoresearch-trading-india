@@ -124,3 +124,19 @@ def test_premarket_scan_resolves_execution_mode(monkeypatch, capsys):
 
     assert pm.main(["--date", "2026-07-16", "--mode", "dhan-paper"]) == 0
     assert seen["mode"] == "dhan-paper"      # explicit flag still wins
+
+
+def test_daily_update_corporate_actions_uses_execution_mode(monkeypatch):
+    """daily_update's CA ingest hardcoded dhan-paper: splits/bonuses were only
+    fetched for PAPER-held names, leaving live names (the book real money
+    holds) exposed to the unadjusted-split phantom-loss bug (June repair)."""
+    import scripts.ingest_corporate_actions as ica
+
+    seen = {}
+    monkeypatch.setattr(ica, "update_corporate_actions",
+                        lambda *, mode, lookback_days: seen.setdefault("mode", mode) or 0)
+    monkeypatch.setenv("EXECUTION_MODE", "dhan-live")
+
+    from scripts.daily_update import _run_corporate_actions_step
+    _run_corporate_actions_step()
+    assert seen["mode"] == "dhan-live"
