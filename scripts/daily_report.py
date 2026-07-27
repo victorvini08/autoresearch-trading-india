@@ -17,6 +17,7 @@ Sections (in order):
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 from dataclasses import dataclass
 from datetime import date, datetime
@@ -347,6 +348,16 @@ def main(argv: list[str] | None = None) -> int:
     # rebalance-execution day (otherwise returns immediately, never touching
     # the LLM) and at most once per day. Non-fatal and folded in here so we
     # don't add a launchd job — same pattern as the safety block above.
+    #
+    # MONTHLY_REVIEW_DISABLED=1 skips it entirely: the 954MB VM must never
+    # spawn the claude CLI (an OOM at 15:35 would take the safety eval down
+    # with it) — the review runs MANUALLY on the laptop each month and the
+    # result is pushed back to storage/realworld.duckdb. The env gate makes
+    # that decision enforced rather than an accident of a missing binary.
+    if os.environ.get("MONTHLY_REVIEW_DISABLED") == "1":
+        print("[review] review disabled on this host (MONTHLY_REVIEW_DISABLED=1; "
+              "runs manually on the laptop)")
+        return 0
     try:
         from scripts.realworld_review import maybe_run_monthly_review
         res = maybe_run_monthly_review(d=args.date, mode=mode)

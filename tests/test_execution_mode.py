@@ -140,3 +140,22 @@ def test_daily_update_corporate_actions_uses_execution_mode(monkeypatch):
     from scripts.daily_update import _run_corporate_actions_step
     _run_corporate_actions_step()
     assert seen["mode"] == "dhan-live"
+
+
+def test_daily_report_review_disabled_by_env(seeded_db, monkeypatch, capsys):
+    """MONTHLY_REVIEW_DISABLED=1 (the VM, 954MB RAM — review runs manually on
+    the laptop) must skip the LLM review entirely, with a clear log line."""
+    monkeypatch.setenv("EXECUTION_MODE", "dhan-live")
+    monkeypatch.setenv("MONTHLY_REVIEW_DISABLED", "1")
+    real_connect = portfolio_db.connect
+    monkeypatch.setattr(dr.portfolio_db, "connect", lambda *a, **k: real_connect(seeded_db))
+    monkeypatch.setattr(dr, "generate", lambda summary: None)
+    monkeypatch.setattr(se, "evaluate_and_persist", lambda *, mode, **k: None)
+
+    import scripts.realworld_review as rr
+    def _boom(**kw):
+        raise AssertionError("review must not be invoked when disabled")
+    monkeypatch.setattr(rr, "maybe_run_monthly_review", _boom)
+
+    assert dr.main(["--date", "2026-07-27"]) == 0
+    assert "review disabled on this host" in capsys.readouterr().out
