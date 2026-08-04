@@ -46,7 +46,16 @@ CONSENT_PATH = REPO_ROOT / "state" / "live_consent.json"
 STRATEGY_PY = REPO_ROOT / "strategy.py"
 PORTFOLIO_DB = REPO_ROOT / "storage" / "portfolio.duckdb"
 
-CONSENT_VALID_DAYS = 30
+# 180 days (~6 months), set 2026-08-04 by explicit user decision. The 30-day
+# default expired unnoticed on 2026-07-30 and silently SKIPPED live trading
+# for 3 sessions; it would also have skipped the 2026-08-10 rebalance. The
+# expiry is a periodic re-affirmation prompt, NOT the real safety property —
+# that is the strategy.py hash binding (any edit to strategy.py invalidates
+# consent immediately regardless of the window) plus halt.json and the
+# safety state machine. Given the operator reviews the book every few days,
+# a silent halt on a rebalance day is the worse failure mode. Override per
+# grant with `--days N`.
+CONSENT_VALID_DAYS = 180
 LOOKBACK_DAYS = 60  # window for the audit numbers recorded in the consent payload
 
 
@@ -78,14 +87,17 @@ def _audit_window(db: Path, lookback_days: int = LOOKBACK_DAYS) -> tuple[int, in
     return int(n_days or 0), int(n_disc or 0)
 
 
-def grant_consent() -> dict:
+def grant_consent(valid_days: int | None = None) -> dict:
     """Write `state/live_consent.json` and return the payload.
 
     No data gates: paper-day count and unresolved discrepancies are recorded
     in the payload (for audit) but don't refuse the grant. The protections
-    that DO matter — strategy.py hash binding, 30-day expiry, and the
+    that DO matter — strategy.py hash binding, expiry, and the
     SEBI_ALGO_ID broker-construction requirement — stay in force.
+
+    `valid_days` defaults to CONSENT_VALID_DAYS (180).
     """
+    valid_days = CONSENT_VALID_DAYS if valid_days is None else int(valid_days)
     n_days, n_disc = _audit_window(PORTFOLIO_DB)
     now = datetime.now(timezone.utc)
     payload = {
@@ -96,7 +108,7 @@ def grant_consent() -> dict:
         "strategy_hash": _strategy_hash(),
         "consent_token": uuid.uuid4().hex,
         "valid_until_utc": (
-            now + timedelta(days=CONSENT_VALID_DAYS)
+            now + timedelta(days=valid_days)
         ).isoformat(timespec="seconds"),
     }
     CONSENT_PATH.parent.mkdir(parents=True, exist_ok=True)
@@ -165,14 +177,16 @@ def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(description=__doc__)
     sub = p.add_subparsers(dest="cmd", required=True)
 
-    sub.add_parser("grant", help="grant live-mode consent (no data gates)")
+    g = sub.add_parser("grant", help="grant live-mode consent (no data gates)")
+    g.add_argument("--days", type=int, default=None,
+                   help=f"validity window in days (default: {CONSENT_VALID_DAYS})")
     sub.add_parser("show", help="print current consent state")
     sub.add_parser("revoke", help="remove consent and re-block live")
 
     args = p.parse_args(argv)
 
     if args.cmd == "grant":
-        payload = grant_consent()
+        payload = grant_consent(valid_days=args.days)
         print(f"[promote_live] granted live consent → {CONSENT_PATH}")
         print(json.dumps(payload, indent=2))
         return 0

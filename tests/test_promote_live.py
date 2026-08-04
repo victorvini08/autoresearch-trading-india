@@ -150,3 +150,42 @@ def test_revoke_blocks_subsequent_live(isolated):
 
 def test_show_returns_none_when_no_consent(isolated):
     assert promote_live.show_consent() is None
+
+
+def test_consent_default_validity_is_six_months(isolated):
+    """Default validity is 180 days. The 30-day default silently halted live
+    trading for 3 sessions (2026-07-31..08-04) and would have skipped the
+    2026-08-10 rebalance; the protection that actually matters — strategy.py
+    hash binding — is unaffected by the period."""
+    assert promote_live.CONSENT_VALID_DAYS == 180
+    payload = promote_live.grant_consent()
+    granted = datetime.fromisoformat(payload["granted_at"])
+    valid_until = datetime.fromisoformat(payload["valid_until_utc"])
+    assert (valid_until - granted) == timedelta(days=180)
+    assert promote_live.check_consent_for_live()[0] is True
+
+
+def test_grant_accepts_explicit_days_override(isolated):
+    payload = promote_live.grant_consent(valid_days=30)
+    granted = datetime.fromisoformat(payload["granted_at"])
+    valid_until = datetime.fromisoformat(payload["valid_until_utc"])
+    assert (valid_until - granted) == timedelta(days=30)
+
+
+def test_grant_cli_days_flag(isolated):
+    assert promote_live.main(["grant", "--days", "90"]) == 0
+    payload = json.loads(isolated["consent"].read_text())
+    granted = datetime.fromisoformat(payload["granted_at"])
+    valid_until = datetime.fromisoformat(payload["valid_until_utc"])
+    assert (valid_until - granted) == timedelta(days=90)
+
+
+def test_expiry_still_blocks_after_the_longer_window(isolated):
+    """A longer default must not disable expiry enforcement."""
+    payload = promote_live.grant_consent()
+    payload["valid_until_utc"] = (
+        datetime.now(timezone.utc) - timedelta(days=1)
+    ).isoformat(timespec="seconds")
+    isolated["consent"].write_text(json.dumps(payload))
+    allowed, reason = promote_live.check_consent_for_live()
+    assert allowed is False and "expired" in reason
