@@ -32,8 +32,12 @@ BENCH = "NIFTYBEES"
 # each occurrence here. Any OTHER reconcile row with |amount| >= 500 triggers
 # a loud warning to classify it.
 KNOWN_FLOW_RECONCILES = {
-    (date(2026, 7, 4), -986.96),   # Q1 FY27 settlement sweep out (to bank)
-    (date(2026, 7, 7), 987.00),    # user re-deposited the sweep
+    (date(2026, 7, 4), -986.96),    # Q1 FY27 settlement sweep out (to bank)
+    (date(2026, 7, 7), 987.00),     # user re-deposited the sweep
+    (date(2026, 8, 8), -1649.52),   # Q2 FY27 settlement sweep out (to bank)
+    # NB: the 2026-08-10 return leg was booked as kind='deposit' (correctly —
+    # it is an external flow), so it needs no entry here. Sweep-OUT legs land
+    # in kind='reconcile' and must be listed, else they read as a loss.
 }
 FLOW_WARN_THRESHOLD = 500.0
 
